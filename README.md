@@ -46,6 +46,8 @@ admin@example.com
 admin123
 ```
 
+Use that password for local development only. Change `ADMIN_PASSWORD` before the first production deploy.
+
 ## Frontend Local Setup
 
 ```bash
@@ -63,6 +65,18 @@ The frontend runs at `http://localhost:5173`.
 2. Copy the pooled or direct connection string.
 3. Paste it into `backend/.env` as `DATABASE_URL`.
 4. Keep `sslmode=require` in the URL for Neon.
+
+Never commit `backend/.env` or `frontend/.env`. They are ignored by git and should stay local or in your hosting provider's environment settings.
+
+## Document Link Workflow
+
+Phase 1 stores document links only. Upload files manually to Google Drive, copy the share URL, then paste it into the document `file_url` field in the shipment Documents tab.
+
+## Phase 1 Limitations
+
+Phase 1 intentionally does not include OpenAI API calls, real file uploads, Google Drive API upload, S3, Celery, Redis, charges, demurrage, BL management, courier tracking, reports, or email/Gmail parsing.
+
+Shipment codes are unique in the database, but the current counter-based generator can race if two shipments of the same type are created at exactly the same time. Use single-user/admin workflows for Phase 1; replace this with a database sequence before high-concurrency production use.
 
 ## Render Deployment
 
@@ -90,6 +104,7 @@ ADMIN_PASSWORD=change-this-password
 ```
 
 For production speed, use Neon's pooled connection URL, deploy the backend in the same or nearest region as the database, and run without `--reload`.
+Set a long random `JWT_SECRET_KEY`, and change `ADMIN_PASSWORD` before the service starts for the first time.
 
 Frontend static site:
 

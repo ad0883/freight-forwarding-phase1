@@ -2,11 +2,10 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import AuthenticatedUser, get_current_user, get_db
 from app.models.document import Document
 from app.models.shipment import Shipment
 from app.models.task import Task
-from app.models.user import User
 
 
 router = APIRouter(prefix="/ai", tags=["mock-ai"])
@@ -24,7 +23,7 @@ class AskResponse(BaseModel):
 def ask_mock_ai(
     payload: AskRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: AuthenticatedUser = Depends(get_current_user),
 ) -> AskResponse:
     question = payload.question.strip().lower()
     if "pending" in question and "task" in question:

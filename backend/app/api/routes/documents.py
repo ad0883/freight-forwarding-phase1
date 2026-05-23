@@ -1,10 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db, require_write_access
+from app.api.deps import AuthenticatedUser, get_current_user, get_db, require_write_access
 from app.models.document import Document
 from app.models.shipment import Shipment
-from app.models.user import User
 from app.schemas.document import DocumentRead, DocumentUpdate
 
 
@@ -15,7 +14,7 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 def list_documents_for_shipment(
     shipment_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: AuthenticatedUser = Depends(get_current_user),
 ) -> list[Document]:
     shipment = db.query(Shipment.id).filter(Shipment.id == shipment_id).first()
     if not shipment:
@@ -33,7 +32,7 @@ def update_document(
     document_id: int,
     document_in: DocumentUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_write_access),
+    _: AuthenticatedUser = Depends(require_write_access),
 ) -> Document:
     document = db.query(Document).filter(Document.id == document_id).first()
     if not document:

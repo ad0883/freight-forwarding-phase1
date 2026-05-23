@@ -27,3 +27,5 @@ The app creates the first admin on startup when no admin exists:
 admin@example.com
 admin123
 ```
+
+Use the default password only for local development. Set a strong `ADMIN_PASSWORD` and `JWT_SECRET_KEY` before the first production deployment, and never commit `.env`.

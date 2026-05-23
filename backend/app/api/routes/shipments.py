@@ -4,10 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import get_current_user, get_db, require_write_access
+from app.api.deps import AuthenticatedUser, get_current_user, get_db, require_write_access
 from app.models.party import Party
 from app.models.shipment import Shipment
-from app.models.user import User
 from app.schemas.shipment import DashboardSummary, ShipmentCreate, ShipmentRead, ShipmentUpdate
 from app.services.dashboard_service import get_dashboard_summary, invalidate_dashboard_cache
 from app.services.shipment_service import create_shipment_with_defaults
@@ -27,7 +26,7 @@ def _validate_party_ids(db: Session, exporter_id: Optional[int], importer_id: Op
 
 @router.get("/dashboard", response_model=DashboardSummary)
 def dashboard(
-    db: Session = Depends(get_db), _: User = Depends(get_current_user)
+    db: Session = Depends(get_db), _: AuthenticatedUser = Depends(get_current_user)
 ) -> DashboardSummary:
     return get_dashboard_summary(db)
 
@@ -36,7 +35,7 @@ def dashboard(
 def list_shipments(
     search: Optional[str] = None,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: AuthenticatedUser = Depends(get_current_user),
 ) -> list[Shipment]:
     query = db.query(Shipment).options(joinedload(Shipment.exporter), joinedload(Shipment.importer))
     if search:
@@ -57,7 +56,7 @@ def list_shipments(
 def create_shipment(
     shipment_in: ShipmentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_write_access),
+    current_user: AuthenticatedUser = Depends(require_write_access),
 ) -> Shipment:
     _validate_party_ids(db, shipment_in.exporter_id, shipment_in.importer_id)
     shipment = create_shipment_with_defaults(db, shipment_in, current_user.id)
@@ -69,7 +68,7 @@ def create_shipment(
 def get_shipment(
     shipment_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: AuthenticatedUser = Depends(get_current_user),
 ) -> Shipment:
     shipment = (
         db.query(Shipment)
@@ -87,7 +86,7 @@ def update_shipment(
     shipment_id: int,
     shipment_in: ShipmentUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_write_access),
+    _: AuthenticatedUser = Depends(require_write_access),
 ) -> Shipment:
     shipment = db.query(Shipment).filter(Shipment.id == shipment_id).first()
     if not shipment:

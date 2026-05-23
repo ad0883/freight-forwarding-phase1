@@ -5,7 +5,7 @@ from app.db.session import Base
 
 
 class FollowUpLog(Base):
-    __tablename__ = "followup_logs"
+    __tablename__ = "follow_up_logs"
 
     id = Column(Integer, primary_key=True, index=True)
     shipment_id = Column(Integer, ForeignKey("shipments.id"), nullable=False, index=True)

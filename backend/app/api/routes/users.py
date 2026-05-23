@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, require_roles
+from app.api.deps import AuthenticatedUser, get_db, require_roles
 from app.core.security import get_password_hash
 from app.models.user import User
 from app.schemas.user import UserCreate, UserRead
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 @router.get("", response_model=list[UserRead])
 def list_users(
-    db: Session = Depends(get_db), _: User = Depends(require_roles("ADMIN"))
+    db: Session = Depends(get_db), _: AuthenticatedUser = Depends(require_roles("ADMIN"))
 ) -> list[User]:
     return db.query(User).order_by(User.created_at.desc()).all()
 
@@ -21,7 +21,7 @@ def list_users(
 def create_user(
     user_in: UserCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("ADMIN")),
+    _: AuthenticatedUser = Depends(require_roles("ADMIN")),
 ) -> User:
     existing = db.query(User).filter(User.email == user_in.email).first()
     if existing:

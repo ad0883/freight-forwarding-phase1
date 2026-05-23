@@ -3,7 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db, require_write_access
+from app.api.deps import AuthenticatedUser, get_current_user, get_db, require_write_access
 from app.models.shipment import Shipment
 from app.models.task import Task
 from app.models.user import User
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 def list_tasks(
     shipment_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: AuthenticatedUser = Depends(get_current_user),
 ) -> list[Task]:
     query = db.query(Task)
     if shipment_id is not None:
@@ -30,7 +30,7 @@ def list_tasks(
 def create_task(
     task_in: TaskCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_write_access),
+    _: AuthenticatedUser = Depends(require_write_access),
 ) -> Task:
     shipment = db.query(Shipment.id).filter(Shipment.id == task_in.shipment_id).first()
     if not shipment:
@@ -52,7 +52,7 @@ def update_task(
     task_id: int,
     task_in: TaskUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_write_access),
+    _: AuthenticatedUser = Depends(require_write_access),
 ) -> Task:
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
