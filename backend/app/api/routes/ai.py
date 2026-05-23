@@ -1,4 +1,6 @@
 import re
+from decimal import Decimal
+from typing import Optional
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
@@ -11,6 +13,13 @@ from app.models.followup import FollowUpLog
 from app.models.shipment import Shipment
 from app.models.task import Task
 from app.services.demurrage_service import calculate_demurrage
+from app.services.finance_service import (
+    calculate_dashboard_financials,
+    calculate_shipment_pnl,
+    list_pending_payables,
+    list_pending_receivables,
+    list_shipment_pnl,
+)
 
 
 router = APIRouter(prefix="/ai", tags=["mock-ai"])
@@ -24,6 +33,17 @@ class AskResponse(BaseModel):
     answer: str
 
 
+def _format_money(amount, currency: str) -> str:
+    return f"{currency} {amount}"
+
+
+def _shipment_code_from_question(question_text: str) -> Optional[str]:
+    code_match = re.search(r"\bFF-[A-Z]+-\d{4}-\d+\b", question_text.upper())
+    if code_match:
+        return code_match.group(0)
+    return None
+
+
 @router.post("/ask", response_model=AskResponse)
 def ask_mock_ai(
     payload: AskRequest,
@@ -31,6 +51,49 @@ def ask_mock_ai(
     _: AuthenticatedUser = Depends(get_current_user),
 ) -> AskResponse:
     question = payload.question.strip().lower()
+    shipment_code = _shipment_code_from_question(payload.question)
+
+    if "uncollected" in question or ("pending" in question and "receivable" in question):
+        rows = list_pending_receivables(db)
+        total = sum((row.amount for row in rows), start=Decimal("0"))
+        if "which" in question or "shipment" in question:
+            if not rows:
+                return AskResponse(answer="There are no pending receivables.")
+            lines = [f"{row.shipment_code}: {_format_money(row.amount, row.currency)}" for row in rows[:10]]
+            return AskResponse(answer="Pending receivables: " + "; ".join(lines))
+        currency = rows[0].currency if rows else "INR"
+        return AskResponse(answer=f"Uncollected receivables total: {_format_money(total, currency)}.")
+
+    if "pending" in question and "payable" in question:
+        rows = list_pending_payables(db)
+        if not rows:
+            return AskResponse(answer="There are no pending payables.")
+        lines = [f"{row.shipment_code}: {_format_money(row.amount, row.currency)}" for row in rows[:10]]
+        return AskResponse(answer="Pending payables: " + "; ".join(lines))
+
+    if shipment_code and ("profit" in question or "p&l" in question or "pnl" in question):
+        shipment = db.query(Shipment).filter(Shipment.shipment_code == shipment_code).first()
+        if shipment:
+            summary = calculate_shipment_pnl(db, shipment.id)
+            return AskResponse(
+                answer=(
+                    f"{shipment.shipment_code} P&L: receivable {_format_money(summary.total_receivable, summary.currency)}, "
+                    f"payable {_format_money(summary.total_payable, summary.currency)}, "
+                    f"net profit {_format_money(summary.net_profit, summary.currency)}."
+                )
+            )
+
+    if "loss-making" in question or "loss making" in question or "loss" in question:
+        rows = [row for row in list_shipment_pnl(db) if row.net_profit < 0]
+        if not rows:
+            return AskResponse(answer="No shipments are currently loss-making.")
+        lines = [f"{row.shipment_code}: {_format_money(row.net_profit, row.currency)}" for row in rows[:10]]
+        return AskResponse(answer="Loss-making shipments: " + "; ".join(lines))
+
+    if "this month" in question and "profit" in question:
+        summary = calculate_dashboard_financials(db)
+        return AskResponse(answer=f"This month profit is {_format_money(summary.this_month_profit, summary.currency)}.")
+
     if "pending" in question and "task" in question:
         tasks = db.query(Task).filter(Task.status == "open").order_by(Task.created_at.desc()).all()
         if not tasks:
@@ -52,9 +115,8 @@ def ask_mock_ai(
         return AskResponse(answer="BL approval is pending for: " + ", ".join(codes[:10]))
 
     if "status" in question:
-        code_match = re.search(r"\bFF-[A-Z]+-\d{4}-\d+\b", payload.question.upper())
-        if code_match:
-            shipment = db.query(Shipment).filter(Shipment.shipment_code == code_match.group(0)).first()
+        if shipment_code:
+            shipment = db.query(Shipment).filter(Shipment.shipment_code == shipment_code).first()
             if shipment:
                 return AskResponse(answer=f"{shipment.shipment_code} is currently {shipment.status}.")
     if "shipment" in question and "status" in question:
@@ -94,6 +156,8 @@ def ask_mock_ai(
             "I can answer Phase 1 questions like: Which tasks are pending? "
             "Which shipments have BL approval pending? Show shipment status. "
             "Phase 2 examples: Which shipments have free days expiring? "
-            "Which shipments have demurrage running? Which follow-ups are open?"
+            "Which shipments have demurrage running? Which follow-ups are open? "
+            "Phase 3 examples: Which shipments have pending receivables? "
+            "Show profit for FF-EXP-2026-001. What is this month profit?"
         )
     )

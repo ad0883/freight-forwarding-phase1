@@ -58,3 +58,6 @@ class Shipment(Base):
     demurrage = relationship(
         "Demurrage", back_populates="shipment", cascade="all, delete-orphan", uselist=False
     )
+    charges = relationship(
+        "Charge", back_populates="shipment", cascade="all, delete-orphan"
+    )

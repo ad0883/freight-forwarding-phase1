@@ -6,6 +6,7 @@ import DashboardPage from './pages/DashboardPage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import MockAiPage from './pages/MockAiPage.jsx';
 import PartiesPage from './pages/PartiesPage.jsx';
+import ReportsPage from './pages/ReportsPage.jsx';
 import ShipmentDetailPage from './pages/ShipmentDetailPage.jsx';
 import ShipmentsPage from './pages/ShipmentsPage.jsx';
 import TasksPage from './pages/TasksPage.jsx';
@@ -28,6 +29,7 @@ function App() {
         <Route path="shipments/:id" element={<ShipmentDetailPage />} />
         <Route path="parties" element={<PartiesPage />} />
         <Route path="tasks" element={<TasksPage />} />
+        <Route path="reports" element={<ReportsPage />} />
         <Route path="ai" element={<MockAiPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

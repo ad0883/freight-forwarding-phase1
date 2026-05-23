@@ -1,5 +1,6 @@
 import {
   Bot,
+  BarChart3,
   ClipboardList,
   LayoutDashboard,
   LogOut,
@@ -15,6 +16,7 @@ const links = [
   { to: '/shipments/new', label: 'New Shipment', icon: PackagePlus },
   { to: '/parties', label: 'Parties', icon: Users },
   { to: '/tasks', label: 'Tasks', icon: ClipboardList },
+  { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/ai', label: 'Mock AI', icon: Bot },
 ];
 

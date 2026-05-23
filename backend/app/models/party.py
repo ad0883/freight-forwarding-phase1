@@ -26,3 +26,4 @@ class Party(Base):
         "Shipment", back_populates="importer", foreign_keys="Shipment.importer_id"
     )
     followups = relationship("FollowUpLog", back_populates="party")
+    charges = relationship("Charge", back_populates="party")

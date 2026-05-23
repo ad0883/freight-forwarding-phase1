@@ -1,18 +1,23 @@
-import { AlertTriangle, CheckCircle2, Clock, Ship, Timer } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, DollarSign, Ship, Timer, WalletCards } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client.js';
 
 function DashboardPage() {
   const [summary, setSummary] = useState(null);
+  const [financials, setFinancials] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [error, setError] = useState('');
 
   useEffect(() => {
     async function load() {
       try {
-        const dashboardResponse = await api.get('/shipments/dashboard');
+        const [dashboardResponse, financialResponse] = await Promise.all([
+          api.get('/shipments/dashboard'),
+          api.get('/reports/dashboard-financials'),
+        ]);
         setSummary(dashboardResponse.data);
+        setFinancials(financialResponse.data);
         setAlerts(dashboardResponse.data.recent_alerts || []);
       } catch (err) {
         setError(err.response?.data?.detail || 'Unable to load dashboard');
@@ -25,7 +30,7 @@ function DashboardPage() {
     return <p className="error-text">{error}</p>;
   }
 
-  if (!summary) {
+  if (!summary || !financials) {
     return <p className="muted">Loading dashboard...</p>;
   }
 
@@ -35,6 +40,23 @@ function DashboardPage() {
     { label: 'Future Bookings', value: summary.future_bookings, icon: Timer },
     { label: 'Alerts Today', value: summary.alerts_today, icon: AlertTriangle },
     { label: 'Completed Shipments This Month', value: summary.completed_this_month, icon: CheckCircle2 },
+  ];
+  const formatMoney = (amount, currency = 'INR') =>
+    `${currency} ${Number(amount || 0).toLocaleString('en-IN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  const financeCards = [
+    { label: 'Pending Receivables', value: formatMoney(financials.pending_receivables, financials.currency), icon: WalletCards, className: 'warning-card' },
+    { label: 'Pending Payables', value: formatMoney(financials.pending_payables, financials.currency), icon: WalletCards, className: 'info-card' },
+    { label: 'This Month Receivables', value: formatMoney(financials.this_month_receivables, financials.currency), icon: DollarSign, className: 'success-card' },
+    { label: 'This Month Payables', value: formatMoney(financials.this_month_payables, financials.currency), icon: DollarSign, className: 'info-card' },
+    {
+      label: 'This Month Profit',
+      value: formatMoney(financials.this_month_profit, financials.currency),
+      icon: DollarSign,
+      className: Number(financials.this_month_profit) < 0 ? 'critical-card' : 'success-card',
+    },
   ];
 
   return (
@@ -58,6 +80,22 @@ function DashboardPage() {
           </article>
         ))}
       </section>
+
+      <div className="panel-header no-margin">
+        <h2>Financial Summary</h2>
+      </div>
+      <section className="metric-grid finance-grid">
+        {financeCards.map(({ label, value, icon: Icon, className }) => (
+          <article className={`metric-card ${className}`} key={label}>
+            <Icon size={20} />
+            <span>{label}</span>
+            <strong>{value}</strong>
+          </article>
+        ))}
+      </section>
+      {financials.multiple_currencies && (
+        <p className="finance-note">Multiple currencies are present. Totals are not converted automatically.</p>
+      )}
 
       <section className="split-grid">
         <div className="panel">

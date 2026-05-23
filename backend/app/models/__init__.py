@@ -1,5 +1,6 @@
 from app.models.alert import Alert
 from app.models.bl_management import BLManagement
+from app.models.charge import Charge
 from app.models.demurrage import Demurrage
 from app.models.document import Document
 from app.models.followup import FollowUpLog
@@ -11,6 +12,7 @@ from app.models.user import User
 __all__ = [
     "Alert",
     "BLManagement",
+    "Charge",
     "Demurrage",
     "Document",
     "FollowUpLog",
