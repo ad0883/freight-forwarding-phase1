@@ -7,9 +7,16 @@ from sqlalchemy.orm import Session, joinedload
 from app.api.deps import AuthenticatedUser, get_current_user, get_db, require_write_access
 from app.models.party import Party
 from app.models.shipment import Shipment
-from app.schemas.shipment import DashboardSummary, ShipmentCreate, ShipmentRead, ShipmentUpdate
+from app.schemas.shipment import (
+    DashboardSummary,
+    ShipmentCreate,
+    ShipmentRead,
+    ShipmentUpdate,
+    WorkflowStatusUpdate,
+)
 from app.services.dashboard_service import get_dashboard_summary, invalidate_dashboard_cache
 from app.services.shipment_service import create_shipment_with_defaults
+from app.services.workflow_service import update_workflow_status
 
 
 router = APIRouter(prefix="/shipments", tags=["shipments"])
@@ -99,3 +106,18 @@ def update_shipment(
     db.refresh(shipment)
     invalidate_dashboard_cache()
     return shipment
+
+
+@router.patch("/{shipment_id}/workflow-status", response_model=ShipmentRead)
+def update_shipment_workflow_status(
+    shipment_id: int,
+    workflow_in: WorkflowStatusUpdate,
+    db: Session = Depends(get_db),
+    _: AuthenticatedUser = Depends(require_write_access),
+) -> Shipment:
+    shipment = db.query(Shipment).filter(Shipment.id == shipment_id).first()
+    if not shipment:
+        raise HTTPException(status_code=404, detail="Shipment not found")
+    updated = update_workflow_status(db, shipment, workflow_in)
+    invalidate_dashboard_cache()
+    return updated

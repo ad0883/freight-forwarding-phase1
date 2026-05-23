@@ -24,6 +24,11 @@ class Shipment(Base):
     container_type = Column(String(20), nullable=True)
     etd = Column(Date, nullable=True)
     eta = Column(Date, nullable=True)
+    vgm_cutoff_date = Column(Date, nullable=True)
+    bl_cutoff_date = Column(Date, nullable=True)
+    si_cutoff_date = Column(Date, nullable=True)
+    do_received_date = Column(Date, nullable=True)
+    container_delivered_date = Column(Date, nullable=True)
     bl_number = Column(String(120), nullable=True)
     booking_ref = Column(String(120), nullable=True)
     commodity = Column(Text, nullable=True)
@@ -46,4 +51,10 @@ class Shipment(Base):
     )
     followups = relationship(
         "FollowUpLog", back_populates="shipment", cascade="all, delete-orphan"
+    )
+    bl_management = relationship(
+        "BLManagement", back_populates="shipment", cascade="all, delete-orphan", uselist=False
+    )
+    demurrage = relationship(
+        "Demurrage", back_populates="shipment", cascade="all, delete-orphan", uselist=False
     )

@@ -13,10 +13,40 @@ PartyType = Literal[
     "other",
 ]
 ShipmentType = Literal["export", "import"]
-ShipmentStatus = Literal["active", "completed", "cancelled"]
+ExportWorkflowStatus = Literal[
+    "Booking Received",
+    "Container Booked",
+    "SI Submitted",
+    "VGM Filed",
+    "BL Draft Received",
+    "BL Approved",
+    "Final BL Received",
+    "Docs Collected",
+    "Docs Dispatched",
+    "Overseas Coordinated",
+    "Freight Invoiced",
+    "Vessel Sailed",
+    "Completed",
+]
+ImportWorkflowStatus = Literal[
+    "Pre-Alert Received",
+    "ETA Tracking Active",
+    "IGM Filed",
+    "Freight Invoice Received",
+    "BL Surrender Confirmed",
+    "DO Received",
+    "DO Handed to CHA",
+    "Clearance In Progress",
+    "Container Delivered",
+    "Freight Collected",
+    "Completed",
+]
+ShipmentStatus = str
 ContainerType = Literal["20GP", "40GP", "40HC", "LCL"]
 DocumentStatus = Literal["pending", "received", "sent", "approved", "not_required"]
 Priority = Literal["critical", "warning", "info"]
 TaskStatus = Literal["open", "done"]
 FollowUpChannel = Literal["email", "call", "whatsapp", "meeting"]
 FollowUpStatus = Literal["open", "closed"]
+BLType = Literal["OBL", "HBL", "Surrender", "Telex", "Seaway", "Ocean"]
+DemurrageStatus = Literal["within_free_days", "expiring_soon", "running", "not_started"]

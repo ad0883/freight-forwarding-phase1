@@ -6,6 +6,7 @@ from app.models.document import Document
 from app.models.shipment import Shipment
 from app.models.task import Task
 from app.schemas.shipment import ShipmentCreate
+from app.services.workflow_service import default_workflow_status
 
 
 EXPORT_DOCUMENTS = [
@@ -81,7 +82,7 @@ def create_shipment_with_defaults(
     shipment = Shipment(
         **shipment_in.model_dump(),
         shipment_code=generate_shipment_code(db, shipment_in.type),
-        status="active",
+        status=default_workflow_status(shipment_in.type),
         created_by=created_by,
     )
     db.add(shipment)

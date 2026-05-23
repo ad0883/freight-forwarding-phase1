@@ -14,6 +14,11 @@ Phase 1 implementation of a freight forwarding operations system with a FastAPI 
 - Task list with done/reopen flow
 - APScheduler overdue-task alert foundation
 - Mock AI assistant with rule-based database answers
+- Phase 2 workflow status automation for export and import shipments
+- BL Management tab with final BL Google Drive link
+- Import demurrage tracker with free-day calculations
+- Shipment follow-up log with party/channel/status tracking
+- Improved dashboard pending-task and critical-alert panels
 
 ## Backend Local Setup
 
@@ -72,9 +77,22 @@ Never commit `backend/.env` or `frontend/.env`. They are ignored by git and shou
 
 Phase 1 stores document links only. Upload files manually to Google Drive, copy the share URL, then paste it into the document `file_url` field in the shipment Documents tab.
 
+## Phase 2 Tracking And Alerts
+
+Phase 2 adds operational tracking after shipment creation:
+
+- Workflow status dropdown on shipment detail pages.
+- Export workflow side effects for SI, VGM, BL draft, final BL, invoice, and packing list documents.
+- Import workflow side effects for freight invoice, DO received, and demurrage start date.
+- BL Management tab for BL type, draft date, corrections, approval, final BL, surrender/telex flags, and Google Drive link.
+- Demurrage tab for import shipments with free days, start date, rate, currency, alert threshold, container count, days remaining, running status, and estimated due amount.
+- Follow-up Log tab for shipment-linked email/call/WhatsApp/meeting follow-ups.
+- APScheduler alert rules for overdue tasks, export cutoffs, free days expiry, demurrage started, DO not collected, and freight invoice chase.
+- Mock AI examples: `Which shipments have free days expiring?`, `Which shipments have demurrage running?`, `Which follow-ups are open?`, and `What is the status of FF-EXP-2026-001?`.
+
 ## Phase 1 Limitations
 
-Phase 1 intentionally does not include OpenAI API calls, real file uploads, Google Drive API upload, S3, Celery, Redis, charges, demurrage, BL management, courier tracking, reports, or email/Gmail parsing.
+The app still intentionally does not include OpenAI API calls, real file uploads, Google Drive API upload, S3, Celery, Redis, charges, courier tracking, reports, invoice/P&L, or email/Gmail parsing.
 
 Shipment codes are unique in the database, but the current counter-based generator can race if two shipments of the same type are created at exactly the same time. Use single-user/admin workflows for Phase 1; replace this with a database sequence before high-concurrency production use.
 

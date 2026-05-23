@@ -102,19 +102,38 @@ function DashboardPage() {
           </div>
         </div>
 
-        <div className="panel">
-          <div className="panel-header">
-            <h2>Recent Alerts</h2>
+        <div className="page-stack">
+          <div className="panel">
+            <div className="panel-header">
+              <h2>Pending Tasks</h2>
+              <Link to="/tasks">View all</Link>
+            </div>
+            <div className="alert-list">
+              {(summary.urgent_tasks || []).map((task) => (
+                <article className="alert-item" key={task.id}>
+                  <span className={`badge priority-${task.priority}`}>{task.priority}</span>
+                  <strong>{task.title}</strong>
+                  <p>Shipment #{task.shipment_id}{task.due_date ? ` due ${task.due_date}` : ''}</p>
+                </article>
+              ))}
+              {!(summary.urgent_tasks || []).length && <p className="muted">No pending tasks.</p>}
+            </div>
           </div>
-          <div className="alert-list">
-            {alerts.map((alert) => (
-              <article className="alert-item" key={alert.id}>
-                <span className={`badge priority-${alert.priority}`}>{alert.priority}</span>
-                <strong>{alert.title}</strong>
-                <p>{alert.message}</p>
-              </article>
-            ))}
-            {!alerts.length && <p className="muted">No alerts yet.</p>}
+
+          <div className="panel">
+            <div className="panel-header">
+              <h2>Recent Critical Alerts</h2>
+            </div>
+            <div className="alert-list">
+              {alerts.map((alert) => (
+                <article className="alert-item" key={alert.id}>
+                  <span className={`badge priority-${alert.priority}`}>{alert.priority}</span>
+                  <strong>{alert.title}</strong>
+                  <p>{alert.message}</p>
+                </article>
+              ))}
+              {!alerts.length && <p className="muted">No critical alerts.</p>}
+            </div>
           </div>
         </div>
       </section>

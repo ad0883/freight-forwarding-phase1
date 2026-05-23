@@ -5,10 +5,23 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
-from app.api.routes import ai, alerts, auth, documents, parties, shipments, tasks, users
+from app.api.routes import (
+    ai,
+    alerts,
+    auth,
+    bl_management,
+    demurrage,
+    documents,
+    followups,
+    parties,
+    shipments,
+    tasks,
+    users,
+)
 from app.core.config import settings
 from app.core.security import get_password_hash
 from app.db.indexes import ensure_performance_indexes
+from app.db.schema import ensure_phase2_columns
 from app.db.session import Base, SessionLocal, engine
 from app.models import User
 from app.services.alert_service import create_overdue_task_alerts
@@ -54,6 +67,7 @@ def run_alert_job() -> None:
 async def lifespan(app: FastAPI):
     if settings.AUTO_CREATE_TABLES:
         Base.metadata.create_all(bind=engine)
+        ensure_phase2_columns(engine)
         ensure_performance_indexes(engine)
     db = SessionLocal()
     try:
@@ -83,10 +97,13 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(parties.router, prefix="/api")
 app.include_router(shipments.router, prefix="/api")
+app.include_router(bl_management.router, prefix="/api")
+app.include_router(demurrage.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
 app.include_router(tasks.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")
 app.include_router(ai.router, prefix="/api")
+app.include_router(followups.router, prefix="/api")
 
 
 @app.get("/")

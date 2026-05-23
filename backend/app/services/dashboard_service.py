@@ -3,7 +3,7 @@ from threading import Lock
 from time import monotonic
 from typing import Optional
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.alert import Alert
@@ -13,6 +13,8 @@ from app.schemas.shipment import DashboardSummary
 
 
 DASHBOARD_CACHE_TTL_SECONDS = 15
+COMPLETED_STATUSES = ["completed", "Completed"]
+CANCELLED_STATUSES = ["cancelled", "Cancelled"]
 
 _cache_lock = Lock()
 _cache_expires_at = 0.0
@@ -51,13 +53,13 @@ def _build_dashboard_summary(db: Session) -> DashboardSummary:
 
     counts = db.query(
         select(func.count(Shipment.id))
-        .where(Shipment.status == "active")
+        .where(~Shipment.status.in_(COMPLETED_STATUSES + CANCELLED_STATUSES))
         .scalar_subquery(),
         select(func.count(Task.id)).where(Task.status == "open").scalar_subquery(),
         select(func.count(Shipment.id))
         .where(
             and_(
-                Shipment.status == "active",
+                ~Shipment.status.in_(COMPLETED_STATUSES + CANCELLED_STATUSES),
                 Shipment.etd.isnot(None),
                 Shipment.etd >= today,
             )
@@ -69,7 +71,7 @@ def _build_dashboard_summary(db: Session) -> DashboardSummary:
         select(func.count(Shipment.id))
         .where(
             and_(
-                Shipment.status == "completed",
+                Shipment.status.in_(COMPLETED_STATUSES),
                 Shipment.created_at >= month_start,
             )
         )
@@ -85,8 +87,21 @@ def _build_dashboard_summary(db: Session) -> DashboardSummary:
     )
     recent_alerts = (
         db.query(Alert)
+        .filter(Alert.priority == "critical")
         .order_by(Alert.is_read.asc(), Alert.created_at.desc())
         .limit(6)
+        .all()
+    )
+    priority_order = case(
+        (Task.priority == "critical", 0),
+        (Task.priority == "warning", 1),
+        else_=2,
+    )
+    urgent_tasks = (
+        db.query(Task)
+        .filter(Task.status == "open")
+        .order_by(priority_order.asc(), Task.due_date.asc().nullslast(), Task.created_at.desc())
+        .limit(8)
         .all()
     )
 
@@ -98,4 +113,5 @@ def _build_dashboard_summary(db: Session) -> DashboardSummary:
         completed_this_month=counts[4],
         shipments=shipments,
         recent_alerts=recent_alerts,
+        urgent_tasks=urgent_tasks,
     )

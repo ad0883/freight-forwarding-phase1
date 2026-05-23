@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.common import ContainerType, ShipmentStatus, ShipmentType
 from app.schemas.alert import AlertRead
@@ -21,6 +21,11 @@ class ShipmentBase(BaseModel):
     container_type: Optional[ContainerType] = None
     etd: Optional[date] = None
     eta: Optional[date] = None
+    vgm_cutoff_date: Optional[date] = None
+    bl_cutoff_date: Optional[date] = None
+    si_cutoff_date: Optional[date] = None
+    do_received_date: Optional[date] = None
+    container_delivered_date: Optional[date] = None
     bl_number: Optional[str] = None
     booking_ref: Optional[str] = None
     commodity: Optional[str] = None
@@ -43,6 +48,11 @@ class ShipmentUpdate(BaseModel):
     container_type: Optional[ContainerType] = None
     etd: Optional[date] = None
     eta: Optional[date] = None
+    vgm_cutoff_date: Optional[date] = None
+    bl_cutoff_date: Optional[date] = None
+    si_cutoff_date: Optional[date] = None
+    do_received_date: Optional[date] = None
+    container_delivered_date: Optional[date] = None
     bl_number: Optional[str] = None
     booking_ref: Optional[str] = None
     commodity: Optional[str] = None
@@ -68,3 +78,13 @@ class DashboardSummary(BaseModel):
     completed_this_month: int
     shipments: list[ShipmentRead]
     recent_alerts: list[AlertRead]
+    urgent_tasks: list["TaskRead"] = Field(default_factory=list)
+
+
+class WorkflowStatusUpdate(BaseModel):
+    status: str
+
+
+from app.schemas.task import TaskRead
+
+DashboardSummary.model_rebuild()
