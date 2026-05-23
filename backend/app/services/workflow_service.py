@@ -144,12 +144,22 @@ def _get_or_create_demurrage(db: Session, shipment: Shipment) -> Demurrage:
 def _set_document_status_if_pending(
     db: Session, shipment: Shipment, doc_type: str, status: str
 ) -> None:
+    _set_document_status_if_current(db, shipment, doc_type, status, {"pending"})
+
+
+def _set_document_status_if_current(
+    db: Session,
+    shipment: Shipment,
+    doc_type: str,
+    status: str,
+    current_statuses: set[str],
+) -> None:
     document = (
         db.query(Document)
         .filter(Document.shipment_id == shipment.id, Document.doc_type == doc_type)
         .first()
     )
-    if document and document.status == "pending":
+    if document and document.status in current_statuses:
         document.status = status
 
 
@@ -166,7 +176,13 @@ def _apply_workflow_side_effects(db: Session, shipment: Shipment, status: str) -
             if not bl.draft_received:
                 bl.draft_received = today
         elif status == "BL Approved":
-            _set_document_status_if_pending(db, shipment, "BL_DRAFT", "approved")
+            _set_document_status_if_current(
+                db,
+                shipment,
+                "BL_DRAFT",
+                "approved",
+                {"pending", "received", "sent"},
+            )
             bl = _get_or_create_bl(db, shipment)
             if not bl.approval_date:
                 bl.approval_date = today

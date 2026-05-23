@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -49,12 +51,13 @@ def ask_mock_ai(
         codes = sorted({shipment.shipment_code for _, shipment in docs})
         return AskResponse(answer="BL approval is pending for: " + ", ".join(codes[:10]))
 
+    if "status" in question:
+        code_match = re.search(r"\bFF-[A-Z]+-\d{4}-\d+\b", payload.question.upper())
+        if code_match:
+            shipment = db.query(Shipment).filter(Shipment.shipment_code == code_match.group(0)).first()
+            if shipment:
+                return AskResponse(answer=f"{shipment.shipment_code} is currently {shipment.status}.")
     if "shipment" in question and "status" in question:
-        for word in payload.question.replace("?", " ").split():
-            if word.upper().startswith("FF-"):
-                shipment = db.query(Shipment).filter(Shipment.shipment_code == word.upper()).first()
-                if shipment:
-                    return AskResponse(answer=f"{shipment.shipment_code} is currently {shipment.status}.")
         shipments = db.query(Shipment).order_by(Shipment.created_at.desc()).limit(10).all()
         if not shipments:
             return AskResponse(answer="No shipments have been created yet.")
