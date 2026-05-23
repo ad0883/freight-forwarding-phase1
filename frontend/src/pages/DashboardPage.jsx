@@ -34,7 +34,7 @@ function DashboardPage() {
     { label: 'Pending Tasks', value: summary.pending_tasks, icon: Clock },
     { label: 'Future Bookings', value: summary.future_bookings, icon: Timer },
     { label: 'Alerts Today', value: summary.alerts_today, icon: AlertTriangle },
-    { label: 'Completed This Month', value: summary.completed_this_month, icon: CheckCircle2 },
+    { label: 'Completed Shipments This Month', value: summary.completed_this_month, icon: CheckCircle2 },
   ];
 
   return (
