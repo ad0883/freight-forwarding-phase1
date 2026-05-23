@@ -49,6 +49,13 @@ def login(
     access_token = create_access_token(
         subject=user.email,
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+        additional_claims={
+            "uid": user.id,
+            "name": user.name,
+            "role": user.role,
+            "is_active": user.is_active,
+            "created_at": user.created_at.isoformat(),
+        },
     )
     return Token(access_token=access_token)
 

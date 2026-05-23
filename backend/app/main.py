@@ -8,9 +8,11 @@ from sqlalchemy.orm import Session
 from app.api.routes import ai, alerts, auth, documents, parties, shipments, tasks, users
 from app.core.config import settings
 from app.core.security import get_password_hash
+from app.db.indexes import ensure_performance_indexes
 from app.db.session import Base, SessionLocal, engine
 from app.models import User
 from app.services.alert_service import create_overdue_task_alerts
+from app.services.dashboard_service import warm_dashboard_cache
 
 
 scheduler = BackgroundScheduler()
@@ -52,9 +54,11 @@ def run_alert_job() -> None:
 async def lifespan(app: FastAPI):
     if settings.AUTO_CREATE_TABLES:
         Base.metadata.create_all(bind=engine)
+        ensure_performance_indexes(engine)
     db = SessionLocal()
     try:
         create_default_admin(db)
+        warm_dashboard_cache(db)
     finally:
         db.close()
     scheduler.add_job(run_alert_job, "cron", hour=7, minute=0, id="daily-overdue-alerts", replace_existing=True)

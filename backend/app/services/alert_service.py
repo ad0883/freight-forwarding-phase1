@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.models.alert import Alert
 from app.models.task import Task
+from app.services.dashboard_service import invalidate_dashboard_cache
 
 
 def create_overdue_task_alerts(db: Session) -> int:
@@ -30,4 +31,5 @@ def create_overdue_task_alerts(db: Session) -> int:
         created += 1
     if created:
         db.commit()
+        invalidate_dashboard_cache()
     return created

@@ -80,10 +80,16 @@ Backend environment variables:
 DATABASE_URL=your_neon_postgres_url
 JWT_SECRET_KEY=your_secret_key
 BACKEND_CORS_ORIGINS=https://your-frontend.onrender.com
+DB_POOL_SIZE=5
+DB_MAX_OVERFLOW=10
+DB_POOL_TIMEOUT=30
+DB_POOL_RECYCLE_SECONDS=1800
 AUTO_CREATE_TABLES=true
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=change-this-password
 ```
+
+For production speed, use Neon's pooled connection URL, deploy the backend in the same or nearest region as the database, and run without `--reload`.
 
 Frontend static site:
 

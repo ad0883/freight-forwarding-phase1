@@ -1,4 +1,3 @@
-from datetime import date, datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -6,12 +5,11 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_user, get_db, require_write_access
-from app.models.alert import Alert
 from app.models.party import Party
 from app.models.shipment import Shipment
-from app.models.task import Task
 from app.models.user import User
 from app.schemas.shipment import DashboardSummary, ShipmentCreate, ShipmentRead, ShipmentUpdate
+from app.services.dashboard_service import get_dashboard_summary, invalidate_dashboard_cache
 from app.services.shipment_service import create_shipment_with_defaults
 
 
@@ -31,32 +29,7 @@ def _validate_party_ids(db: Session, exporter_id: Optional[int], importer_id: Op
 def dashboard(
     db: Session = Depends(get_db), _: User = Depends(get_current_user)
 ) -> DashboardSummary:
-    today = date.today()
-    month_start = datetime(today.year, today.month, 1)
-    day_start = datetime(today.year, today.month, today.day)
-    shipments = (
-        db.query(Shipment)
-        .options(joinedload(Shipment.exporter), joinedload(Shipment.importer))
-        .order_by(Shipment.created_at.desc())
-        .limit(8)
-        .all()
-    )
-    return DashboardSummary(
-        live_shipments=db.query(Shipment).filter(Shipment.status == "active").count(),
-        pending_tasks=db.query(Task).filter(Task.status == "open").count(),
-        future_bookings=(
-            db.query(Shipment)
-            .filter(Shipment.status == "active", Shipment.etd.isnot(None), Shipment.etd >= today)
-            .count()
-        ),
-        alerts_today=db.query(Alert).filter(Alert.created_at >= day_start).count(),
-        completed_this_month=(
-            db.query(Shipment)
-            .filter(Shipment.status == "completed", Shipment.created_at >= month_start)
-            .count()
-        ),
-        shipments=shipments,
-    )
+    return get_dashboard_summary(db)
 
 
 @router.get("", response_model=list[ShipmentRead])
@@ -87,7 +60,9 @@ def create_shipment(
     current_user: User = Depends(require_write_access),
 ) -> Shipment:
     _validate_party_ids(db, shipment_in.exporter_id, shipment_in.importer_id)
-    return create_shipment_with_defaults(db, shipment_in, current_user.id)
+    shipment = create_shipment_with_defaults(db, shipment_in, current_user.id)
+    invalidate_dashboard_cache()
+    return shipment
 
 
 @router.get("/{shipment_id}", response_model=ShipmentRead)
@@ -123,4 +98,5 @@ def update_shipment(
         setattr(shipment, field, value)
     db.commit()
     db.refresh(shipment)
+    invalidate_dashboard_cache()
     return shipment

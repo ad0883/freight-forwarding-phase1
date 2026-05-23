@@ -11,12 +11,9 @@ function DashboardPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [dashboardResponse, alertsResponse] = await Promise.all([
-          api.get('/shipments/dashboard'),
-          api.get('/alerts'),
-        ]);
+        const dashboardResponse = await api.get('/shipments/dashboard');
         setSummary(dashboardResponse.data);
-        setAlerts(alertsResponse.data.slice(0, 6));
+        setAlerts(dashboardResponse.data.recent_alerts || []);
       } catch (err) {
         setError(err.response?.data?.detail || 'Unable to load dashboard');
       }

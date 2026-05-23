@@ -4,6 +4,7 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict
 
 from app.schemas.common import ContainerType, ShipmentStatus, ShipmentType
+from app.schemas.alert import AlertRead
 from app.schemas.party import PartyRead
 
 
@@ -66,3 +67,4 @@ class DashboardSummary(BaseModel):
     alerts_today: int
     completed_this_month: int
     shipments: list[ShipmentRead]
+    recent_alerts: list[AlertRead]

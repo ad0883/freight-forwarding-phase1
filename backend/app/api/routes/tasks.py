@@ -8,6 +8,7 @@ from app.models.shipment import Shipment
 from app.models.task import Task
 from app.models.user import User
 from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
+from app.services.dashboard_service import invalidate_dashboard_cache
 
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -42,6 +43,7 @@ def create_task(
     db.add(task)
     db.commit()
     db.refresh(task)
+    invalidate_dashboard_cache()
     return task
 
 
@@ -64,4 +66,5 @@ def update_task(
         setattr(task, field, value)
     db.commit()
     db.refresh(task)
+    invalidate_dashboard_cache()
     return task

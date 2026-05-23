@@ -15,6 +15,11 @@ class Settings(BaseSettings):
 
     BACKEND_CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
 
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 10
+    DB_POOL_TIMEOUT: int = 30
+    DB_POOL_RECYCLE_SECONDS: int = 1800
+
     AUTO_CREATE_TABLES: bool = True
 
     ADMIN_NAME: str = "Admin"

@@ -1,4 +1,6 @@
-from typing import Generator
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Generator, Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -12,6 +14,16 @@ from app.models.user import User
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
+@dataclass(frozen=True)
+class AuthenticatedUser:
+    id: int
+    name: str
+    email: str
+    role: str
+    is_active: bool
+    created_at: datetime
+
+
 def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
@@ -20,9 +32,23 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
+def _user_from_token_payload(payload: dict) -> Optional[AuthenticatedUser]:
+    required_claims = ["uid", "name", "role", "is_active", "created_at"]
+    if not all(claim in payload for claim in required_claims):
+        return None
+    return AuthenticatedUser(
+        id=int(payload["uid"]),
+        name=payload["name"],
+        email=payload["sub"],
+        role=payload["role"],
+        is_active=bool(payload["is_active"]),
+        created_at=datetime.fromisoformat(payload["created_at"]),
+    )
+
+
 def get_current_user(
     token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
-) -> User:
+) -> AuthenticatedUser:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -35,14 +61,24 @@ def get_current_user(
         raise credentials_exception
     if not email:
         raise credentials_exception
+    token_user = _user_from_token_payload(payload)
+    if token_user and token_user.is_active:
+        return token_user
     user = db.query(User).filter(User.email == email).first()
     if not user or not user.is_active:
         raise credentials_exception
-    return user
+    return AuthenticatedUser(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        role=user.role,
+        is_active=user.is_active,
+        created_at=user.created_at,
+    )
 
 
 def require_roles(*roles: str):
-    def dependency(current_user: User = Depends(get_current_user)) -> User:
+    def dependency(current_user: AuthenticatedUser = Depends(get_current_user)) -> AuthenticatedUser:
         if current_user.role not in roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -53,7 +89,7 @@ def require_roles(*roles: str):
     return dependency
 
 
-def require_write_access(current_user: User = Depends(get_current_user)) -> User:
+def require_write_access(current_user: AuthenticatedUser = Depends(get_current_user)) -> AuthenticatedUser:
     if current_user.role == "VIEW_ONLY":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
