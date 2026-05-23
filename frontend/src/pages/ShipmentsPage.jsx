@@ -1,0 +1,90 @@
+import { Plus, Search } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import api from '../api/client.js';
+
+function ShipmentsPage() {
+  const navigate = useNavigate();
+  const [shipments, setShipments] = useState([]);
+  const [search, setSearch] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const timeout = setTimeout(async () => {
+      try {
+        const response = await api.get('/shipments', { params: search ? { search } : {} });
+        setShipments(response.data);
+      } catch (err) {
+        setError(err.response?.data?.detail || 'Unable to load shipments');
+      }
+    }, 250);
+    return () => clearTimeout(timeout);
+  }, [search]);
+
+  return (
+    <div className="page-stack">
+      <div className="page-header">
+        <div>
+          <p className="eyebrow">Shipments</p>
+          <h1>Shipment List</h1>
+        </div>
+        <Link className="primary-button" to="/shipments/new">
+          <Plus size={18} />
+          <span>Create</span>
+        </Link>
+      </div>
+
+      <div className="toolbar">
+        <div className="search-box">
+          <Search size={18} />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search shipment, line, port, commodity"
+          />
+        </div>
+      </div>
+
+      {error && <p className="error-text">{error}</p>}
+      <div className="panel">
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Shipment ID</th>
+                <th>Type</th>
+                <th>Shipping Line</th>
+                <th>Origin</th>
+                <th>Destination</th>
+                <th>Commodity</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shipments.map((shipment) => (
+                <tr key={shipment.id} className="clickable-row" onClick={() => navigate(`/shipments/${shipment.id}`)}>
+                  <td>{shipment.shipment_code}</td>
+                  <td>{shipment.type}</td>
+                  <td>{shipment.shipping_line || '-'}</td>
+                  <td>{shipment.origin_port || '-'}</td>
+                  <td>{shipment.dest_port || '-'}</td>
+                  <td>{shipment.commodity || '-'}</td>
+                  <td>
+                    <span className={`badge status-${shipment.status}`}>{shipment.status}</span>
+                  </td>
+                </tr>
+              ))}
+              {!shipments.length && (
+                <tr>
+                  <td colSpan="7">No shipments found.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default ShipmentsPage;
