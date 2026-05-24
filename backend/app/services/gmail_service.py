@@ -1,4 +1,5 @@
 import base64
+import logging
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, Optional
@@ -17,9 +18,32 @@ from app.models.email import EmailConnection
 from app.services.token_crypto_service import decrypt_token, encrypt_token, TokenCryptoError
 
 
+logger = logging.getLogger(__name__)
+
 GMAIL_PROVIDER = "gmail"
 GMAIL_TOKEN_URI = "https://oauth2.googleapis.com/token"
 GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
+
+OAUTH_ERROR_STATE_INVALID = "state_invalid"
+OAUTH_ERROR_TOKEN_EXCHANGE_FAILED = "token_exchange_failed"
+OAUTH_ERROR_GMAIL_PROFILE_FAILED = "gmail_profile_failed"
+OAUTH_ERROR_TOKEN_ENCRYPTION_FAILED = "token_encryption_failed"
+OAUTH_ERROR_DB_SAVE_FAILED = "db_save_failed"
+OAUTH_ERROR_CALLBACK_FAILED = "oauth_callback_failed"
+
+
+class GmailOAuthCallbackError(Exception):
+    def __init__(
+        self,
+        error_code: str,
+        stage: str,
+        message: str,
+        cause_type: Optional[str] = None,
+    ) -> None:
+        super().__init__(message)
+        self.error_code = error_code
+        self.stage = stage
+        self.cause_type = cause_type
 
 
 def _ensure_gmail_configured() -> None:
@@ -80,33 +104,178 @@ def user_id_from_oauth_state(state: str) -> int:
 
 
 def handle_oauth_callback(db: Session, code: str, state: str) -> EmailConnection:
-    user_id = user_id_from_oauth_state(state)
-    flow = _build_flow(state=state)
+    try:
+        user_id = user_id_from_oauth_state(state)
+    except Exception as exc:
+        raise GmailOAuthCallbackError(
+            OAUTH_ERROR_STATE_INVALID,
+            "state_validation",
+            "Invalid Gmail OAuth state.",
+            type(exc).__name__,
+        ) from None
+
+    try:
+        flow = _build_flow(state=state)
+    except HTTPException as exc:
+        error_code = (
+            OAUTH_ERROR_TOKEN_ENCRYPTION_FAILED
+            if "TOKEN_ENCRYPTION_KEY" in str(exc.detail)
+            else OAUTH_ERROR_CALLBACK_FAILED
+        )
+        raise GmailOAuthCallbackError(
+            error_code,
+            "flow_configuration",
+            "Unable to configure Gmail OAuth callback.",
+            type(exc).__name__,
+        ) from None
+    except Exception as exc:
+        raise GmailOAuthCallbackError(
+            OAUTH_ERROR_CALLBACK_FAILED,
+            "flow_configuration",
+            "Unable to configure Gmail OAuth callback.",
+            type(exc).__name__,
+        ) from None
+
+    logger.info("Gmail OAuth token exchange start", extra={"gmail_oauth_user_id": user_id})
     try:
         flow.fetch_token(code=code)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail="Unable to complete Gmail OAuth callback.") from exc
-    credentials = flow.credentials
-    existing = get_active_connection(db, user_id)
-    refresh_token = credentials.refresh_token
-    if not refresh_token and existing:
-        refresh_token = decrypt_token(existing.refresh_token_encrypted)
-    if not refresh_token:
-        raise HTTPException(
-            status_code=400,
-            detail="Google did not return a refresh token. Reconnect Gmail and approve offline access.",
+        logger.info(
+            "Gmail OAuth token exchange end",
+            extra={
+                "gmail_oauth_user_id": user_id,
+                "gmail_oauth_success": False,
+                "gmail_oauth_cause_type": type(exc).__name__,
+            },
         )
-    profile = get_profile_from_credentials(credentials)
+        raise GmailOAuthCallbackError(
+            OAUTH_ERROR_TOKEN_EXCHANGE_FAILED,
+            "token_exchange",
+            "Gmail OAuth token exchange failed.",
+            type(exc).__name__,
+        ) from None
+    credentials = flow.credentials
+    logger.info(
+        "Gmail OAuth token exchange end",
+        extra={
+            "gmail_oauth_user_id": user_id,
+            "gmail_oauth_success": True,
+            "gmail_oauth_has_refresh_token": bool(credentials.refresh_token),
+        },
+    )
+
+    existing = get_active_connection(db, user_id)
+    existing_refresh_token_encrypted = existing.refresh_token_encrypted if existing else None
+    if not credentials.refresh_token and not existing_refresh_token_encrypted:
+        raise GmailOAuthCallbackError(
+            OAUTH_ERROR_TOKEN_EXCHANGE_FAILED,
+            "token_exchange",
+            "Gmail OAuth did not provide a refresh token.",
+        )
+
+    logger.info("Gmail profile fetch start", extra={"gmail_oauth_user_id": user_id})
+    try:
+        profile = get_profile_from_credentials(credentials)
+    except Exception as exc:
+        logger.info(
+            "Gmail profile fetch end",
+            extra={
+                "gmail_oauth_user_id": user_id,
+                "gmail_oauth_success": False,
+                "gmail_oauth_cause_type": type(exc).__name__,
+            },
+        )
+        raise GmailOAuthCallbackError(
+            OAUTH_ERROR_GMAIL_PROFILE_FAILED,
+            "gmail_profile",
+            "Gmail profile fetch failed.",
+            type(exc).__name__,
+        ) from None
+    logger.info(
+        "Gmail profile fetch end",
+        extra={
+            "gmail_oauth_user_id": user_id,
+            "gmail_oauth_success": True,
+            "gmail_oauth_has_email_address": bool(profile.get("emailAddress")),
+        },
+    )
+
+    logger.info("Gmail OAuth token encryption start", extra={"gmail_oauth_user_id": user_id})
+    try:
+        access_token_encrypted = encrypt_token(credentials.token or "")
+        refresh_token_encrypted = (
+            encrypt_token(credentials.refresh_token)
+            if credentials.refresh_token
+            else existing_refresh_token_encrypted
+        )
+    except TokenCryptoError as exc:
+        logger.info(
+            "Gmail OAuth token encryption end",
+            extra={
+                "gmail_oauth_user_id": user_id,
+                "gmail_oauth_success": False,
+                "gmail_oauth_cause_type": type(exc).__name__,
+            },
+        )
+        raise GmailOAuthCallbackError(
+            OAUTH_ERROR_TOKEN_ENCRYPTION_FAILED,
+            "token_encryption",
+            "Gmail token encryption failed.",
+            type(exc).__name__,
+        ) from None
+    except Exception as exc:
+        logger.info(
+            "Gmail OAuth token encryption end",
+            extra={
+                "gmail_oauth_user_id": user_id,
+                "gmail_oauth_success": False,
+                "gmail_oauth_cause_type": type(exc).__name__,
+            },
+        )
+        raise GmailOAuthCallbackError(
+            OAUTH_ERROR_TOKEN_ENCRYPTION_FAILED,
+            "token_encryption",
+            "Gmail token encryption failed.",
+            type(exc).__name__,
+        ) from None
+    logger.info(
+        "Gmail OAuth token encryption end",
+        extra={"gmail_oauth_user_id": user_id, "gmail_oauth_success": True},
+    )
+
     connection = existing or EmailConnection(user_id=user_id, provider=GMAIL_PROVIDER)
     connection.email_address = profile.get("emailAddress")
-    connection.access_token_encrypted = encrypt_token(credentials.token or "")
-    connection.refresh_token_encrypted = encrypt_token(refresh_token)
+    connection.access_token_encrypted = access_token_encrypted
+    connection.refresh_token_encrypted = refresh_token_encrypted
     connection.token_expiry = _naive_utc(credentials.expiry)
     connection.scopes = ",".join(settings.gmail_scopes)
     connection.is_active = True
-    db.add(connection)
-    db.commit()
-    db.refresh(connection)
+
+    logger.info("EmailConnection DB save start", extra={"gmail_oauth_user_id": user_id})
+    try:
+        db.add(connection)
+        db.commit()
+        db.refresh(connection)
+    except Exception as exc:
+        db.rollback()
+        logger.info(
+            "EmailConnection DB save end",
+            extra={
+                "gmail_oauth_user_id": user_id,
+                "gmail_oauth_success": False,
+                "gmail_oauth_cause_type": type(exc).__name__,
+            },
+        )
+        raise GmailOAuthCallbackError(
+            OAUTH_ERROR_DB_SAVE_FAILED,
+            "db_save",
+            "EmailConnection save failed.",
+            type(exc).__name__,
+        ) from None
+    logger.info(
+        "EmailConnection DB save end",
+        extra={"gmail_oauth_user_id": user_id, "gmail_oauth_success": True},
+    )
     return connection
 
 

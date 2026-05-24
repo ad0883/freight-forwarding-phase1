@@ -22,6 +22,17 @@ class EmailOAuthStartResponse(BaseModel):
     auth_url: str
 
 
+class EmailDebugConfigResponse(BaseModel):
+    gmail_enabled: bool
+    has_google_client_id: bool
+    has_google_client_secret: bool
+    google_redirect_uri: str
+    frontend_base_url: str
+    gmail_scopes: list[str]
+    has_token_encryption_key: bool
+    token_encryption_key_valid: bool
+
+
 class EmailScanRequest(BaseModel):
     query: Optional[str] = None
     lookback_days: int = Field(default=30, ge=1, le=365)

@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 from urllib.parse import urlencode
 
@@ -11,6 +12,7 @@ from app.models.email import EmailConnection, EmailMessageCache, EmailSuggestion
 from app.models.shipment import Shipment
 from app.schemas.email import (
     EmailConnectionStatus,
+    EmailDebugConfigResponse,
     EmailDisconnectResponse,
     EmailMessageListItem,
     EmailMessageRead,
@@ -30,6 +32,9 @@ from app.services.email_suggestion_service import (
     reject_suggestion,
 )
 from app.services.gmail_service import (
+    GmailOAuthCallbackError,
+    OAUTH_ERROR_CALLBACK_FAILED,
+    OAUTH_ERROR_STATE_INVALID,
     build_default_query,
     disconnect_gmail,
     get_active_connection,
@@ -39,12 +44,31 @@ from app.services.gmail_service import (
     normalize_message,
     search_messages,
 )
+from app.services.token_crypto_service import TokenCryptoError, encrypt_token
 
 
 router = APIRouter(prefix="/email", tags=["email-automation"])
+logger = logging.getLogger(__name__)
 
 
 EmailUser = Depends(require_roles("ADMIN", "STAFF"))
+AdminUser = Depends(require_roles("ADMIN"))
+
+
+@router.get("/debug/config", response_model=EmailDebugConfigResponse)
+def email_debug_config(
+    current_user: AuthenticatedUser = AdminUser,
+) -> EmailDebugConfigResponse:
+    return EmailDebugConfigResponse(
+        gmail_enabled=settings.GMAIL_ENABLED,
+        has_google_client_id=bool(settings.GOOGLE_CLIENT_ID.strip()),
+        has_google_client_secret=bool(settings.GOOGLE_CLIENT_SECRET.strip()),
+        google_redirect_uri=settings.GOOGLE_REDIRECT_URI,
+        frontend_base_url=settings.FRONTEND_BASE_URL,
+        gmail_scopes=settings.gmail_scopes,
+        has_token_encryption_key=bool(settings.TOKEN_ENCRYPTION_KEY.strip()),
+        token_encryption_key_valid=_token_encryption_key_valid(),
+    )
 
 
 @router.get("/status", response_model=EmailConnectionStatus)
@@ -73,14 +97,54 @@ def email_oauth_callback(
     error: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    if error:
-        return _redirect({"email_error": error})
-    if not code or not state:
-        return _redirect({"email_error": "missing_oauth_code_or_state"})
     try:
+        logger.info(
+            "Gmail OAuth callback start",
+            extra={
+                "gmail_oauth_has_code": bool(code),
+                "gmail_oauth_has_state": bool(state),
+                "gmail_oauth_has_provider_error": bool(error),
+            },
+        )
+        if error:
+            raise GmailOAuthCallbackError(
+                OAUTH_ERROR_CALLBACK_FAILED,
+                "provider_redirect",
+                "Google OAuth redirected with an error.",
+            )
+        if not state:
+            raise GmailOAuthCallbackError(
+                OAUTH_ERROR_STATE_INVALID,
+                "callback_validation",
+                "Gmail OAuth callback state is missing.",
+            )
+        if not code:
+            raise GmailOAuthCallbackError(
+                OAUTH_ERROR_CALLBACK_FAILED,
+                "callback_validation",
+                "Gmail OAuth callback code is missing.",
+            )
         handle_oauth_callback(db, code, state)
-    except HTTPException as exc:
-        return _redirect({"email_error": str(exc.detail)})
+    except GmailOAuthCallbackError as exc:
+        logger.exception(
+            "Gmail OAuth callback failed",
+            extra={
+                "gmail_oauth_error_code": exc.error_code,
+                "gmail_oauth_stage": exc.stage,
+                "gmail_oauth_cause_type": exc.cause_type,
+            },
+        )
+        return _redirect({"email_error": exc.error_code})
+    except Exception as exc:
+        logger.exception(
+            "Gmail OAuth callback failed",
+            extra={
+                "gmail_oauth_error_code": OAUTH_ERROR_CALLBACK_FAILED,
+                "gmail_oauth_stage": "callback",
+                "gmail_oauth_cause_type": type(exc).__name__,
+            },
+        )
+        return _redirect({"email_error": OAUTH_ERROR_CALLBACK_FAILED})
     return _redirect({"connected": "true"})
 
 
@@ -316,6 +380,16 @@ def _suggestion_read(suggestion: EmailSuggestion) -> EmailSuggestionRead:
         status=suggestion.status,
         created_at=suggestion.created_at,
     )
+
+
+def _token_encryption_key_valid() -> bool:
+    if not settings.TOKEN_ENCRYPTION_KEY.strip():
+        return False
+    try:
+        encrypt_token("configuration-check")
+    except TokenCryptoError:
+        return False
+    return True
 
 
 def _redirect(params: dict[str, str]) -> RedirectResponse:
