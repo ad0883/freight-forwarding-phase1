@@ -37,6 +37,10 @@ function getConflictList(error) {
   return [];
 }
 
+function suggestionNeedsShipment(suggestion) {
+  return Boolean(suggestion);
+}
+
 function EmailAutomationPage() {
   const [searchParams] = useSearchParams();
   const [currentUser, setCurrentUser] = useState(null);
@@ -55,6 +59,11 @@ function EmailAutomationPage() {
   const [loading, setLoading] = useState(false);
 
   const canUseEmail = currentUser && ['ADMIN', 'STAFF'].includes(currentUser.role);
+  const selectedShipment = useMemo(
+    () => shipments.find((shipment) => String(shipment.id) === String(reviewShipmentId)) || null,
+    [shipments, reviewShipmentId]
+  );
+  const applyDisabled = suggestionNeedsShipment(selectedSuggestion) && !reviewShipmentId;
   const oauthNotice = useMemo(() => {
     if (searchParams.get('connected')) return 'Gmail connected';
     if (searchParams.get('email_error')) return `Gmail connection failed: ${searchParams.get('email_error')}`;
@@ -70,7 +79,7 @@ function EmailAutomationPage() {
       api.get('/email/status'),
       api.get('/email/messages'),
       api.get('/email/suggestions', { params: { status: 'pending' } }),
-      api.get('/shipments'),
+      api.get('/shipments', { params: { include_archived: true } }),
     ]);
     setConnection(statusResponse.data);
     setMessages(messagesResponse.data);
@@ -156,7 +165,14 @@ function EmailAutomationPage() {
   async function reviewSuggestion(suggestion) {
     setConflicts([]);
     setSelectedSuggestion(suggestion);
-    setReviewShipmentId(suggestion.shipment_id ? String(suggestion.shipment_id) : '');
+    const matchedShipment = shipments.find(
+      (shipment) =>
+        (suggestion.shipment_id && shipment.id === suggestion.shipment_id) ||
+        (suggestion.shipment_code && shipment.shipment_code === suggestion.shipment_code) ||
+        (suggestion.extracted_data_json?.shipment_code &&
+          shipment.shipment_code === suggestion.extracted_data_json.shipment_code)
+    );
+    setReviewShipmentId(matchedShipment ? String(matchedShipment.id) : '');
     setReviewJson(JSON.stringify(suggestion.extracted_data_json || {}, null, 2));
     try {
       const response = await api.get(`/email/messages/${suggestion.email_message_id}`);
@@ -187,6 +203,10 @@ function EmailAutomationPage() {
     setError('');
     setNotice('');
     setConflicts([]);
+    if (applyDisabled) {
+      setError('Select a shipment before applying this suggestion.');
+      return;
+    }
     const saved = await saveReviewEdits();
     if (!saved) return;
     try {
@@ -339,7 +359,10 @@ function EmailAutomationPage() {
                 {suggestions.map((suggestion) => (
                   <tr key={suggestion.id}>
                     <td>{suggestion.suggestion_type}</td>
-                    <td>{suggestion.shipment_code || '-'}</td>
+                    <td>
+                      {suggestion.shipment_code || '-'}
+                      {suggestion.shipment_is_archived && <span className="badge status-archived">Archived</span>}
+                    </td>
                     <td>{Math.round(Number(suggestion.confidence || 0) * 100)}%</td>
                     <td>{summarizeData(suggestion.extracted_data_json)}</td>
                     <td>
@@ -375,11 +398,17 @@ function EmailAutomationPage() {
                   <option value="">Select shipment</option>
                   {shipments.map((shipment) => (
                     <option key={shipment.id} value={shipment.id}>
-                      {shipment.shipment_code}
+                      {shipment.shipment_code}{shipment.is_archived ? ' (Archived)' : ''}
                     </option>
                   ))}
                 </select>
               </label>
+              {selectedShipment?.is_archived && (
+                <div className="warning-box">
+                  <strong>{selectedShipment.shipment_code} is archived.</strong>
+                  <p>{selectedShipment.archive_reason || 'Review carefully before force applying this suggestion.'}</p>
+                </div>
+              )}
               <label>
                 Extracted Data
                 <textarea
@@ -398,12 +427,12 @@ function EmailAutomationPage() {
                 </div>
               )}
               <div className="row-actions">
-                <button className="primary-button" type="button" onClick={() => applySelected(false)}>
+                <button className="primary-button" type="button" onClick={() => applySelected(false)} disabled={applyDisabled}>
                   <CheckCircle2 size={18} />
                   <span>Apply</span>
                 </button>
                 {conflicts.length > 0 && (
-                  <button className="secondary-button" type="button" onClick={() => applySelected(true)}>
+                  <button className="secondary-button" type="button" onClick={() => applySelected(true)} disabled={applyDisabled}>
                     <RotateCcw size={18} />
                     <span>Force Apply</span>
                   </button>

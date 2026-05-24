@@ -68,7 +68,6 @@ def extract_fields(text: str) -> dict[str, Any]:
     labeled_patterns = {
         "booking_ref": r"(?:booking\s*(?:ref|reference|no|number)\s*[:#-]?\s*)([A-Z0-9][A-Z0-9/-]{3,})",
         "bl_number": r"(?:(?:hbl|mbl|bl|bill of lading)\s*(?:no|number)?\s*[:#-]?\s*)([A-Z0-9][A-Z0-9/-]{3,})",
-        "invoice_no": r"(?:invoice\s*(?:no|number|#)?\s*[:#-]?\s*)([A-Z0-9][A-Z0-9/-]{2,})",
         "vessel_name": r"(?:vessel\s*[:#-]?\s*)([A-Z][A-Z0-9 .'-]{2,})",
         "voyage_no": r"(?:voyage\s*(?:no|number)?\s*[:#-]?\s*)([A-Z0-9/-]{2,})",
         "origin_port": r"(?:(?:origin|pol|load port)\s*[:#-]?\s*)([A-Z][A-Z .'-]{2,})",
@@ -78,6 +77,9 @@ def extract_fields(text: str) -> dict[str, Any]:
         match = re.search(pattern, text, flags=re.IGNORECASE)
         if match:
             extracted[field] = _clean_value(match.group(1))
+    invoice_no = _extract_invoice_no(text)
+    if invoice_no:
+        extracted["invoice_no"] = invoice_no
     for field in ["etd", "eta"]:
         value = _extract_labeled_date(text, field.upper())
         if value:
@@ -89,6 +91,20 @@ def extract_fields(text: str) -> dict[str, Any]:
     if bl_type:
         extracted["bl_type"] = bl_type
     return extracted
+
+
+def _extract_invoice_no(text: str) -> Optional[str]:
+    patterns = [
+        r"\b(?:invoice|inv)\s*(?:no\.?|number|#)\s*[:#-]?\s*([A-Z0-9][A-Z0-9._/-]{2,})\b",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if not match:
+            continue
+        invoice_no = _clean_value(match.group(1)).upper()
+        if invoice_no.lower() not in {"for", "the", "and", "with", "from"}:
+            return invoice_no
+    return None
 
 
 def build_suggestions_for_classification(

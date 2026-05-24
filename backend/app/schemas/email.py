@@ -50,6 +50,8 @@ class EmailSuggestionRead(BaseModel):
     email_message_id: int
     shipment_id: Optional[int] = None
     shipment_code: Optional[str] = None
+    shipment_is_archived: bool = False
+    shipment_archive_reason: Optional[str] = None
     suggestion_type: EmailSuggestionType
     classification: EmailClassification
     confidence: float

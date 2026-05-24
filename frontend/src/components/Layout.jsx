@@ -27,10 +27,19 @@ const links = [
 function Layout() {
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState(null);
+  const [userLoading, setUserLoading] = useState(true);
 
   useEffect(() => {
-    api.get('/auth/me').then((response) => setCurrentUser(response.data)).catch(() => setCurrentUser(null));
-  }, []);
+    api
+      .get('/auth/me')
+      .then((response) => setCurrentUser(response.data))
+      .catch(() => {
+        localStorage.removeItem('access_token');
+        setCurrentUser(null);
+        navigate('/login');
+      })
+      .finally(() => setUserLoading(false));
+  }, [navigate]);
 
   function logout() {
     localStorage.removeItem('access_token');
@@ -49,7 +58,7 @@ function Layout() {
         </div>
         <nav className="nav-links">
           {links
-            .filter((link) => !link.writeRoleOnly || ['ADMIN', 'STAFF'].includes(currentUser?.role))
+            .filter((link) => !link.writeRoleOnly || userLoading || ['ADMIN', 'STAFF'].includes(currentUser?.role))
             .map(({ to, label, icon: Icon }) => (
               <NavLink key={to} to={to} end={to === '/'}>
                 <Icon size={18} />

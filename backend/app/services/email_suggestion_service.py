@@ -63,12 +63,20 @@ def process_cached_message(db: Session, message: EmailMessageCache) -> int:
         message.classification, extracted_data, message.received_at
     )
     for suggestion in suggestions:
-        if _suggestion_exists(db, message.id, suggestion["suggestion_type"], shipment.id if shipment else None):
-            continue
         suggestion_data = {**extracted_data, **suggestion["data"]}
+        suggestion_shipment = shipment or _shipment_from_code(db, suggestion_data.get("shipment_code"))
+        if suggestion_shipment and not message.matched_shipment_id:
+            message.matched_shipment_id = suggestion_shipment.id
+        if _suggestion_exists(
+            db,
+            message.id,
+            suggestion["suggestion_type"],
+            suggestion_shipment.id if suggestion_shipment else None,
+        ):
+            continue
         email_suggestion = EmailSuggestion(
             email_message_id=message.id,
-            shipment_id=shipment.id if shipment else None,
+            shipment_id=suggestion_shipment.id if suggestion_shipment else None,
             suggestion_type=suggestion["suggestion_type"],
             confidence=confidence,
             extracted_data_json=suggestion_data,
@@ -163,7 +171,7 @@ def reject_suggestion(db: Session, suggestion: EmailSuggestion, user_id: int) ->
 
 
 def _apply_update_shipment(db: Session, suggestion: EmailSuggestion, force: bool) -> None:
-    shipment = _require_shipment(db, suggestion)
+    shipment = _require_shipment(db, suggestion, force)
     data = suggestion.extracted_data_json or {}
     updates = {
         field: _coerce_field_value(field, data[field])
@@ -174,7 +182,7 @@ def _apply_update_shipment(db: Session, suggestion: EmailSuggestion, force: bool
 
 
 def _apply_update_document(db: Session, suggestion: EmailSuggestion, force: bool) -> None:
-    shipment = _require_shipment(db, suggestion)
+    shipment = _require_shipment(db, suggestion, force)
     data = suggestion.extracted_data_json or {}
     doc_type = data.get("doc_type")
     if not doc_type:
@@ -207,7 +215,7 @@ def _apply_update_document(db: Session, suggestion: EmailSuggestion, force: bool
 
 
 def _apply_update_bl(db: Session, suggestion: EmailSuggestion, force: bool) -> None:
-    shipment = _require_shipment(db, suggestion)
+    shipment = _require_shipment(db, suggestion, force)
     data = suggestion.extracted_data_json or {}
     record = db.query(BLManagement).filter(BLManagement.shipment_id == shipment.id).first()
     if not record:
@@ -223,7 +231,7 @@ def _apply_update_bl(db: Session, suggestion: EmailSuggestion, force: bool) -> N
 
 
 def _apply_update_demurrage(db: Session, suggestion: EmailSuggestion, force: bool) -> None:
-    shipment = _require_shipment(db, suggestion)
+    shipment = _require_shipment(db, suggestion, force)
     if shipment.type != "import":
         raise HTTPException(status_code=400, detail="Demurrage suggestions apply only to import shipments")
     data = suggestion.extracted_data_json or {}
@@ -241,7 +249,7 @@ def _apply_update_demurrage(db: Session, suggestion: EmailSuggestion, force: boo
 
 
 def _apply_create_charge(db: Session, suggestion: EmailSuggestion, force: bool) -> None:
-    shipment = _require_shipment(db, suggestion)
+    shipment = _require_shipment(db, suggestion, force)
     data = suggestion.extracted_data_json or {}
     if data.get("amount") in (None, ""):
         raise HTTPException(status_code=400, detail="Charge amount is required")
@@ -287,7 +295,7 @@ def _apply_create_charge(db: Session, suggestion: EmailSuggestion, force: bool) 
 
 
 def _apply_create_followup(db: Session, suggestion: EmailSuggestion, force: bool) -> None:
-    shipment = _require_shipment(db, suggestion)
+    shipment = _require_shipment(db, suggestion, force)
     data = suggestion.extracted_data_json or {}
     db.add(
         FollowUpLog(
@@ -304,7 +312,7 @@ def _apply_create_followup(db: Session, suggestion: EmailSuggestion, force: bool
 
 
 def _apply_create_task(db: Session, suggestion: EmailSuggestion, force: bool) -> None:
-    shipment = _require_shipment(db, suggestion)
+    shipment = _require_shipment(db, suggestion, force)
     data = suggestion.extracted_data_json or {}
     db.add(
         Task(
@@ -319,12 +327,23 @@ def _apply_create_task(db: Session, suggestion: EmailSuggestion, force: bool) ->
     )
 
 
-def _require_shipment(db: Session, suggestion: EmailSuggestion) -> Shipment:
+def _require_shipment(db: Session, suggestion: EmailSuggestion, force: bool = False) -> Shipment:
     if not suggestion.shipment_id:
         raise HTTPException(status_code=400, detail="Suggestion must be assigned to a shipment before applying")
     shipment = db.query(Shipment).filter(Shipment.id == suggestion.shipment_id).first()
     if not shipment:
         raise HTTPException(status_code=400, detail="Shipment does not exist")
+    if shipment.is_archived and not force:
+        raise EmailSuggestionConflict(
+            [
+                {
+                    "field": "shipment_id",
+                    "existing_value": shipment.shipment_code,
+                    "suggested_value": shipment.shipment_code,
+                    "message": f"Shipment {shipment.shipment_code} is archived. Force apply only if this is intentional.",
+                }
+            ]
+        )
     return shipment
 
 
@@ -384,6 +403,12 @@ def _json_value(value: Any) -> Any:
 
 def _match_shipment_field(db: Session, column: Any, value: str) -> Optional[Shipment]:
     return db.query(Shipment).filter(func.lower(column) == value.lower()).first()
+
+
+def _shipment_from_code(db: Session, value: Optional[Any]) -> Optional[Shipment]:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return _match_shipment_field(db, Shipment.shipment_code, value.strip())
 
 
 def _suggestion_exists(

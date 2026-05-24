@@ -1,7 +1,9 @@
 import base64
 import hashlib
+import html
 import hmac
 import logging
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
@@ -481,7 +483,7 @@ def get_message(db: Session, connection: EmailConnection, gmail_message_id: str)
 def normalize_message(raw_message: dict[str, Any]) -> dict[str, Any]:
     payload = raw_message.get("payload") or {}
     headers = _headers_to_dict(payload.get("headers") or [])
-    body_preview = _extract_body_preview(payload)[:4000]
+    body_preview = clean_body_preview(_extract_body_preview(payload))[:4000]
     return {
         "gmail_message_id": raw_message.get("id"),
         "thread_id": raw_message.get("threadId"),
@@ -529,6 +531,17 @@ def _decode_body(data: str) -> str:
         return base64.urlsafe_b64decode(padded.encode("utf-8")).decode("utf-8", errors="ignore")
     except Exception:
         return ""
+
+
+def clean_body_preview(value: str) -> str:
+    if not value:
+        return ""
+    text = html.unescape(value)
+    text = re.sub(r"(?i)<\s*br\s*/?\s*>", "\n", text)
+    text = re.sub(r"(?is)<\s*(script|style)[^>]*>.*?<\s*/\s*\1\s*>", " ", text)
+    text = re.sub(r"(?s)<[^>]+>", " ", text)
+    lines = [" ".join(line.split()) for line in text.splitlines()]
+    return "\n".join(line for line in lines if line)
 
 
 def _has_attachments(payload: dict[str, Any]) -> bool:

@@ -430,7 +430,8 @@ label {
   padding: 0.66rem 0.9rem;
 }
 
-.primary-button:disabled {
+.primary-button:disabled,
+.secondary-button:disabled {
   cursor: not-allowed;
   opacity: 0.7;
 }
@@ -558,6 +559,16 @@ label {
 
 .conflict-list p {
   color: #8a6100;
+}
+
+.warning-box {
+  display: grid;
+  gap: 0.35rem;
+  border: 1px solid #f59e0b;
+  border-radius: 7px;
+  color: #8a6100;
+  background: #fffbeb;
+  padding: 0.75rem;
 }
 
 .email-preview {
