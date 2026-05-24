@@ -13,8 +13,9 @@ const initialForm = {
 
 function UsersAdminPage() {
   const [users, setUsers] = useState([]);
+  const [drafts, setDrafts] = useState({});
   const [form, setForm] = useState(initialForm);
-  const [reset, setReset] = useState({ user: null, password: '' });
+  const [reset, setReset] = useState({ user: null, password: '', confirm_password: '' });
   const [confirm, setConfirm] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -26,6 +27,17 @@ function UsersAdminPage() {
     try {
       const response = await api.get('/users');
       setUsers(response.data);
+      setDrafts(
+        Object.fromEntries(
+          response.data.map((user) => [
+            user.id,
+            {
+              name: user.name,
+              role: user.role,
+            },
+          ])
+        )
+      );
     } catch (err) {
       setError(err.response?.data?.detail || 'Unable to load users');
     } finally {
@@ -82,9 +94,13 @@ function UsersAdminPage() {
     if (!reset.user) return;
     setError('');
     setNotice('');
+    if (reset.password !== reset.confirm_password) {
+      setError('New passwords do not match');
+      return;
+    }
     try {
       await api.patch(`/users/${reset.user.id}/password-reset`, { new_password: reset.password });
-      setReset({ user: null, password: '' });
+      setReset({ user: null, password: '', confirm_password: '' });
       setNotice('Password reset');
     } catch (err) {
       setError(err.response?.data?.detail || 'Unable to reset password');
@@ -141,16 +157,35 @@ function UsersAdminPage() {
                   <th>Email</th>
                   <th>Role</th>
                   <th>Status</th>
+                  <th>Created At</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {users.map((user) => (
                   <tr key={user.id}>
-                    <td>{user.name}</td>
+                    <td>
+                      <input
+                        value={drafts[user.id]?.name || ''}
+                        onChange={(event) =>
+                          setDrafts((current) => ({
+                            ...current,
+                            [user.id]: { ...(current[user.id] || {}), name: event.target.value },
+                          }))
+                        }
+                      />
+                    </td>
                     <td>{user.email}</td>
                     <td>
-                      <select value={user.role} onChange={(event) => updateUser(user, { role: event.target.value })}>
+                      <select
+                        value={drafts[user.id]?.role || user.role}
+                        onChange={(event) =>
+                          setDrafts((current) => ({
+                            ...current,
+                            [user.id]: { ...(current[user.id] || {}), role: event.target.value },
+                          }))
+                        }
+                      >
                         <option value="ADMIN">ADMIN</option>
                         <option value="STAFF">STAFF</option>
                         <option value="VIEW_ONLY">VIEW_ONLY</option>
@@ -161,9 +196,27 @@ function UsersAdminPage() {
                         {user.is_active ? 'active' : 'inactive'}
                       </span>
                     </td>
+                    <td>{new Date(user.created_at).toLocaleString()}</td>
                     <td>
                       <div className="row-actions">
-                        <button className="secondary-button" type="button" onClick={() => setReset({ user, password: '' })}>
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          onClick={() =>
+                            updateUser(user, {
+                              name: drafts[user.id]?.name || user.name,
+                              role: drafts[user.id]?.role || user.role,
+                            })
+                          }
+                        >
+                          <UserCheck size={17} />
+                          <span>Save</span>
+                        </button>
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          onClick={() => setReset({ user, password: '', confirm_password: '' })}
+                        >
                           <KeyRound size={17} />
                           <span>Reset</span>
                         </button>
@@ -201,6 +254,16 @@ function UsersAdminPage() {
           <label>
             New Password
             <input value={reset.password} onChange={(event) => setReset((current) => ({ ...current, password: event.target.value }))} type="password" minLength="6" required />
+          </label>
+          <label>
+            Confirm New Password
+            <input
+              value={reset.confirm_password}
+              onChange={(event) => setReset((current) => ({ ...current, confirm_password: event.target.value }))}
+              type="password"
+              minLength="6"
+              required
+            />
           </label>
           <div className="form-actions">
             <button className="primary-button" type="submit">

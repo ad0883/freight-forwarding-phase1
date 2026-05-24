@@ -1,13 +1,21 @@
 import { KeyRound } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import api from '../api/client.js';
-import { ErrorState } from '../components/States.jsx';
+import { ErrorState, LoadingState } from '../components/States.jsx';
 
 function SettingsPage() {
+  const [currentUser, setCurrentUser] = useState(null);
   const [form, setForm] = useState({ current_password: '', new_password: '', confirm_password: '' });
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api
+      .get('/auth/me')
+      .then((response) => setCurrentUser(response.data))
+      .catch((err) => setError(err.response?.data?.detail || 'Unable to load account settings'));
+  }, []);
 
   async function submit(event) {
     event.preventDefault();
@@ -40,6 +48,30 @@ function SettingsPage() {
           <h1>Settings</h1>
         </div>
       </div>
+      {!currentUser ? (
+        <LoadingState label="Loading account..." />
+      ) : (
+        <section className="panel">
+          <div className="info-grid">
+            <div className="info-item">
+              <span>Name</span>
+              <strong>{currentUser.name}</strong>
+            </div>
+            <div className="info-item">
+              <span>Email</span>
+              <strong>{currentUser.email}</strong>
+            </div>
+            <div className="info-item">
+              <span>Role</span>
+              <strong>{currentUser.role}</strong>
+            </div>
+            <div className="info-item">
+              <span>Status</span>
+              <strong>{currentUser.is_active ? 'Active' : 'Inactive'}</strong>
+            </div>
+          </div>
+        </section>
+      )}
       <form className="panel form-grid settings-form" onSubmit={submit}>
         <label>
           Current Password

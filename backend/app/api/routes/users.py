@@ -41,7 +41,7 @@ def create_user(
     record_audit_log(
         db,
         current_user,
-        "user.created",
+        "user.create",
         "user",
         entity_id=user.id,
         entity_label=user.email,
@@ -77,17 +77,31 @@ def update_user(
         setattr(user, field, value)
     db.commit()
     db.refresh(user)
+    after = _user_audit_snapshot(user)
+    fields_changed = changed_fields(before, after)
     record_audit_log(
         db,
         current_user,
-        "user.updated",
+        "user.update",
         "user",
         entity_id=user.id,
         entity_label=user.email,
         description="User updated by admin.",
-        metadata={"fields_changed": changed_fields(before, _user_audit_snapshot(user))},
+        metadata={"fields_changed": fields_changed},
         request=request,
     )
+    if before["role"] != after["role"]:
+        record_audit_log(
+            db,
+            current_user,
+            "user.role_change",
+            "user",
+            entity_id=user.id,
+            entity_label=user.email,
+            description="User role changed by admin.",
+            metadata={"from_role": before["role"], "to_role": after["role"]},
+            request=request,
+        )
     return user
 
 
@@ -132,7 +146,7 @@ def deactivate_user(
     record_audit_log(
         db,
         current_user,
-        "user.deactivated",
+        "user.deactivate",
         "user",
         entity_id=user.id,
         entity_label=user.email,
@@ -157,7 +171,7 @@ def reactivate_user(
     record_audit_log(
         db,
         current_user,
-        "user.reactivated",
+        "user.reactivate",
         "user",
         entity_id=user.id,
         entity_label=user.email,

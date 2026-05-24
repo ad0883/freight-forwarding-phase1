@@ -39,7 +39,7 @@ def register(
     record_audit_log(
         db,
         current_user,
-        "user.registered",
+        "user.create",
         "user",
         entity_id=user.id,
         entity_label=user.email,
@@ -99,7 +99,7 @@ def change_password(
     record_audit_log(
         db,
         current_user,
-        "auth.password_changed",
+        "auth.change_password",
         "user",
         entity_id=user.id,
         entity_label=user.email,

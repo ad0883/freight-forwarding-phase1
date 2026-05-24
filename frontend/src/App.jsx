@@ -31,18 +31,63 @@ function App() {
       >
         <Route index element={<DashboardPage />} />
         <Route path="shipments" element={<ShipmentsPage />} />
-        <Route path="shipments/new" element={<CreateShipmentPage />} />
+        <Route
+          path="shipments/new"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'STAFF']}>
+              <CreateShipmentPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="shipments/:id" element={<ShipmentDetailPage />} />
         <Route path="parties" element={<PartiesPage />} />
         <Route path="tasks" element={<TasksPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="ai" element={<MockAiPage />} />
-        <Route path="email" element={<EmailAutomationPage />} />
+        <Route
+          path="email"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'STAFF']}>
+              <EmailAutomationPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="settings" element={<SettingsPage />} />
-        <Route path="admin/audit-logs" element={<AuditLogsPage />} />
-        <Route path="admin/users" element={<UsersAdminPage />} />
-        <Route path="admin/status" element={<StatusPage />} />
-        <Route path="admin/tools" element={<AdminToolsPage />} />
+        <Route
+          path="audit-logs"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN']}>
+              <AuditLogsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="users"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN']}>
+              <UsersAdminPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="status"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN']}>
+              <StatusPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="admin/tools"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN']}>
+              <AdminToolsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="admin/audit-logs" element={<Navigate to="/audit-logs" replace />} />
+        <Route path="admin/users" element={<Navigate to="/users" replace />} />
+        <Route path="admin/status" element={<Navigate to="/status" replace />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
