@@ -7,19 +7,23 @@ function ShipmentsPage() {
   const navigate = useNavigate();
   const [shipments, setShipments] = useState([]);
   const [search, setSearch] = useState('');
+  const [includeArchived, setIncludeArchived] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     const timeout = setTimeout(async () => {
       try {
-        const response = await api.get('/shipments', { params: search ? { search } : {} });
+        const params = {};
+        if (search) params.search = search;
+        if (includeArchived) params.include_archived = true;
+        const response = await api.get('/shipments', { params });
         setShipments(response.data);
       } catch (err) {
         setError(err.response?.data?.detail || 'Unable to load shipments');
       }
     }, 250);
     return () => clearTimeout(timeout);
-  }, [search]);
+  }, [search, includeArchived]);
 
   return (
     <div className="page-stack">
@@ -43,6 +47,14 @@ function ShipmentsPage() {
             placeholder="Search shipment, line, port, commodity"
           />
         </div>
+        <label className="checkbox-label compact-toggle">
+          <input
+            type="checkbox"
+            checked={includeArchived}
+            onChange={(event) => setIncludeArchived(event.target.checked)}
+          />
+          Include Archived
+        </label>
       </div>
 
       {error && <p className="error-text">{error}</p>}
@@ -71,6 +83,7 @@ function ShipmentsPage() {
                   <td>{shipment.commodity || '-'}</td>
                   <td>
                     <span className={`badge status-${shipment.status}`}>{shipment.status}</span>
+                    {shipment.is_archived && <span className="badge status-archived">Archived</span>}
                   </td>
                 </tr>
               ))}

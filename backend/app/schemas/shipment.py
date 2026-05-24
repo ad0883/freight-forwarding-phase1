@@ -62,12 +62,20 @@ class ShipmentRead(ShipmentBase):
     id: int
     shipment_code: str
     status: ShipmentStatus
+    is_archived: bool = False
+    archived_at: Optional[datetime] = None
+    archived_by: Optional[int] = None
+    archive_reason: Optional[str] = None
     created_at: datetime
     created_by: int
     exporter: Optional[PartyRead] = None
     importer: Optional[PartyRead] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ShipmentArchiveRequest(BaseModel):
+    reason: Optional[str] = None
 
 
 class DashboardSummary(BaseModel):

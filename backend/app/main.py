@@ -23,7 +23,7 @@ from app.api.routes import (
 from app.core.config import settings
 from app.core.security import get_password_hash
 from app.db.indexes import ensure_performance_indexes
-from app.db.schema import ensure_phase2_columns
+from app.db.schema import ensure_phase2_columns, ensure_phase35_columns
 from app.db.session import Base, SessionLocal, engine
 from app.models import User
 from app.services.alert_service import create_overdue_task_alerts
@@ -70,6 +70,7 @@ async def lifespan(app: FastAPI):
     if settings.AUTO_CREATE_TABLES:
         Base.metadata.create_all(bind=engine)
         ensure_phase2_columns(engine)
+        ensure_phase35_columns(engine)
         ensure_performance_indexes(engine)
     db = SessionLocal()
     try:

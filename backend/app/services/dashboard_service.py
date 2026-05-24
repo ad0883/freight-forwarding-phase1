@@ -53,12 +53,16 @@ def _build_dashboard_summary(db: Session) -> DashboardSummary:
 
     counts = db.query(
         select(func.count(Shipment.id))
-        .where(~Shipment.status.in_(COMPLETED_STATUSES + CANCELLED_STATUSES))
+        .where(Shipment.is_archived.is_(False), ~Shipment.status.in_(COMPLETED_STATUSES + CANCELLED_STATUSES))
         .scalar_subquery(),
-        select(func.count(Task.id)).where(Task.status == "open").scalar_subquery(),
+        select(func.count(Task.id))
+        .join(Shipment, Shipment.id == Task.shipment_id)
+        .where(Task.status == "open", Shipment.is_archived.is_(False))
+        .scalar_subquery(),
         select(func.count(Shipment.id))
         .where(
             and_(
+                Shipment.is_archived.is_(False),
                 ~Shipment.status.in_(COMPLETED_STATUSES + CANCELLED_STATUSES),
                 Shipment.etd.isnot(None),
                 Shipment.etd >= today,
@@ -66,11 +70,13 @@ def _build_dashboard_summary(db: Session) -> DashboardSummary:
         )
         .scalar_subquery(),
         select(func.count(Alert.id))
-        .where(Alert.created_at >= day_start)
+        .join(Shipment, Shipment.id == Alert.shipment_id)
+        .where(Alert.created_at >= day_start, Shipment.is_archived.is_(False))
         .scalar_subquery(),
         select(func.count(Shipment.id))
         .where(
             and_(
+                Shipment.is_archived.is_(False),
                 Shipment.status.in_(COMPLETED_STATUSES),
                 Shipment.created_at >= month_start,
             )
@@ -81,13 +87,15 @@ def _build_dashboard_summary(db: Session) -> DashboardSummary:
     shipments = (
         db.query(Shipment)
         .options(joinedload(Shipment.exporter), joinedload(Shipment.importer))
+        .filter(Shipment.is_archived.is_(False))
         .order_by(Shipment.created_at.desc())
         .limit(8)
         .all()
     )
     recent_alerts = (
         db.query(Alert)
-        .filter(Alert.priority == "critical")
+        .join(Shipment, Shipment.id == Alert.shipment_id)
+        .filter(Alert.priority == "critical", Shipment.is_archived.is_(False))
         .order_by(Alert.is_read.asc(), Alert.created_at.desc())
         .limit(6)
         .all()
@@ -99,7 +107,8 @@ def _build_dashboard_summary(db: Session) -> DashboardSummary:
     )
     urgent_tasks = (
         db.query(Task)
-        .filter(Task.status == "open")
+        .join(Shipment, Shipment.id == Task.shipment_id)
+        .filter(Task.status == "open", Shipment.is_archived.is_(False))
         .order_by(priority_order.asc(), Task.due_date.asc().nullslast(), Task.created_at.desc())
         .limit(8)
         .all()

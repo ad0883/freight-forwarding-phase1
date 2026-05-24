@@ -37,9 +37,9 @@ def _get_charge(db: Session, charge_id: int) -> Charge:
 def _validate_party(db: Session, party_id: Optional[int]) -> None:
     if party_id is None:
         return
-    exists = db.query(Party.id).filter(Party.id == party_id).first()
+    exists = db.query(Party.id).filter(Party.id == party_id, Party.is_active.is_(True)).first()
     if not exists:
-        raise HTTPException(status_code=400, detail="Party does not exist")
+        raise HTTPException(status_code=400, detail="Party does not exist or is inactive")
 
 
 def _validate_direction_status(direction: str, status_value: str) -> None:

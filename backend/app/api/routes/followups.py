@@ -23,9 +23,9 @@ def _get_shipment(db: Session, shipment_id: int) -> Shipment:
 def _validate_party(db: Session, party_id: Optional[int]) -> None:
     if party_id is None:
         return
-    exists = db.query(Party.id).filter(Party.id == party_id).first()
+    exists = db.query(Party.id).filter(Party.id == party_id, Party.is_active.is_(True)).first()
     if not exists:
-        raise HTTPException(status_code=400, detail="Party does not exist")
+        raise HTTPException(status_code=400, detail="Party does not exist or is inactive")
 
 
 @router.get("/shipments/{shipment_id}/followups", response_model=list[FollowUpRead])

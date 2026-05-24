@@ -1,4 +1,16 @@
-import { Ban, CheckCircle2, Edit3, ExternalLink, Plus, RotateCcw, Save, ToggleRight } from 'lucide-react';
+import {
+  Archive,
+  ArchiveRestore,
+  Ban,
+  CheckCircle2,
+  Edit3,
+  ExternalLink,
+  Plus,
+  RotateCcw,
+  Save,
+  ToggleRight,
+  Trash2,
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../api/client.js';
@@ -117,6 +129,7 @@ function ShipmentDetailPage() {
   const [pnl, setPnl] = useState(null);
   const [parties, setParties] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
+  const [includeCancelledTasks, setIncludeCancelledTasks] = useState(false);
   const [workflowStatus, setWorkflowStatus] = useState('');
   const [followupForm, setFollowupForm] = useState(emptyFollowup);
   const [chargeForm, setChargeForm] = useState(emptyChargeForm());
@@ -126,6 +139,7 @@ function ShipmentDetailPage() {
   const [notice, setNotice] = useState('');
 
   const canWrite = currentUser && currentUser.role !== 'VIEW_ONLY';
+  const canAdmin = currentUser?.role === 'ADMIN';
   const workflowStatuses = useMemo(
     () => (shipment?.type === 'export' ? exportStatuses : importStatuses),
     [shipment?.type]
@@ -138,6 +152,16 @@ function ShipmentDetailPage() {
     ]);
     setCharges(chargesResponse.data);
     setPnl(pnlResponse.data);
+  }
+
+  async function loadTasks() {
+    const response = await api.get('/tasks', {
+      params: {
+        shipment_id: id,
+        ...(includeCancelledTasks ? { include_cancelled: true } : {}),
+      },
+    });
+    setTasks(response.data);
   }
 
   async function loadAll() {
@@ -157,7 +181,12 @@ function ShipmentDetailPage() {
         api.get('/auth/me'),
         api.get(`/shipments/${id}`),
         api.get(`/documents/shipment/${id}`),
-        api.get('/tasks', { params: { shipment_id: id } }),
+        api.get('/tasks', {
+          params: {
+            shipment_id: id,
+            ...(includeCancelledTasks ? { include_cancelled: true } : {}),
+          },
+        }),
         api.get(`/shipments/${id}/bl`),
         api.get(`/shipments/${id}/demurrage`),
         api.get(`/shipments/${id}/followups`),
@@ -181,6 +210,12 @@ function ShipmentDetailPage() {
   useEffect(() => {
     loadAll().catch((err) => setError(err.response?.data?.detail || 'Unable to load shipment'));
   }, [id]);
+
+  useEffect(() => {
+    if (shipment) {
+      loadTasks().catch((err) => setError(err.response?.data?.detail || 'Unable to load shipment tasks'));
+    }
+  }, [includeCancelledTasks]);
 
   function updateDocument(documentId, field, value) {
     setDocuments((current) =>
@@ -214,6 +249,66 @@ function ShipmentDetailPage() {
       setNotice('Task updated');
     } catch (err) {
       setError(err.response?.data?.detail || 'Unable to update task');
+    }
+  }
+
+  async function cancelTask(task) {
+    setNotice('');
+    try {
+      await api.patch(`/tasks/${task.id}/cancel`);
+      await loadTasks();
+      setNotice('Task cancelled');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to cancel task');
+    }
+  }
+
+  async function restoreTask(task) {
+    setNotice('');
+    try {
+      await api.patch(`/tasks/${task.id}/restore`);
+      await loadTasks();
+      setNotice('Task restored');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to restore task');
+    }
+  }
+
+  async function deleteManualTask(task) {
+    if (!window.confirm(`Delete manual task "${task.title}" permanently?`)) return;
+    setNotice('');
+    try {
+      await api.delete(`/tasks/${task.id}`);
+      await loadTasks();
+      setNotice('Manual task deleted');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to delete task');
+    }
+  }
+
+  async function archiveShipment() {
+    const reason = window.prompt(`Reason for archiving ${shipment.shipment_code}`, '');
+    if (reason === null) return;
+    setNotice('');
+    try {
+      const response = await api.patch(`/shipments/${id}/archive`, { reason: reason || null });
+      setShipment(response.data);
+      setWorkflowStatus(response.data.status);
+      setNotice('Shipment archived');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to archive shipment');
+    }
+  }
+
+  async function restoreShipment() {
+    setNotice('');
+    try {
+      const response = await api.patch(`/shipments/${id}/restore`);
+      setShipment(response.data);
+      setWorkflowStatus(response.data.status);
+      setNotice('Shipment restored');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to restore shipment');
     }
   }
 
@@ -399,7 +494,23 @@ function ShipmentDetailPage() {
           <p className="eyebrow">{shipment.type}</p>
           <h1>{shipment.shipment_code}</h1>
         </div>
-        <span className="badge status-active">{shipment.status}</span>
+        <div className="header-actions">
+          <span className="badge status-active">{shipment.status}</span>
+          {shipment.is_archived && <span className="badge status-archived">Archived</span>}
+          {canAdmin && (
+            shipment.is_archived ? (
+              <button className="secondary-button" type="button" onClick={restoreShipment}>
+                <ArchiveRestore size={17} />
+                <span>Restore Shipment</span>
+              </button>
+            ) : (
+              <button className="secondary-button danger-text" type="button" onClick={archiveShipment}>
+                <Archive size={17} />
+                <span>Archive Shipment</span>
+              </button>
+            )
+          )}
+        </div>
       </div>
       {notice && <p className="success-text">{notice}</p>}
 
@@ -435,6 +546,7 @@ function ShipmentDetailPage() {
             <InfoItem label="Shipment Code" value={shipment.shipment_code} />
             <InfoItem label="Type" value={shipment.type} />
             <InfoItem label="Status" value={shipment.status} />
+            <InfoItem label="Archived" value={shipment.is_archived ? 'Yes' : 'No'} />
             <InfoItem label="Shipping Line" value={shipment.shipping_line} />
             <InfoItem label="Vessel" value={shipment.vessel_name} />
             <InfoItem label="Voyage No" value={shipment.voyage_no} />
@@ -446,6 +558,7 @@ function ShipmentDetailPage() {
             <InfoItem label="ETA" value={shipment.eta} />
             <InfoItem label="Booking Ref" value={shipment.booking_ref} />
             <InfoItem label="Commodity" value={shipment.commodity} />
+            {shipment.is_archived && <InfoItem label="Archive Reason" value={shipment.archive_reason} />}
           </div>
         </section>
       )}
@@ -518,6 +631,17 @@ function ShipmentDetailPage() {
 
       {activeTab === 'tasks' && (
         <section className="panel">
+          <div className="panel-header">
+            <h2>Shipment Tasks</h2>
+            <label className="checkbox-label compact-toggle">
+              <input
+                type="checkbox"
+                checked={includeCancelledTasks}
+                onChange={(event) => setIncludeCancelledTasks(event.target.checked)}
+              />
+              Include Cancelled
+            </label>
+          </div>
           <div className="table-wrap">
             <table>
               <thead>
@@ -542,10 +666,31 @@ function ShipmentDetailPage() {
                     </td>
                     <td>
                       {canWrite && (
-                        <button className="secondary-button" type="button" onClick={() => toggleTask(task)}>
-                          {task.status === 'open' ? <ToggleRight size={17} /> : <RotateCcw size={17} />}
-                          <span>{task.status === 'open' ? 'Mark done' : 'Reopen'}</span>
-                        </button>
+                        <div className="row-actions">
+                          {task.status === 'cancelled' ? (
+                            <button className="secondary-button" type="button" onClick={() => restoreTask(task)}>
+                              <RotateCcw size={17} />
+                              <span>Restore Task</span>
+                            </button>
+                          ) : (
+                            <>
+                              <button className="secondary-button" type="button" onClick={() => toggleTask(task)}>
+                                {task.status === 'open' ? <ToggleRight size={17} /> : <RotateCcw size={17} />}
+                                <span>{task.status === 'open' ? 'Mark done' : 'Reopen'}</span>
+                              </button>
+                              <button className="secondary-button danger-text" type="button" onClick={() => cancelTask(task)}>
+                                <Ban size={17} />
+                                <span>Cancel Task</span>
+                              </button>
+                            </>
+                          )}
+                          {!task.auto_generated && (
+                            <button className="secondary-button danger-text" type="button" onClick={() => deleteManualTask(task)}>
+                              <Trash2 size={17} />
+                              <span>Delete Manual Task</span>
+                            </button>
+                          )}
+                        </div>
                       )}
                     </td>
                   </tr>

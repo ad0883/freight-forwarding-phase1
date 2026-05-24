@@ -54,7 +54,7 @@ def ask_mock_ai(
     shipment_code = _shipment_code_from_question(payload.question)
 
     if "uncollected" in question or ("pending" in question and "receivable" in question):
-        rows = list_pending_receivables(db)
+        rows = list_pending_receivables(db, active_only=True)
         total = sum((row.amount for row in rows), start=Decimal("0"))
         if "which" in question or "shipment" in question:
             if not rows:
@@ -65,7 +65,7 @@ def ask_mock_ai(
         return AskResponse(answer=f"Uncollected receivables total: {_format_money(total, currency)}.")
 
     if "pending" in question and "payable" in question:
-        rows = list_pending_payables(db)
+        rows = list_pending_payables(db, active_only=True)
         if not rows:
             return AskResponse(answer="There are no pending payables.")
         lines = [f"{row.shipment_code}: {_format_money(row.amount, row.currency)}" for row in rows[:10]]
@@ -75,16 +75,17 @@ def ask_mock_ai(
         shipment = db.query(Shipment).filter(Shipment.shipment_code == shipment_code).first()
         if shipment:
             summary = calculate_shipment_pnl(db, shipment.id)
+            archived_note = " This shipment is archived." if shipment.is_archived else ""
             return AskResponse(
                 answer=(
                     f"{shipment.shipment_code} P&L: receivable {_format_money(summary.total_receivable, summary.currency)}, "
                     f"payable {_format_money(summary.total_payable, summary.currency)}, "
-                    f"net profit {_format_money(summary.net_profit, summary.currency)}."
+                    f"net profit {_format_money(summary.net_profit, summary.currency)}.{archived_note}"
                 )
             )
 
     if "loss-making" in question or "loss making" in question or "loss" in question:
-        rows = [row for row in list_shipment_pnl(db) if row.net_profit < 0]
+        rows = [row for row in list_shipment_pnl(db, active_only=True) if row.net_profit < 0]
         if not rows:
             return AskResponse(answer="No shipments are currently loss-making.")
         lines = [f"{row.shipment_code}: {_format_money(row.net_profit, row.currency)}" for row in rows[:10]]
@@ -95,7 +96,13 @@ def ask_mock_ai(
         return AskResponse(answer=f"This month profit is {_format_money(summary.this_month_profit, summary.currency)}.")
 
     if "pending" in question and "task" in question:
-        tasks = db.query(Task).filter(Task.status == "open").order_by(Task.created_at.desc()).all()
+        tasks = (
+            db.query(Task)
+            .join(Shipment, Shipment.id == Task.shipment_id)
+            .filter(Task.status == "open", Shipment.is_archived.is_(False))
+            .order_by(Task.created_at.desc())
+            .all()
+        )
         if not tasks:
             return AskResponse(answer="There are no pending tasks.")
         lines = [f"{task.title} for shipment #{task.shipment_id}" for task in tasks[:10]]
@@ -105,7 +112,11 @@ def ask_mock_ai(
         docs = (
             db.query(Document, Shipment)
             .join(Shipment, Shipment.id == Document.shipment_id)
-            .filter(Document.doc_type.ilike("%BL%"), Document.status.in_(["pending", "received", "sent"]))
+            .filter(
+                Document.doc_type.ilike("%BL%"),
+                Document.status.in_(["pending", "received", "sent"]),
+                Shipment.is_archived.is_(False),
+            )
             .order_by(Shipment.created_at.desc())
             .all()
         )
@@ -118,16 +129,28 @@ def ask_mock_ai(
         if shipment_code:
             shipment = db.query(Shipment).filter(Shipment.shipment_code == shipment_code).first()
             if shipment:
-                return AskResponse(answer=f"{shipment.shipment_code} is currently {shipment.status}.")
+                archived_note = " It is archived." if shipment.is_archived else ""
+                return AskResponse(answer=f"{shipment.shipment_code} is currently {shipment.status}.{archived_note}")
     if "shipment" in question and "status" in question:
-        shipments = db.query(Shipment).order_by(Shipment.created_at.desc()).limit(10).all()
+        shipments = (
+            db.query(Shipment)
+            .filter(Shipment.is_archived.is_(False))
+            .order_by(Shipment.created_at.desc())
+            .limit(10)
+            .all()
+        )
         if not shipments:
             return AskResponse(answer="No shipments have been created yet.")
         lines = [f"{shipment.shipment_code}: {shipment.status}" for shipment in shipments]
         return AskResponse(answer="Shipment status: " + "; ".join(lines))
 
     if "free days" in question and ("expiring" in question or "expire" in question):
-        rows = db.query(Demurrage, Shipment).join(Shipment, Shipment.id == Demurrage.shipment_id).all()
+        rows = (
+            db.query(Demurrage, Shipment)
+            .join(Shipment, Shipment.id == Demurrage.shipment_id)
+            .filter(Shipment.is_archived.is_(False))
+            .all()
+        )
         matches = []
         for demurrage, shipment in rows:
             read = calculate_demurrage(demurrage)
@@ -136,7 +159,12 @@ def ask_mock_ai(
         return AskResponse(answer="Free days expiring: " + "; ".join(matches) if matches else "No shipments have free days expiring.")
 
     if "demurrage" in question and "running" in question:
-        rows = db.query(Demurrage, Shipment).join(Shipment, Shipment.id == Demurrage.shipment_id).all()
+        rows = (
+            db.query(Demurrage, Shipment)
+            .join(Shipment, Shipment.id == Demurrage.shipment_id)
+            .filter(Shipment.is_archived.is_(False))
+            .all()
+        )
         matches = [
             shipment.shipment_code
             for demurrage, shipment in rows
@@ -145,7 +173,14 @@ def ask_mock_ai(
         return AskResponse(answer="Demurrage running for: " + ", ".join(matches) if matches else "No shipments currently have demurrage running.")
 
     if "follow-up" in question or "follow up" in question or "followups" in question:
-        followups = db.query(FollowUpLog).filter(FollowUpLog.status == "open").order_by(FollowUpLog.date.desc()).limit(10).all()
+        followups = (
+            db.query(FollowUpLog)
+            .join(Shipment, Shipment.id == FollowUpLog.shipment_id)
+            .filter(FollowUpLog.status == "open", Shipment.is_archived.is_(False))
+            .order_by(FollowUpLog.date.desc())
+            .limit(10)
+            .all()
+        )
         if not followups:
             return AskResponse(answer="There are no open follow-ups.")
         lines = [f"Shipment #{item.shipment_id}: {item.summary}" for item in followups]

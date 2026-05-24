@@ -202,6 +202,14 @@ label {
   line-height: 1.15;
 }
 
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 .eyebrow {
   color: #6b7280;
   font-size: 0.78rem;
@@ -327,6 +335,10 @@ label {
   white-space: nowrap;
 }
 
+.badge + .badge {
+  margin-left: 0.35rem;
+}
+
 .status-active,
 .task-open {
   color: #164aa2;
@@ -341,9 +353,16 @@ label {
 
 .status-cancelled,
 .charge-cancelled,
+.task-cancelled,
 .priority-critical {
   color: #b42318;
   background: #fee4e2;
+}
+
+.status-archived,
+.state-inactive {
+  color: #475467;
+  background: #eef2f6;
 }
 
 .charge-paid,
@@ -466,6 +485,14 @@ label {
 
 .checkbox-label input {
   width: auto;
+}
+
+.compact-toggle {
+  display: inline-flex;
+  width: auto;
+  gap: 0.45rem;
+  color: #485166;
+  white-space: nowrap;
 }
 
 .row-actions {

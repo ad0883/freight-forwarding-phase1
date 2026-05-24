@@ -23,6 +23,7 @@ Phase 1 implementation of a freight forwarding operations system with a FastAPI 
 - Shipment-wise Profit & Loss summary
 - Financial dashboard cards and reports page
 - Mock AI finance questions backed by database rules
+- Phase 3.5 admin cleanup controls for shipment archive/restore, party deactivate/reactivate, safe party delete, task cancel/restore, and manual task delete
 
 ## Backend Local Setup
 
@@ -109,6 +110,29 @@ Phase 3 adds a manual finance layer:
 - Dashboard financial cards show pending receivables, pending payables, this month receivables, this month payables, and this month profit.
 - Reports page shows monthly summary, pending receivables, pending payables, and shipment-wise P&L.
 - Mock AI finance examples: `How much freight is uncollected?`, `Which shipments have pending receivables?`, `Which shipments have pending payables?`, `Show profit for FF-EXP-2026-001`, `Which shipments are loss-making?`, and `What is this month profit?`.
+
+## Phase 3.5 Admin Cleanup
+
+Phase 3.5 adds safe cleanup controls without removing operational history:
+
+- Shipments can be archived and restored by `ADMIN` users only. Archived shipments keep linked documents, tasks, charges, BL, demurrage, follow-ups, and alerts.
+- Shipment lists hide archived records by default. Use Include Archived to show them with an Archived badge.
+- Parties can be deactivated and reactivated by `ADMIN` users only. Inactive parties are hidden from new shipment, charge, and follow-up dropdowns by default, but old linked records still show their names.
+- Parties can be permanently deleted only when unused. Parties linked to shipments, charges, or follow-ups are blocked with `Party is used in existing records. Deactivate it instead.`
+- Tasks can be cancelled and restored by `ADMIN` and `STAFF`. Cancelled tasks are hidden by default and do not count as pending tasks.
+- Manual tasks can be permanently deleted only when they are not auto-generated and are not referenced by alerts. Auto-generated workflow tasks should be cancelled instead of deleted.
+- `VIEW_ONLY` users can read archived/inactive/cancelled state but cannot use cleanup write controls.
+
+Archive, deactivate, and cancel actions keep history safe while reducing clutter in normal day-to-day screens.
+
+### Database Compatibility
+
+The app keeps using the existing `Base.metadata.create_all()` startup pattern, but Phase 3.5 also runs an idempotent compatibility helper:
+
+- Missing shipment archive columns and party deactivation columns are added with `ALTER TABLE ... ADD COLUMN` only if they are absent.
+- If a column already exists, startup skips it.
+- Existing data is not dropped, recreated, truncated, or reset.
+- If an installed PostgreSQL database uses a native enum for task status, startup safely allows the `cancelled` status value without crashing on repeated runs.
 
 ## Phase 1 Limitations
 

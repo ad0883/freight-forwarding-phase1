@@ -90,7 +90,12 @@ def calculate_shipment_pnl(db: Session, shipment_id: int) -> Optional[ShipmentPL
 
 def calculate_dashboard_financials(db: Session, today: Optional[date] = None) -> DashboardFinancialSummary:
     today = today or date.today()
-    charges = db.query(Charge).filter(Charge.status != "cancelled").all()
+    charges = (
+        db.query(Charge)
+        .join(Shipment, Shipment.id == Charge.shipment_id)
+        .filter(Charge.status != "cancelled", Shipment.is_archived.is_(False))
+        .all()
+    )
     month_charges = [
         charge
         for charge in charges
@@ -177,14 +182,15 @@ def calculate_monthly_report(
     )
 
 
-def _pending_charges(db: Session, direction: str) -> list[PendingChargeReportRow]:
-    charges = (
+def _pending_charges(db: Session, direction: str, active_only: bool = False) -> list[PendingChargeReportRow]:
+    query = (
         db.query(Charge)
         .options(joinedload(Charge.shipment), joinedload(Charge.party))
         .filter(Charge.direction == direction, Charge.status == "pending")
-        .order_by(Charge.date.asc().nullslast(), Charge.created_at.asc())
-        .all()
     )
+    if active_only:
+        query = query.join(Shipment, Shipment.id == Charge.shipment_id).filter(Shipment.is_archived.is_(False))
+    charges = query.order_by(Charge.date.asc().nullslast(), Charge.created_at.asc()).all()
     return [
         PendingChargeReportRow(
             charge_id=charge.id,
@@ -201,21 +207,22 @@ def _pending_charges(db: Session, direction: str) -> list[PendingChargeReportRow
     ]
 
 
-def list_pending_receivables(db: Session) -> list[PendingChargeReportRow]:
-    return _pending_charges(db, "receivable")
+def list_pending_receivables(db: Session, active_only: bool = False) -> list[PendingChargeReportRow]:
+    return _pending_charges(db, "receivable", active_only=active_only)
 
 
-def list_pending_payables(db: Session) -> list[PendingChargeReportRow]:
-    return _pending_charges(db, "payable")
+def list_pending_payables(db: Session, active_only: bool = False) -> list[PendingChargeReportRow]:
+    return _pending_charges(db, "payable", active_only=active_only)
 
 
-def list_shipment_pnl(db: Session) -> list[ShipmentPLReportRow]:
-    shipments = (
+def list_shipment_pnl(db: Session, active_only: bool = False) -> list[ShipmentPLReportRow]:
+    query = (
         db.query(Shipment)
         .options(joinedload(Shipment.charges))
-        .order_by(Shipment.created_at.desc())
-        .all()
     )
+    if active_only:
+        query = query.filter(Shipment.is_archived.is_(False))
+    shipments = query.order_by(Shipment.created_at.desc()).all()
     rows = []
     for shipment in shipments:
         summary = _shipment_pnl_from_charges(shipment, list(shipment.charges))

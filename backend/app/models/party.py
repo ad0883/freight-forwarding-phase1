@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from app.db.session import Base
@@ -17,6 +17,10 @@ class Party(Base):
     phone = Column(String(80), nullable=True)
     country = Column(String(120), nullable=True)
     gstin = Column(String(80), nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    deactivated_at = Column(DateTime, nullable=True)
+    deactivated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    deactivation_reason = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     export_shipments = relationship(
