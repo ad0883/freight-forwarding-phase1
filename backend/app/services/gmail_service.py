@@ -26,6 +26,10 @@ GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 
 OAUTH_ERROR_STATE_INVALID = "state_invalid"
 OAUTH_ERROR_TOKEN_EXCHANGE_FAILED = "token_exchange_failed"
+OAUTH_ERROR_TOKEN_EXCHANGE_FAILED_INVALID_CLIENT = "token_exchange_failed_invalid_client"
+OAUTH_ERROR_TOKEN_EXCHANGE_FAILED_REDIRECT_URI_MISMATCH = "token_exchange_failed_redirect_uri_mismatch"
+OAUTH_ERROR_TOKEN_EXCHANGE_FAILED_INVALID_GRANT = "token_exchange_failed_invalid_grant"
+OAUTH_ERROR_TOKEN_EXCHANGE_FAILED_UNKNOWN = "token_exchange_failed_unknown"
 OAUTH_ERROR_GMAIL_PROFILE_FAILED = "gmail_profile_failed"
 OAUTH_ERROR_TOKEN_ENCRYPTION_FAILED = "token_encryption_failed"
 OAUTH_ERROR_DB_SAVE_FAILED = "db_save_failed"
@@ -140,16 +144,14 @@ def handle_oauth_callback(db: Session, code: str, state: str) -> EmailConnection
     try:
         flow.fetch_token(code=code)
     except Exception as exc:
+        error_details = _oauth_exception_log_details(exc)
+        error_code = _token_exchange_redirect_error_code(error_details)
         logger.info(
             "Gmail OAuth token exchange end",
-            extra={
-                "gmail_oauth_user_id": user_id,
-                "gmail_oauth_success": False,
-                "gmail_oauth_cause_type": type(exc).__name__,
-            },
+            extra=error_details,
         )
         raise GmailOAuthCallbackError(
-            OAUTH_ERROR_TOKEN_EXCHANGE_FAILED,
+            error_code,
             "token_exchange",
             "Gmail OAuth token exchange failed.",
             type(exc).__name__,
@@ -168,7 +170,7 @@ def handle_oauth_callback(db: Session, code: str, state: str) -> EmailConnection
     existing_refresh_token_encrypted = existing.refresh_token_encrypted if existing else None
     if not credentials.refresh_token and not existing_refresh_token_encrypted:
         raise GmailOAuthCallbackError(
-            OAUTH_ERROR_TOKEN_EXCHANGE_FAILED,
+            OAUTH_ERROR_TOKEN_EXCHANGE_FAILED_UNKNOWN,
             "token_exchange",
             "Gmail OAuth did not provide a refresh token.",
         )
@@ -277,6 +279,67 @@ def handle_oauth_callback(db: Session, code: str, state: str) -> EmailConnection
         extra={"gmail_oauth_user_id": user_id, "gmail_oauth_success": True},
     )
     return connection
+
+
+def _oauth_exception_log_details(exc: Exception) -> dict[str, Any]:
+    response_payload = _oauth_response_payload(exc)
+    response = getattr(exc, "response", None)
+    provider_error_code = _safe_oauth_string(
+        getattr(exc, "error", None)
+    ) or _safe_oauth_string(response_payload.get("error") if response_payload else None)
+    error_description = (
+        _safe_oauth_string(getattr(exc, "description", None))
+        or _safe_oauth_string(getattr(exc, "error_description", None))
+        or _safe_oauth_string(response_payload.get("error_description") if response_payload else None)
+    )
+    http_status = _safe_http_status(getattr(exc, "status_code", None)) or _safe_http_status(
+        getattr(response, "status_code", None)
+    )
+    return {
+        "gmail_oauth_exception_class": type(exc).__name__,
+        "gmail_oauth_provider_error_code": provider_error_code,
+        "gmail_oauth_error_description": error_description,
+        "gmail_oauth_http_status": http_status,
+    }
+
+
+def _oauth_response_payload(exc: Exception) -> Optional[dict[str, Any]]:
+    response = getattr(exc, "response", None)
+    if response is None:
+        return None
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _safe_oauth_string(value: Any) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    sanitized = " ".join(value.split())
+    return sanitized[:300] if sanitized else None
+
+
+def _safe_http_status(value: Any) -> Optional[int]:
+    try:
+        status = int(value)
+    except (TypeError, ValueError):
+        return None
+    return status if 100 <= status <= 599 else None
+
+
+def _token_exchange_redirect_error_code(error_details: dict[str, Any]) -> str:
+    provider_error_code = (error_details.get("gmail_oauth_provider_error_code") or "").lower()
+    error_description = (error_details.get("gmail_oauth_error_description") or "").lower()
+    safe_text = f"{provider_error_code} {error_description}"
+    if "invalid_client" in safe_text:
+        return OAUTH_ERROR_TOKEN_EXCHANGE_FAILED_INVALID_CLIENT
+    if "redirect_uri_mismatch" in safe_text or ("redirect" in safe_text and "mismatch" in safe_text):
+        return OAUTH_ERROR_TOKEN_EXCHANGE_FAILED_REDIRECT_URI_MISMATCH
+    if "invalid_grant" in safe_text:
+        return OAUTH_ERROR_TOKEN_EXCHANGE_FAILED_INVALID_GRANT
+    return OAUTH_ERROR_TOKEN_EXCHANGE_FAILED_UNKNOWN
 
 
 def get_active_connection(db: Session, user_id: int) -> Optional[EmailConnection]:
