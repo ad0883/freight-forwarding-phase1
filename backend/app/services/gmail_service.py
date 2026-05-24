@@ -82,11 +82,14 @@ def _build_flow(state: Optional[str] = None) -> Flow:
     return flow
 
 
-def get_authorization_url(user_id: int) -> str:
+def get_authorization_url(user_id: int, frontend_base_url: Optional[str] = None) -> str:
+    claims: dict[str, Any] = {"uid": user_id, "purpose": "gmail_oauth"}
+    if frontend_base_url:
+        claims["frontend_base_url"] = frontend_base_url
     state = create_access_token(
         "gmail-oauth",
         expires_delta=timedelta(minutes=10),
-        additional_claims={"uid": user_id, "purpose": "gmail_oauth"},
+        additional_claims=claims,
     )
     flow = _build_flow(state=state)
     authorization_url, _ = flow.authorization_url(
@@ -98,13 +101,27 @@ def get_authorization_url(user_id: int) -> str:
 
 
 def user_id_from_oauth_state(state: str) -> int:
+    return int(_oauth_state_payload(state)["uid"])
+
+
+def frontend_base_url_from_oauth_state(state: Optional[str]) -> Optional[str]:
+    if not state:
+        return None
+    try:
+        value = _oauth_state_payload(state).get("frontend_base_url")
+    except HTTPException:
+        return None
+    return value if isinstance(value, str) and value else None
+
+
+def _oauth_state_payload(state: str) -> dict[str, Any]:
     try:
         payload = decode_access_token(state)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Invalid Gmail OAuth state.") from exc
     if payload.get("purpose") != "gmail_oauth" or payload.get("sub") != "gmail-oauth":
         raise HTTPException(status_code=400, detail="Invalid Gmail OAuth state.")
-    return int(payload["uid"])
+    return payload
 
 
 def handle_oauth_callback(db: Session, code: str, state: str) -> EmailConnection:
@@ -147,8 +164,14 @@ def handle_oauth_callback(db: Session, code: str, state: str) -> EmailConnection
         error_details = _oauth_exception_log_details(exc)
         error_code = _token_exchange_redirect_error_code(error_details)
         logger.info(
-            "Gmail OAuth token exchange end",
-            extra=error_details,
+            (
+                "Gmail OAuth token exchange failed diagnostics "
+                "exception_class=%s provider_error_code=%s error_description=%s http_status=%s"
+            ),
+            error_details["gmail_oauth_exception_class"],
+            error_details["gmail_oauth_provider_error_code"],
+            error_details["gmail_oauth_error_description"],
+            error_details["gmail_oauth_http_status"],
         )
         raise GmailOAuthCallbackError(
             error_code,

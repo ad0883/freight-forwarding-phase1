@@ -1,8 +1,8 @@
 import logging
 from typing import Optional
-from urllib.parse import urlencode
+from urllib.parse import urlparse, urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session, joinedload
 
@@ -37,6 +37,7 @@ from app.services.gmail_service import (
     OAUTH_ERROR_STATE_INVALID,
     build_default_query,
     disconnect_gmail,
+    frontend_base_url_from_oauth_state,
     get_active_connection,
     get_authorization_url,
     get_message,
@@ -86,8 +87,16 @@ def email_status(
 
 
 @router.get("/oauth/start", response_model=EmailOAuthStartResponse)
-def email_oauth_start(current_user: AuthenticatedUser = EmailUser) -> EmailOAuthStartResponse:
-    return EmailOAuthStartResponse(auth_url=get_authorization_url(current_user.id))
+def email_oauth_start(
+    request: Request,
+    current_user: AuthenticatedUser = EmailUser,
+) -> EmailOAuthStartResponse:
+    return EmailOAuthStartResponse(
+        auth_url=get_authorization_url(
+            current_user.id,
+            frontend_base_url=_frontend_base_url_from_request(request),
+        )
+    )
 
 
 @router.get("/oauth/callback")
@@ -97,6 +106,7 @@ def email_oauth_callback(
     error: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
+    redirect_frontend_base_url = frontend_base_url_from_oauth_state(state)
     try:
         logger.info(
             "Gmail OAuth callback start",
@@ -134,7 +144,7 @@ def email_oauth_callback(
                 "gmail_oauth_cause_type": exc.cause_type,
             },
         )
-        return _redirect({"email_error": exc.error_code})
+        return _redirect({"email_error": exc.error_code}, redirect_frontend_base_url)
     except Exception as exc:
         logger.exception(
             "Gmail OAuth callback failed",
@@ -144,8 +154,8 @@ def email_oauth_callback(
                 "gmail_oauth_cause_type": type(exc).__name__,
             },
         )
-        return _redirect({"email_error": OAUTH_ERROR_CALLBACK_FAILED})
-    return _redirect({"connected": "true"})
+        return _redirect({"email_error": OAUTH_ERROR_CALLBACK_FAILED}, redirect_frontend_base_url)
+    return _redirect({"connected": "true"}, redirect_frontend_base_url)
 
 
 @router.post("/disconnect", response_model=EmailDisconnectResponse)
@@ -392,6 +402,30 @@ def _token_encryption_key_valid() -> bool:
     return True
 
 
-def _redirect(params: dict[str, str]) -> RedirectResponse:
+def _frontend_base_url_from_request(request: Request) -> Optional[str]:
+    for value in [request.headers.get("origin"), request.headers.get("referer")]:
+        frontend_base_url = _origin_from_url(value)
+        if frontend_base_url and _is_allowed_frontend_base_url(frontend_base_url):
+            return frontend_base_url
+    return None
+
+
+def _origin_from_url(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    parsed = urlparse(value)
+    if not parsed.scheme or not parsed.netloc:
+        return None
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _is_allowed_frontend_base_url(value: str) -> bool:
+    allowed = {settings.FRONTEND_BASE_URL.rstrip("/")}
+    allowed.update(origin.rstrip("/") for origin in settings.cors_origins)
+    return value.rstrip("/") in allowed
+
+
+def _redirect(params: dict[str, str], frontend_base_url: Optional[str] = None) -> RedirectResponse:
     query = urlencode(params)
-    return RedirectResponse(f"{settings.FRONTEND_BASE_URL.rstrip('/')}/email?{query}")
+    base_url = frontend_base_url if frontend_base_url and _is_allowed_frontend_base_url(frontend_base_url) else settings.FRONTEND_BASE_URL
+    return RedirectResponse(f"{base_url.rstrip('/')}/email?{query}")
