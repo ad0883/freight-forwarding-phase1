@@ -22,6 +22,15 @@ class Settings(BaseSettings):
 
     AUTO_CREATE_TABLES: bool = True
 
+    AI_PROVIDER: str = "groq"
+    AI_ENABLED: bool = False
+    GROQ_API_KEY: str = ""
+    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    AI_TIMEOUT_SECONDS: int = 30
+    AI_MAX_CONTEXT_ROWS: int = 30
+    AI_LOG_INTERACTIONS: bool = True
+
     ADMIN_NAME: str = "Admin"
     ADMIN_EMAIL: str = "admin@example.com"
     ADMIN_PASSWORD: str = "admin123"
