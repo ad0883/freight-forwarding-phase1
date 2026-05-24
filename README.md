@@ -13,7 +13,7 @@ Phase 1 implementation of a freight forwarding operations system with a FastAPI 
 - Party directory
 - Task list with done/reopen flow
 - APScheduler overdue-task alert foundation
-- Mock AI assistant with rule-based database answers
+- AI Assistant with Groq LLM support and rule-based fallback
 - Phase 2 workflow status automation for export and import shipments
 - BL Management tab with final BL Google Drive link
 - Import demurrage tracker with free-day calculations
@@ -22,7 +22,7 @@ Phase 1 implementation of a freight forwarding operations system with a FastAPI 
 - Charges module for manual payable and receivable tracking
 - Shipment-wise Profit & Loss summary
 - Financial dashboard cards and reports page
-- Mock AI finance questions backed by database rules
+- AI finance questions backed by database context
 - Phase 3.5 admin cleanup controls for shipment archive/restore, party deactivate/reactivate, safe party delete, task cancel/restore, and manual task delete
 
 ## Backend Local Setup
@@ -134,9 +134,51 @@ The app keeps using the existing `Base.metadata.create_all()` startup pattern, b
 - Existing data is not dropped, recreated, truncated, or reset.
 - If an installed PostgreSQL database uses a native enum for task status, startup safely allows the `cancelled` status value without crashing on repeated runs.
 
+## Phase 4 Groq AI Assistant
+
+Phase 4 upgrades the `/ai` page from a mock assistant into a database-aware AI Assistant with a Groq-backed LLM path and rule-based fallback.
+
+- The backend builds a small, read-only context from relevant shipments, tasks, BL records, demurrage, follow-ups, charges, and reports.
+- The LLM never receives full database tables or API keys.
+- The assistant is read-only in Phase 4. It may suggest actions, but it cannot archive shipments, deactivate parties, cancel tasks, edit charges, send emails, upload files, or perform any write action.
+- If `AI_ENABLED=false`, `GROQ_API_KEY` is missing, Groq times out, or the LLM returns an invalid response, the existing rule-based fallback answers are returned with `fallback_used=true`.
+- All authenticated roles, including `VIEW_ONLY`, can ask read-only AI questions.
+
+Backend-only AI environment variables:
+
+```env
+AI_PROVIDER=groq
+AI_ENABLED=true
+GROQ_API_KEY=your_groq_api_key
+GROQ_BASE_URL=https://api.groq.com/openai/v1
+GROQ_MODEL=llama-3.3-70b-versatile
+AI_TIMEOUT_SECONDS=30
+AI_MAX_CONTEXT_ROWS=30
+AI_LOG_INTERACTIONS=true
+```
+
+Never put `GROQ_API_KEY` or `OPENAI_API_KEY` in frontend environment variables, never expose them through API responses, and never commit `backend/.env`.
+
+Supported examples include:
+
+- `What shipments need attention today?`
+- `Which tasks are overdue?`
+- `Which shipments have demurrage running?`
+- `Which BL approvals are pending?`
+- `Which follow-ups are open?`
+- `How much freight is uncollected?`
+- `Which shipments have pending receivables?`
+- `Which shipments have pending payables?`
+- `Which shipments are loss-making?`
+- `Show profit for FF-EXP-2026-001.`
+- `What is the next action for FF-IMP-2026-001?`
+- `Show archived shipments.`
+- `Show inactive parties.`
+- `Show cancelled tasks.`
+
 ## Phase 1 Limitations
 
-The app still intentionally does not include OpenAI API calls, real file uploads, Google Drive API upload, S3, Celery, Redis, courier automation, invoice PDF generation, payment gateway integration, accounting software integration, GST invoice automation, bank reconciliation, exchange-rate automation, or email/Gmail parsing.
+The app still intentionally does not include OpenAI as the primary AI provider, real file uploads, Google Drive API upload, S3, Celery, Redis, courier automation, invoice PDF generation, payment gateway integration, accounting software integration, GST invoice automation, bank reconciliation, exchange-rate automation, email/Gmail parsing, OCR, autonomous database writes, or AI-executed archive/delete/cancel actions.
 
 Phase 3 finance entries are manual. The app stores currencies per charge and flags mixed-currency totals, but it does not convert exchange rates automatically.
 
@@ -163,12 +205,21 @@ DB_MAX_OVERFLOW=10
 DB_POOL_TIMEOUT=30
 DB_POOL_RECYCLE_SECONDS=1800
 AUTO_CREATE_TABLES=true
+AI_PROVIDER=groq
+AI_ENABLED=true
+GROQ_API_KEY=your_groq_api_key
+GROQ_BASE_URL=https://api.groq.com/openai/v1
+GROQ_MODEL=llama-3.3-70b-versatile
+AI_TIMEOUT_SECONDS=30
+AI_MAX_CONTEXT_ROWS=30
+AI_LOG_INTERACTIONS=true
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=change-this-password
 ```
 
 For production speed, use Neon's pooled connection URL, deploy the backend in the same or nearest region as the database, and run without `--reload`.
 Set a long random `JWT_SECRET_KEY`, and change `ADMIN_PASSWORD` before the service starts for the first time.
+Add Groq variables only to the backend Render service. Do not add Groq or OpenAI API keys to the frontend Render service.
 
 Frontend static site:
 

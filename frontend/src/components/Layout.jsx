@@ -17,7 +17,7 @@ const links = [
   { to: '/parties', label: 'Parties', icon: Users },
   { to: '/tasks', label: 'Tasks', icon: ClipboardList },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
-  { to: '/ai', label: 'Mock AI', icon: Bot },
+  { to: '/ai', label: 'AI Assistant', icon: Bot },
 ];
 
 function Layout() {
