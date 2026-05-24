@@ -17,6 +17,8 @@ class User(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
-    created_shipments = relationship("Shipment", back_populates="creator")
+    created_shipments = relationship(
+        "Shipment", back_populates="creator", foreign_keys="Shipment.created_by"
+    )
     assigned_tasks = relationship("Task", back_populates="assignee")
     followups = relationship("FollowUpLog", back_populates="logger")

@@ -68,7 +68,13 @@ def _add_alert(
 def _create_task_overdue_alerts(db: Session, today: date) -> int:
     overdue_tasks = (
         db.query(Task)
-        .filter(Task.status == "open", Task.due_date.isnot(None), Task.due_date < today)
+        .join(Shipment, Shipment.id == Task.shipment_id)
+        .filter(
+            Task.status == "open",
+            Task.due_date.isnot(None),
+            Task.due_date < today,
+            Shipment.is_archived.is_(False),
+        )
         .all()
     )
     created = 0
@@ -100,7 +106,7 @@ def _within_days(target: Optional[date], today: date, days: int) -> bool:
 
 
 def _create_export_deadline_alerts(db: Session, today: date) -> int:
-    shipments = db.query(Shipment).filter(Shipment.type == "export").all()
+    shipments = db.query(Shipment).filter(Shipment.type == "export", Shipment.is_archived.is_(False)).all()
     created = 0
     for shipment in shipments:
         if shipment.status in INACTIVE_SHIPMENT_STATUSES:
@@ -133,7 +139,12 @@ def _create_export_deadline_alerts(db: Session, today: date) -> int:
 
 
 def _create_import_demurrage_alerts(db: Session, today: date) -> int:
-    records = db.query(Demurrage, Shipment).join(Shipment, Shipment.id == Demurrage.shipment_id).filter(Shipment.type == "import").all()
+    records = (
+        db.query(Demurrage, Shipment)
+        .join(Shipment, Shipment.id == Demurrage.shipment_id)
+        .filter(Shipment.type == "import", Shipment.is_archived.is_(False))
+        .all()
+    )
     created = 0
     for demurrage, shipment in records:
         if shipment.status in IMPORT_DELIVERED_STATUSES:
@@ -162,7 +173,7 @@ def _create_import_demurrage_alerts(db: Session, today: date) -> int:
 
 
 def _create_import_document_alerts(db: Session, today: date) -> int:
-    shipments = db.query(Shipment).filter(Shipment.type == "import").all()
+    shipments = db.query(Shipment).filter(Shipment.type == "import", Shipment.is_archived.is_(False)).all()
     created = 0
     for shipment in shipments:
         if shipment.status in IMPORT_DELIVERED_STATUSES:

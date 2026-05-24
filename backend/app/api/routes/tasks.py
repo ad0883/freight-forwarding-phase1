@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import AuthenticatedUser, get_current_user, get_db, require_write_access
+from app.models.alert import Alert
 from app.models.shipment import Shipment
 from app.models.task import Task
 from app.models.user import User
@@ -17,12 +18,15 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 @router.get("", response_model=list[TaskRead])
 def list_tasks(
     shipment_id: Optional[int] = None,
+    include_cancelled: bool = False,
     db: Session = Depends(get_db),
     _: AuthenticatedUser = Depends(get_current_user),
 ) -> list[Task]:
     query = db.query(Task)
     if shipment_id is not None:
         query = query.filter(Task.shipment_id == shipment_id)
+    if not include_cancelled:
+        query = query.filter(Task.status != "cancelled")
     return query.order_by(Task.status.asc(), Task.due_date.asc().nullslast(), Task.created_at.desc()).all()
 
 
@@ -45,6 +49,62 @@ def create_task(
     db.refresh(task)
     invalidate_dashboard_cache()
     return task
+
+
+@router.patch("/{task_id}/cancel", response_model=TaskRead)
+def cancel_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    _: AuthenticatedUser = Depends(require_write_access),
+) -> Task:
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    task.status = "cancelled"
+    db.commit()
+    db.refresh(task)
+    invalidate_dashboard_cache()
+    return task
+
+
+@router.patch("/{task_id}/restore", response_model=TaskRead)
+def restore_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    _: AuthenticatedUser = Depends(require_write_access),
+) -> Task:
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    task.status = "open"
+    db.commit()
+    db.refresh(task)
+    invalidate_dashboard_cache()
+    return task
+
+
+@router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    _: AuthenticatedUser = Depends(require_write_access),
+) -> None:
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.auto_generated:
+        raise HTTPException(
+            status_code=400,
+            detail="Auto-generated workflow tasks should be cancelled instead of deleted.",
+        )
+    if db.query(Alert.id).filter(Alert.task_id == task.id).first():
+        raise HTTPException(
+            status_code=400,
+            detail="Task is referenced by alerts. Cancel it instead of deleting.",
+        )
+    db.delete(task)
+    db.commit()
+    invalidate_dashboard_cache()
 
 
 @router.patch("/{task_id}", response_model=TaskRead)

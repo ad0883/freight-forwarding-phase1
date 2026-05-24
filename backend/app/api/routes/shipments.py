@@ -1,14 +1,16 @@
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import AuthenticatedUser, get_current_user, get_db, require_write_access
+from app.api.deps import AuthenticatedUser, get_current_user, get_db, require_roles, require_write_access
 from app.models.party import Party
 from app.models.shipment import Shipment
 from app.schemas.shipment import (
     DashboardSummary,
+    ShipmentArchiveRequest,
     ShipmentCreate,
     ShipmentRead,
     ShipmentUpdate,
@@ -26,9 +28,9 @@ def _validate_party_ids(db: Session, exporter_id: Optional[int], importer_id: Op
     for party_id in [exporter_id, importer_id]:
         if party_id is None:
             continue
-        exists = db.query(Party.id).filter(Party.id == party_id).first()
+        exists = db.query(Party.id).filter(Party.id == party_id, Party.is_active.is_(True)).first()
         if not exists:
-            raise HTTPException(status_code=400, detail=f"Party {party_id} does not exist")
+            raise HTTPException(status_code=400, detail=f"Party {party_id} does not exist or is inactive")
 
 
 @router.get("/dashboard", response_model=DashboardSummary)
@@ -41,10 +43,16 @@ def dashboard(
 @router.get("", response_model=list[ShipmentRead])
 def list_shipments(
     search: Optional[str] = None,
+    include_archived: bool = False,
+    archived_only: bool = False,
     db: Session = Depends(get_db),
     _: AuthenticatedUser = Depends(get_current_user),
 ) -> list[Shipment]:
     query = db.query(Shipment).options(joinedload(Shipment.exporter), joinedload(Shipment.importer))
+    if archived_only:
+        query = query.filter(Shipment.is_archived.is_(True))
+    elif not include_archived:
+        query = query.filter(Shipment.is_archived.is_(False))
     if search:
         pattern = f"%{search}%"
         query = query.filter(
@@ -102,6 +110,45 @@ def update_shipment(
     _validate_party_ids(db, data.get("exporter_id"), data.get("importer_id"))
     for field, value in data.items():
         setattr(shipment, field, value)
+    db.commit()
+    db.refresh(shipment)
+    invalidate_dashboard_cache()
+    return shipment
+
+
+@router.patch("/{shipment_id}/archive", response_model=ShipmentRead)
+def archive_shipment(
+    shipment_id: int,
+    archive_in: ShipmentArchiveRequest,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = Depends(require_roles("ADMIN")),
+) -> Shipment:
+    shipment = db.query(Shipment).filter(Shipment.id == shipment_id).first()
+    if not shipment:
+        raise HTTPException(status_code=404, detail="Shipment not found")
+    shipment.is_archived = True
+    shipment.archived_at = datetime.utcnow()
+    shipment.archived_by = current_user.id
+    shipment.archive_reason = archive_in.reason
+    db.commit()
+    db.refresh(shipment)
+    invalidate_dashboard_cache()
+    return shipment
+
+
+@router.patch("/{shipment_id}/restore", response_model=ShipmentRead)
+def restore_shipment(
+    shipment_id: int,
+    db: Session = Depends(get_db),
+    _: AuthenticatedUser = Depends(require_roles("ADMIN")),
+) -> Shipment:
+    shipment = db.query(Shipment).filter(Shipment.id == shipment_id).first()
+    if not shipment:
+        raise HTTPException(status_code=404, detail="Shipment not found")
+    shipment.is_archived = False
+    shipment.archived_at = None
+    shipment.archived_by = None
+    shipment.archive_reason = None
     db.commit()
     db.refresh(shipment)
     invalidate_dashboard_cache()

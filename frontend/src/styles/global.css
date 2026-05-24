@@ -202,6 +202,14 @@ label {
   line-height: 1.15;
 }
 
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 .eyebrow {
   color: #6b7280;
   font-size: 0.78rem;
@@ -235,6 +243,10 @@ label {
   font-size: 1rem;
 }
 
+.panel-header.no-margin {
+  margin-bottom: -0.2rem;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(140px, 1fr));
@@ -261,6 +273,35 @@ label {
 .metric-card strong {
   color: #172033;
   font-size: 1.8rem;
+}
+
+.metric-card.success-card {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.metric-card.warning-card {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.metric-card.info-card {
+  border-color: #bae6fd;
+  background: #f0f9ff;
+}
+
+.metric-card.critical-card {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.finance-grid {
+  grid-template-columns: repeat(5, minmax(170px, 1fr));
+}
+
+.finance-note {
+  color: #8a6100;
+  font-weight: 700;
 }
 
 .split-grid {
@@ -294,6 +335,10 @@ label {
   white-space: nowrap;
 }
 
+.badge + .badge {
+  margin-left: 0.35rem;
+}
+
 .status-active,
 .task-open {
   color: #164aa2;
@@ -307,9 +352,28 @@ label {
 }
 
 .status-cancelled,
+.charge-cancelled,
+.task-cancelled,
 .priority-critical {
   color: #b42318;
   background: #fee4e2;
+}
+
+.status-archived,
+.state-inactive {
+  color: #475467;
+  background: #eef2f6;
+}
+
+.charge-paid,
+.charge-received {
+  color: #047857;
+  background: #dcfce7;
+}
+
+.charge-pending {
+  color: #a15c07;
+  background: #fef3c7;
 }
 
 .priority-warning {
@@ -366,6 +430,10 @@ label {
   background: #fee4e2;
 }
 
+.danger-text {
+  color: #b42318;
+}
+
 .toolbar {
   display: flex;
   justify-content: space-between;
@@ -419,6 +487,14 @@ label {
   width: auto;
 }
 
+.compact-toggle {
+  display: inline-flex;
+  width: auto;
+  gap: 0.45rem;
+  color: #485166;
+  white-space: nowrap;
+}
+
 .row-actions {
   display: flex;
   align-items: center;
@@ -452,6 +528,7 @@ label {
 
 .tabs {
   display: inline-flex;
+  flex-wrap: wrap;
   width: fit-content;
   border: 1px solid #ccd5e1;
   border-radius: 8px;

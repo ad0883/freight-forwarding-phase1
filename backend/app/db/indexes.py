@@ -6,6 +6,7 @@ PERFORMANCE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS ix_shipments_status_created_at ON shipments (status, created_at)",
     "CREATE INDEX IF NOT EXISTS ix_shipments_status_etd ON shipments (status, etd)",
     "CREATE INDEX IF NOT EXISTS ix_shipments_type_created_at ON shipments (type, created_at)",
+    "CREATE INDEX IF NOT EXISTS ix_shipments_archived_created_at ON shipments (is_archived, created_at)",
     "CREATE INDEX IF NOT EXISTS ix_shipments_export_cutoffs ON shipments (type, vgm_cutoff_date, bl_cutoff_date, si_cutoff_date)",
     "CREATE INDEX IF NOT EXISTS ix_shipments_import_dates ON shipments (type, eta, do_received_date, container_delivered_date)",
     "CREATE INDEX IF NOT EXISTS ix_tasks_status_due_date ON tasks (status, due_date)",
@@ -18,6 +19,10 @@ PERFORMANCE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS ix_demurrage_shipment_status ON demurrage (shipment_id, status)",
     "CREATE INDEX IF NOT EXISTS ix_follow_up_logs_shipment_date ON follow_up_logs (shipment_id, date)",
     "CREATE INDEX IF NOT EXISTS ix_parties_type_name ON parties (type, name)",
+    "CREATE INDEX IF NOT EXISTS ix_parties_active_name ON parties (is_active, name)",
+    "CREATE INDEX IF NOT EXISTS ix_charges_shipment_status ON charges (shipment_id, status)",
+    "CREATE INDEX IF NOT EXISTS ix_charges_direction_status ON charges (direction, status)",
+    "CREATE INDEX IF NOT EXISTS ix_charges_date_created_at ON charges (date, created_at)",
 ]
 
 

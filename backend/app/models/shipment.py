@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from app.db.session import Base
@@ -32,10 +32,15 @@ class Shipment(Base):
     bl_number = Column(String(120), nullable=True)
     booking_ref = Column(String(120), nullable=True)
     commodity = Column(Text, nullable=True)
+    is_archived = Column(Boolean, nullable=False, default=False)
+    archived_at = Column(DateTime, nullable=True)
+    archived_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    archive_reason = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
 
-    creator = relationship("User", back_populates="created_shipments")
+    creator = relationship("User", back_populates="created_shipments", foreign_keys=[created_by])
+    archiver = relationship("User", foreign_keys=[archived_by])
     exporter = relationship(
         "Party", back_populates="export_shipments", foreign_keys=[exporter_id]
     )
@@ -57,4 +62,7 @@ class Shipment(Base):
     )
     demurrage = relationship(
         "Demurrage", back_populates="shipment", cascade="all, delete-orphan", uselist=False
+    )
+    charges = relationship(
+        "Charge", back_populates="shipment", cascade="all, delete-orphan"
     )

@@ -1,4 +1,16 @@
-import { ExternalLink, Plus, RotateCcw, Save, Trash2, ToggleRight } from 'lucide-react';
+import {
+  Archive,
+  ArchiveRestore,
+  Ban,
+  CheckCircle2,
+  Edit3,
+  ExternalLink,
+  Plus,
+  RotateCcw,
+  Save,
+  ToggleRight,
+  Trash2,
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../api/client.js';
@@ -42,6 +54,43 @@ const emptyFollowup = {
   date: new Date().toISOString().slice(0, 10),
 };
 
+const chargeTypeOptions = [
+  ['ocean_freight', 'Ocean Freight'],
+  ['do_charges', 'DO Charges'],
+  ['bl_charges', 'BL Charges'],
+  ['hbl_charges', 'HBL Charges'],
+  ['liner_charges', 'Liner Charges'],
+  ['clearance_charges', 'Clearance Charges'],
+  ['courier_charges', 'Courier Charges'],
+  ['agent_charges', 'Agent Charges'],
+  ['demurrage', 'Demurrage'],
+  ['documentation', 'Documentation'],
+  ['handling', 'Handling'],
+  ['transport', 'Transport'],
+  ['other', 'Other'],
+];
+
+const chargeTypeLabels = Object.fromEntries(chargeTypeOptions);
+
+const chargeStatusOptions = {
+  payable: ['pending', 'paid', 'cancelled'],
+  receivable: ['pending', 'received', 'cancelled'],
+};
+
+function emptyChargeForm() {
+  return {
+    charge_type: 'ocean_freight',
+    direction: 'receivable',
+    amount: '',
+    currency: 'INR',
+    party_id: '',
+    status: 'pending',
+    invoice_no: '',
+    date: new Date().toISOString().slice(0, 10),
+    notes: '',
+  };
+}
+
 function InfoItem({ label, value }) {
   return (
     <div className="info-item">
@@ -49,6 +98,13 @@ function InfoItem({ label, value }) {
       <strong>{value || '-'}</strong>
     </div>
   );
+}
+
+function formatMoney(amount, currency = 'INR') {
+  return `${currency} ${Number(amount || 0).toLocaleString('en-IN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 function cleanNullableForm(form) {
@@ -69,31 +125,74 @@ function ShipmentDetailPage() {
   const [bl, setBl] = useState(null);
   const [demurrage, setDemurrage] = useState(null);
   const [followups, setFollowups] = useState([]);
+  const [charges, setCharges] = useState([]);
+  const [pnl, setPnl] = useState(null);
   const [parties, setParties] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
+  const [includeCancelledTasks, setIncludeCancelledTasks] = useState(false);
   const [workflowStatus, setWorkflowStatus] = useState('');
   const [followupForm, setFollowupForm] = useState(emptyFollowup);
+  const [chargeForm, setChargeForm] = useState(emptyChargeForm());
+  const [editingChargeId, setEditingChargeId] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
   const canWrite = currentUser && currentUser.role !== 'VIEW_ONLY';
+  const canAdmin = currentUser?.role === 'ADMIN';
   const workflowStatuses = useMemo(
     () => (shipment?.type === 'export' ? exportStatuses : importStatuses),
     [shipment?.type]
   );
 
+  async function loadFinance() {
+    const [chargesResponse, pnlResponse] = await Promise.all([
+      api.get(`/shipments/${id}/charges`),
+      api.get(`/shipments/${id}/pnl`),
+    ]);
+    setCharges(chargesResponse.data);
+    setPnl(pnlResponse.data);
+  }
+
+  async function loadTasks() {
+    const response = await api.get('/tasks', {
+      params: {
+        shipment_id: id,
+        ...(includeCancelledTasks ? { include_cancelled: true } : {}),
+      },
+    });
+    setTasks(response.data);
+  }
+
   async function loadAll() {
-    const [meResponse, shipmentResponse, documentsResponse, tasksResponse, blResponse, demurrageResponse, followupsResponse, partiesResponse] =
+    const [
+      meResponse,
+      shipmentResponse,
+      documentsResponse,
+      tasksResponse,
+      blResponse,
+      demurrageResponse,
+      followupsResponse,
+      partiesResponse,
+      chargesResponse,
+      pnlResponse,
+    ] =
       await Promise.all([
         api.get('/auth/me'),
         api.get(`/shipments/${id}`),
         api.get(`/documents/shipment/${id}`),
-        api.get('/tasks', { params: { shipment_id: id } }),
+        api.get('/tasks', {
+          params: {
+            shipment_id: id,
+            ...(includeCancelledTasks ? { include_cancelled: true } : {}),
+          },
+        }),
         api.get(`/shipments/${id}/bl`),
         api.get(`/shipments/${id}/demurrage`),
         api.get(`/shipments/${id}/followups`),
         api.get('/parties'),
+        api.get(`/shipments/${id}/charges`),
+        api.get(`/shipments/${id}/pnl`),
       ]);
     setCurrentUser(meResponse.data);
     setShipment(shipmentResponse.data);
@@ -104,11 +203,19 @@ function ShipmentDetailPage() {
     setDemurrage(demurrageResponse.data);
     setFollowups(followupsResponse.data);
     setParties(partiesResponse.data);
+    setCharges(chargesResponse.data);
+    setPnl(pnlResponse.data);
   }
 
   useEffect(() => {
     loadAll().catch((err) => setError(err.response?.data?.detail || 'Unable to load shipment'));
   }, [id]);
+
+  useEffect(() => {
+    if (shipment) {
+      loadTasks().catch((err) => setError(err.response?.data?.detail || 'Unable to load shipment tasks'));
+    }
+  }, [includeCancelledTasks]);
 
   function updateDocument(documentId, field, value) {
     setDocuments((current) =>
@@ -142,6 +249,66 @@ function ShipmentDetailPage() {
       setNotice('Task updated');
     } catch (err) {
       setError(err.response?.data?.detail || 'Unable to update task');
+    }
+  }
+
+  async function cancelTask(task) {
+    setNotice('');
+    try {
+      await api.patch(`/tasks/${task.id}/cancel`);
+      await loadTasks();
+      setNotice('Task cancelled');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to cancel task');
+    }
+  }
+
+  async function restoreTask(task) {
+    setNotice('');
+    try {
+      await api.patch(`/tasks/${task.id}/restore`);
+      await loadTasks();
+      setNotice('Task restored');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to restore task');
+    }
+  }
+
+  async function deleteManualTask(task) {
+    if (!window.confirm(`Delete manual task "${task.title}" permanently?`)) return;
+    setNotice('');
+    try {
+      await api.delete(`/tasks/${task.id}`);
+      await loadTasks();
+      setNotice('Manual task deleted');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to delete task');
+    }
+  }
+
+  async function archiveShipment() {
+    const reason = window.prompt(`Reason for archiving ${shipment.shipment_code}`, '');
+    if (reason === null) return;
+    setNotice('');
+    try {
+      const response = await api.patch(`/shipments/${id}/archive`, { reason: reason || null });
+      setShipment(response.data);
+      setWorkflowStatus(response.data.status);
+      setNotice('Shipment archived');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to archive shipment');
+    }
+  }
+
+  async function restoreShipment() {
+    setNotice('');
+    try {
+      const response = await api.patch(`/shipments/${id}/restore`);
+      setShipment(response.data);
+      setWorkflowStatus(response.data.status);
+      setNotice('Shipment restored');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to restore shipment');
     }
   }
 
@@ -222,6 +389,96 @@ function ShipmentDetailPage() {
     }
   }
 
+  function updateChargeForm(field, value) {
+    setChargeForm((current) => {
+      const next = { ...current, [field]: value };
+      if (field === 'direction' && !chargeStatusOptions[value].includes(next.status)) {
+        next.status = 'pending';
+      }
+      return next;
+    });
+  }
+
+  function resetChargeForm() {
+    setChargeForm(emptyChargeForm());
+    setEditingChargeId(null);
+  }
+
+  function editCharge(charge) {
+    setEditingChargeId(charge.id);
+    setChargeForm({
+      charge_type: charge.charge_type,
+      direction: charge.direction,
+      amount: charge.amount,
+      currency: charge.currency || 'INR',
+      party_id: charge.party_id || '',
+      status: charge.status,
+      invoice_no: charge.invoice_no || '',
+      date: charge.date || '',
+      notes: charge.notes || '',
+    });
+    setActiveTab('charges');
+  }
+
+  function chargePayload() {
+    return {
+      shipment_id: Number(id),
+      charge_type: chargeForm.charge_type,
+      direction: chargeForm.direction,
+      amount: Number(chargeForm.amount),
+      currency: chargeForm.currency || 'INR',
+      party_id: chargeForm.party_id ? Number(chargeForm.party_id) : null,
+      status: chargeForm.status,
+      invoice_no: chargeForm.invoice_no || null,
+      date: chargeForm.date || null,
+      notes: chargeForm.notes || null,
+    };
+  }
+
+  async function saveCharge(event) {
+    event.preventDefault();
+    setNotice('');
+    if (chargeForm.amount === '' || Number(chargeForm.amount) < 0) {
+      setError('Charge amount is required and cannot be negative');
+      return;
+    }
+    try {
+      if (editingChargeId) {
+        await api.patch(`/charges/${editingChargeId}`, chargePayload());
+        setNotice('Charge updated');
+      } else {
+        await api.post(`/shipments/${id}/charges`, chargePayload());
+        setNotice('Charge added');
+      }
+      resetChargeForm();
+      await loadFinance();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to save charge');
+    }
+  }
+
+  async function updateChargeStatus(charge, status) {
+    setNotice('');
+    try {
+      await api.patch(`/charges/${charge.id}`, { status });
+      await loadFinance();
+      setNotice(status === 'cancelled' ? 'Charge cancelled' : 'Charge status updated');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to update charge');
+    }
+  }
+
+  async function cancelCharge(charge) {
+    setNotice('');
+    try {
+      await api.delete(`/charges/${charge.id}`);
+      await loadFinance();
+      setNotice('Charge cancelled');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to cancel charge');
+    }
+  }
+
   if (error) {
     return <p className="error-text">{error}</p>;
   }
@@ -237,12 +494,28 @@ function ShipmentDetailPage() {
           <p className="eyebrow">{shipment.type}</p>
           <h1>{shipment.shipment_code}</h1>
         </div>
-        <span className="badge status-active">{shipment.status}</span>
+        <div className="header-actions">
+          <span className="badge status-active">{shipment.status}</span>
+          {shipment.is_archived && <span className="badge status-archived">Archived</span>}
+          {canAdmin && (
+            shipment.is_archived ? (
+              <button className="secondary-button" type="button" onClick={restoreShipment}>
+                <ArchiveRestore size={17} />
+                <span>Restore Shipment</span>
+              </button>
+            ) : (
+              <button className="secondary-button danger-text" type="button" onClick={archiveShipment}>
+                <Archive size={17} />
+                <span>Archive Shipment</span>
+              </button>
+            )
+          )}
+        </div>
       </div>
       {notice && <p className="success-text">{notice}</p>}
 
       <div className="tabs" role="tablist">
-        {['overview', 'documents', 'tasks', 'bl', 'followups', 'demurrage'].map((tab) => (
+        {['overview', 'documents', 'tasks', 'bl', 'followups', 'demurrage', 'charges'].map((tab) => (
           <button key={tab} className={activeTab === tab ? 'active' : ''} onClick={() => setActiveTab(tab)}>
             {tab === 'bl' ? 'BL Management' : tab === 'followups' ? 'Follow-up Log' : tab[0].toUpperCase() + tab.slice(1)}
           </button>
@@ -273,6 +546,7 @@ function ShipmentDetailPage() {
             <InfoItem label="Shipment Code" value={shipment.shipment_code} />
             <InfoItem label="Type" value={shipment.type} />
             <InfoItem label="Status" value={shipment.status} />
+            <InfoItem label="Archived" value={shipment.is_archived ? 'Yes' : 'No'} />
             <InfoItem label="Shipping Line" value={shipment.shipping_line} />
             <InfoItem label="Vessel" value={shipment.vessel_name} />
             <InfoItem label="Voyage No" value={shipment.voyage_no} />
@@ -284,6 +558,7 @@ function ShipmentDetailPage() {
             <InfoItem label="ETA" value={shipment.eta} />
             <InfoItem label="Booking Ref" value={shipment.booking_ref} />
             <InfoItem label="Commodity" value={shipment.commodity} />
+            {shipment.is_archived && <InfoItem label="Archive Reason" value={shipment.archive_reason} />}
           </div>
         </section>
       )}
@@ -356,6 +631,17 @@ function ShipmentDetailPage() {
 
       {activeTab === 'tasks' && (
         <section className="panel">
+          <div className="panel-header">
+            <h2>Shipment Tasks</h2>
+            <label className="checkbox-label compact-toggle">
+              <input
+                type="checkbox"
+                checked={includeCancelledTasks}
+                onChange={(event) => setIncludeCancelledTasks(event.target.checked)}
+              />
+              Include Cancelled
+            </label>
+          </div>
           <div className="table-wrap">
             <table>
               <thead>
@@ -380,10 +666,31 @@ function ShipmentDetailPage() {
                     </td>
                     <td>
                       {canWrite && (
-                        <button className="secondary-button" type="button" onClick={() => toggleTask(task)}>
-                          {task.status === 'open' ? <ToggleRight size={17} /> : <RotateCcw size={17} />}
-                          <span>{task.status === 'open' ? 'Mark done' : 'Reopen'}</span>
-                        </button>
+                        <div className="row-actions">
+                          {task.status === 'cancelled' ? (
+                            <button className="secondary-button" type="button" onClick={() => restoreTask(task)}>
+                              <RotateCcw size={17} />
+                              <span>Restore Task</span>
+                            </button>
+                          ) : (
+                            <>
+                              <button className="secondary-button" type="button" onClick={() => toggleTask(task)}>
+                                {task.status === 'open' ? <ToggleRight size={17} /> : <RotateCcw size={17} />}
+                                <span>{task.status === 'open' ? 'Mark done' : 'Reopen'}</span>
+                              </button>
+                              <button className="secondary-button danger-text" type="button" onClick={() => cancelTask(task)}>
+                                <Ban size={17} />
+                                <span>Cancel Task</span>
+                              </button>
+                            </>
+                          )}
+                          {!task.auto_generated && (
+                            <button className="secondary-button danger-text" type="button" onClick={() => deleteManualTask(task)}>
+                              <Trash2 size={17} />
+                              <span>Delete Manual Task</span>
+                            </button>
+                          )}
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -607,6 +914,185 @@ function ShipmentDetailPage() {
                 {!followups.length && (
                   <tr>
                     <td colSpan="8">No follow-ups yet.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {activeTab === 'charges' && (
+        <section className="page-stack">
+          {pnl && (
+            <>
+              <div className="metric-grid finance-grid">
+                <article className="metric-card">
+                  <span>Total Receivable</span>
+                  <strong>{formatMoney(pnl.total_receivable, pnl.currency)}</strong>
+                </article>
+                <article className="metric-card">
+                  <span>Total Payable</span>
+                  <strong>{formatMoney(pnl.total_payable, pnl.currency)}</strong>
+                </article>
+                <article className={`metric-card ${Number(pnl.net_profit) < 0 ? 'critical-card' : 'success-card'}`}>
+                  <span>Net Profit</span>
+                  <strong>{formatMoney(pnl.net_profit, pnl.currency)}</strong>
+                </article>
+                <article className="metric-card warning-card">
+                  <span>Pending Receivable</span>
+                  <strong>{formatMoney(pnl.pending_receivable, pnl.currency)}</strong>
+                </article>
+                <article className="metric-card info-card">
+                  <span>Pending Payable</span>
+                  <strong>{formatMoney(pnl.pending_payable, pnl.currency)}</strong>
+                </article>
+              </div>
+              {pnl.multiple_currencies && (
+                <p className="finance-note">Multiple currencies are present. Totals are not converted automatically.</p>
+              )}
+            </>
+          )}
+
+          {canWrite && (
+            <form className="panel form-grid" onSubmit={saveCharge}>
+              <label>
+                Charge Type
+                <select value={chargeForm.charge_type} onChange={(event) => updateChargeForm('charge_type', event.target.value)}>
+                  {chargeTypeOptions.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Direction
+                <select value={chargeForm.direction} onChange={(event) => updateChargeForm('direction', event.target.value)}>
+                  <option value="receivable">receivable</option>
+                  <option value="payable">payable</option>
+                </select>
+              </label>
+              <label>
+                Amount
+                <input
+                  required
+                  min="0"
+                  step="0.01"
+                  type="number"
+                  value={chargeForm.amount}
+                  onChange={(event) => updateChargeForm('amount', event.target.value)}
+                />
+              </label>
+              <label>
+                Currency
+                <input value={chargeForm.currency} onChange={(event) => updateChargeForm('currency', event.target.value.toUpperCase())} />
+              </label>
+              <label>
+                Party
+                <select value={chargeForm.party_id} onChange={(event) => updateChargeForm('party_id', event.target.value)}>
+                  <option value="">No party</option>
+                  {parties.map((party) => (
+                    <option key={party.id} value={party.id}>
+                      {party.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Status
+                <select value={chargeForm.status} onChange={(event) => updateChargeForm('status', event.target.value)}>
+                  {chargeStatusOptions[chargeForm.direction].map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Invoice No
+                <input value={chargeForm.invoice_no} onChange={(event) => updateChargeForm('invoice_no', event.target.value)} />
+              </label>
+              <label>
+                Date
+                <input type="date" value={chargeForm.date} onChange={(event) => updateChargeForm('date', event.target.value)} />
+              </label>
+              <label className="span-2">
+                Notes
+                <textarea value={chargeForm.notes} onChange={(event) => updateChargeForm('notes', event.target.value)} />
+              </label>
+              <div className="form-actions span-2">
+                {editingChargeId && (
+                  <button className="secondary-button" type="button" onClick={resetChargeForm}>
+                    Cancel Edit
+                  </button>
+                )}
+                <button className="primary-button" type="submit">
+                  <Save size={18} />
+                  <span>{editingChargeId ? 'Save Charge' : 'Add Charge'}</span>
+                </button>
+              </div>
+            </form>
+          )}
+
+          <div className="panel table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Direction</th>
+                  <th>Amount</th>
+                  <th>Party</th>
+                  <th>Status</th>
+                  <th>Invoice No</th>
+                  <th>Date</th>
+                  <th>Notes</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {charges.map((charge) => (
+                  <tr key={charge.id}>
+                    <td>{chargeTypeLabels[charge.charge_type] || charge.charge_type}</td>
+                    <td>{charge.direction}</td>
+                    <td>{formatMoney(charge.amount, charge.currency)}</td>
+                    <td>{charge.party_name || '-'}</td>
+                    <td>
+                      <span className={`badge charge-${charge.status}`}>{charge.status}</span>
+                    </td>
+                    <td>{charge.invoice_no || '-'}</td>
+                    <td>{charge.date || '-'}</td>
+                    <td>{charge.notes || '-'}</td>
+                    <td>
+                      {canWrite && charge.status !== 'cancelled' && (
+                        <div className="row-actions">
+                          <button className="icon-button" type="button" onClick={() => editCharge(charge)} title="Edit charge">
+                            <Edit3 size={17} />
+                          </button>
+                          {charge.direction === 'payable' && charge.status !== 'paid' && (
+                            <button className="secondary-button" type="button" onClick={() => updateChargeStatus(charge, 'paid')}>
+                              <CheckCircle2 size={17} />
+                              <span>Mark Paid</span>
+                            </button>
+                          )}
+                          {charge.direction === 'receivable' && charge.status !== 'received' && (
+                            <button className="secondary-button" type="button" onClick={() => updateChargeStatus(charge, 'received')}>
+                              <CheckCircle2 size={17} />
+                              <span>Mark Received</span>
+                            </button>
+                          )}
+                          <button className="secondary-button danger-text" type="button" onClick={() => cancelCharge(charge)}>
+                            <Ban size={17} />
+                            <span>Cancel Charge</span>
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {!charges.length && (
+                  <tr>
+                    <td colSpan="9">No charges for this shipment.</td>
                   </tr>
                 )}
               </tbody>

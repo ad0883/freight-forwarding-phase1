@@ -45,8 +45,25 @@ ShipmentStatus = str
 ContainerType = Literal["20GP", "40GP", "40HC", "LCL"]
 DocumentStatus = Literal["pending", "received", "sent", "approved", "not_required"]
 Priority = Literal["critical", "warning", "info"]
-TaskStatus = Literal["open", "done"]
+TaskStatus = Literal["open", "done", "cancelled"]
 FollowUpChannel = Literal["email", "call", "whatsapp", "meeting"]
 FollowUpStatus = Literal["open", "closed"]
 BLType = Literal["OBL", "HBL", "Surrender", "Telex", "Seaway", "Ocean"]
 DemurrageStatus = Literal["within_free_days", "expiring_soon", "running", "not_started"]
+ChargeType = Literal[
+    "ocean_freight",
+    "do_charges",
+    "bl_charges",
+    "hbl_charges",
+    "liner_charges",
+    "clearance_charges",
+    "courier_charges",
+    "agent_charges",
+    "demurrage",
+    "documentation",
+    "handling",
+    "transport",
+    "other",
+]
+ChargeDirection = Literal["payable", "receivable"]
+ChargeStatus = Literal["pending", "paid", "received", "cancelled"]

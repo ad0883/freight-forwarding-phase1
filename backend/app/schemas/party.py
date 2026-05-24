@@ -32,6 +32,14 @@ class PartyUpdate(BaseModel):
 
 class PartyRead(PartyBase):
     id: int
+    is_active: bool = True
+    deactivated_at: Optional[datetime] = None
+    deactivated_by: Optional[int] = None
+    deactivation_reason: Optional[str] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PartyDeactivationRequest(BaseModel):
+    reason: Optional[str] = None

@@ -19,6 +19,11 @@ Phase 1 implementation of a freight forwarding operations system with a FastAPI 
 - Import demurrage tracker with free-day calculations
 - Shipment follow-up log with party/channel/status tracking
 - Improved dashboard pending-task and critical-alert panels
+- Charges module for manual payable and receivable tracking
+- Shipment-wise Profit & Loss summary
+- Financial dashboard cards and reports page
+- Mock AI finance questions backed by database rules
+- Phase 3.5 admin cleanup controls for shipment archive/restore, party deactivate/reactivate, safe party delete, task cancel/restore, and manual task delete
 
 ## Backend Local Setup
 
@@ -90,9 +95,50 @@ Phase 2 adds operational tracking after shipment creation:
 - APScheduler alert rules for overdue tasks, export cutoffs, free days expiry, demurrage started, DO not collected, and freight invoice chase.
 - Mock AI examples: `Which shipments have free days expiring?`, `Which shipments have demurrage running?`, `Which follow-ups are open?`, and `What is the status of FF-EXP-2026-001?`.
 
+## Phase 3 Charges And Reporting
+
+Phase 3 adds a manual finance layer:
+
+- Charges tab on shipment detail pages for payable and receivable entries.
+- Payable charges are amounts the company must pay to vendors, lines, agents, CHA, courier, or other parties.
+- Receivable charges are amounts the company must collect from clients, exporters, importers, or other parties.
+- Charge status rules:
+  - payable: `pending`, `paid`, or `cancelled`
+  - receivable: `pending`, `received`, or `cancelled`
+- Cancelling a charge keeps the record in the database with `status = cancelled`; cancelled charges are excluded from active P&L, dashboard, and report totals.
+- Shipment P&L formula: `net_profit = total_receivable - total_payable`, excluding cancelled charges.
+- Dashboard financial cards show pending receivables, pending payables, this month receivables, this month payables, and this month profit.
+- Reports page shows monthly summary, pending receivables, pending payables, and shipment-wise P&L.
+- Mock AI finance examples: `How much freight is uncollected?`, `Which shipments have pending receivables?`, `Which shipments have pending payables?`, `Show profit for FF-EXP-2026-001`, `Which shipments are loss-making?`, and `What is this month profit?`.
+
+## Phase 3.5 Admin Cleanup
+
+Phase 3.5 adds safe cleanup controls without removing operational history:
+
+- Shipments can be archived and restored by `ADMIN` users only. Archived shipments keep linked documents, tasks, charges, BL, demurrage, follow-ups, and alerts.
+- Shipment lists hide archived records by default. Use Include Archived to show them with an Archived badge.
+- Parties can be deactivated and reactivated by `ADMIN` users only. Inactive parties are hidden from new shipment, charge, and follow-up dropdowns by default, but old linked records still show their names.
+- Parties can be permanently deleted only when unused. Parties linked to shipments, charges, or follow-ups are blocked with `Party is used in existing records. Deactivate it instead.`
+- Tasks can be cancelled and restored by `ADMIN` and `STAFF`. Cancelled tasks are hidden by default and do not count as pending tasks.
+- Manual tasks can be permanently deleted only when they are not auto-generated and are not referenced by alerts. Auto-generated workflow tasks should be cancelled instead of deleted.
+- `VIEW_ONLY` users can read archived/inactive/cancelled state but cannot use cleanup write controls.
+
+Archive, deactivate, and cancel actions keep history safe while reducing clutter in normal day-to-day screens.
+
+### Database Compatibility
+
+The app keeps using the existing `Base.metadata.create_all()` startup pattern, but Phase 3.5 also runs an idempotent compatibility helper:
+
+- Missing shipment archive columns and party deactivation columns are added with `ALTER TABLE ... ADD COLUMN` only if they are absent.
+- If a column already exists, startup skips it.
+- Existing data is not dropped, recreated, truncated, or reset.
+- If an installed PostgreSQL database uses a native enum for task status, startup safely allows the `cancelled` status value without crashing on repeated runs.
+
 ## Phase 1 Limitations
 
-The app still intentionally does not include OpenAI API calls, real file uploads, Google Drive API upload, S3, Celery, Redis, charges, courier tracking, reports, invoice/P&L, or email/Gmail parsing.
+The app still intentionally does not include OpenAI API calls, real file uploads, Google Drive API upload, S3, Celery, Redis, courier automation, invoice PDF generation, payment gateway integration, accounting software integration, GST invoice automation, bank reconciliation, exchange-rate automation, or email/Gmail parsing.
+
+Phase 3 finance entries are manual. The app stores currencies per charge and flags mixed-currency totals, but it does not convert exchange rates automatically.
 
 Shipment codes are unique in the database, but the current counter-based generator can race if two shipments of the same type are created at exactly the same time. Use single-user/admin workflows for Phase 1; replace this with a database sequence before high-concurrency production use.
 
