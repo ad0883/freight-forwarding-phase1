@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import AuthenticatedUser, get_current_user, get_db, require_write_access
@@ -9,6 +9,7 @@ from app.models.shipment import Shipment
 from app.models.task import Task
 from app.models.user import User
 from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
+from app.services.audit_service import changed_fields, record_audit_log
 from app.services.dashboard_service import invalidate_dashboard_cache
 
 
@@ -33,8 +34,9 @@ def list_tasks(
 @router.post("", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
 def create_task(
     task_in: TaskCreate,
+    request: Request,
     db: Session = Depends(get_db),
-    _: AuthenticatedUser = Depends(require_write_access),
+    current_user: AuthenticatedUser = Depends(require_write_access),
 ) -> Task:
     shipment = db.query(Shipment.id).filter(Shipment.id == task_in.shipment_id).first()
     if not shipment:
@@ -48,14 +50,26 @@ def create_task(
     db.commit()
     db.refresh(task)
     invalidate_dashboard_cache()
+    record_audit_log(
+        db,
+        current_user,
+        "task.created",
+        "task",
+        entity_id=task.id,
+        entity_label=task.title,
+        description="Task created.",
+        metadata={"shipment_id": task.shipment_id, "priority": task.priority, "status": task.status},
+        request=request,
+    )
     return task
 
 
 @router.patch("/{task_id}/cancel", response_model=TaskRead)
 def cancel_task(
     task_id: int,
+    request: Request,
     db: Session = Depends(get_db),
-    _: AuthenticatedUser = Depends(require_write_access),
+    current_user: AuthenticatedUser = Depends(require_write_access),
 ) -> Task:
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
@@ -64,14 +78,26 @@ def cancel_task(
     db.commit()
     db.refresh(task)
     invalidate_dashboard_cache()
+    record_audit_log(
+        db,
+        current_user,
+        "task.cancelled",
+        "task",
+        entity_id=task.id,
+        entity_label=task.title,
+        description="Task cancelled.",
+        metadata={"shipment_id": task.shipment_id},
+        request=request,
+    )
     return task
 
 
 @router.patch("/{task_id}/restore", response_model=TaskRead)
 def restore_task(
     task_id: int,
+    request: Request,
     db: Session = Depends(get_db),
-    _: AuthenticatedUser = Depends(require_write_access),
+    current_user: AuthenticatedUser = Depends(require_write_access),
 ) -> Task:
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
@@ -80,14 +106,26 @@ def restore_task(
     db.commit()
     db.refresh(task)
     invalidate_dashboard_cache()
+    record_audit_log(
+        db,
+        current_user,
+        "task.restored",
+        "task",
+        entity_id=task.id,
+        entity_label=task.title,
+        description="Task restored.",
+        metadata={"shipment_id": task.shipment_id, "status": task.status},
+        request=request,
+    )
     return task
 
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_task(
     task_id: int,
+    request: Request,
     db: Session = Depends(get_db),
-    _: AuthenticatedUser = Depends(require_write_access),
+    current_user: AuthenticatedUser = Depends(require_write_access),
 ) -> None:
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
@@ -102,17 +140,31 @@ def delete_task(
             status_code=400,
             detail="Task is referenced by alerts. Cancel it instead of deleting.",
         )
+    entity_label = task.title
+    shipment_id = task.shipment_id
     db.delete(task)
     db.commit()
     invalidate_dashboard_cache()
+    record_audit_log(
+        db,
+        current_user,
+        "task.deleted",
+        "task",
+        entity_id=task_id,
+        entity_label=entity_label,
+        description="Task deleted.",
+        metadata={"shipment_id": shipment_id},
+        request=request,
+    )
 
 
 @router.patch("/{task_id}", response_model=TaskRead)
 def update_task(
     task_id: int,
     task_in: TaskUpdate,
+    request: Request,
     db: Session = Depends(get_db),
-    _: AuthenticatedUser = Depends(require_write_access),
+    current_user: AuthenticatedUser = Depends(require_write_access),
 ) -> Task:
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
@@ -122,9 +174,21 @@ def update_task(
         user = db.query(User.id).filter(User.id == data["assigned_to"]).first()
         if not user:
             raise HTTPException(status_code=400, detail="Assigned user does not exist")
+    before = {field: getattr(task, field, None) for field in data}
     for field, value in data.items():
         setattr(task, field, value)
     db.commit()
     db.refresh(task)
     invalidate_dashboard_cache()
+    record_audit_log(
+        db,
+        current_user,
+        "task.updated",
+        "task",
+        entity_id=task.id,
+        entity_label=task.title,
+        description="Task updated.",
+        metadata={"fields_changed": changed_fields(before, {field: getattr(task, field, None) for field in data})},
+        request=request,
+    )
     return task

@@ -25,6 +25,7 @@ Phase 1 implementation of a freight forwarding operations system with a FastAPI 
 - AI finance questions backed by database context
 - Phase 3.5 admin cleanup controls for shipment archive/restore, party deactivate/reactivate, safe party delete, task cancel/restore, and manual task delete
 - Phase 5 Gmail email automation for read-only scanning, deterministic extraction, and reviewable suggestions
+- Phase 6 production hardening with audit logs, admin user lifecycle controls, status checks, CSV exports, dry-run cleanup, and password-change settings
 
 ## Backend Local Setup
 
@@ -226,9 +227,26 @@ https://freight-backend-au6c.onrender.com/api/email/oauth/callback
 
 Keep downloaded Google OAuth JSON files untracked. Copy only the client ID and client secret into backend environment variables. `client_secret*.json` is ignored by git.
 
+## Phase 6 Production Hardening
+
+Phase 6 adds safer production operations around the existing freight workflows:
+
+- `ADMIN` users can review Audit Logs, Users, Status, and Admin Tools pages.
+- All authenticated users can change their own password from Settings.
+- Admin user lifecycle APIs support create, update, password reset, deactivate, and reactivate with safeguards that keep at least one active admin.
+- Audit logs are stored in `audit_logs` and available through `GET /api/audit-logs`.
+- Audit metadata is allowlisted and redacted. Password changes and resets only log that the action happened with actor/target metadata.
+- Audit logs must never include old passwords, new passwords, password hashes, JWTs, Gmail access or refresh tokens, OAuth codes, Google client secrets, API keys, database URLs, or environment values.
+- Health checks are available at public `GET /api/health` and admin-only `GET /api/health/details`.
+- Admin CSV exports are available for shipments, parties, charges, tasks, and audit logs.
+- Admin test-data cleanup is dry-run only at `POST /api/admin/cleanup-test-data`; it reports candidates and does not modify records.
+- Risky admin actions in the frontend use confirmation dialogs.
+
+Phase 6 CSV exports intentionally omit password hashes, token fields, API keys, secrets, database URLs, and environment values.
+
 ## Phase 1 Limitations
 
-The app still intentionally does not include OpenAI as the primary AI provider, real file uploads, Google Drive API upload, S3, Celery, Redis, courier automation, invoice PDF generation, payment gateway integration, accounting software integration, GST invoice automation, bank reconciliation, exchange-rate automation, OCR, autonomous database writes, auto-reply email, Gmail message modification, or AI-executed archive/delete/cancel actions.
+The app still intentionally does not include OpenAI as the primary AI provider, real file uploads, Google Drive API upload, S3, Celery, Redis, courier automation, invoice PDF generation, payment gateway integration, accounting software integration, GST invoice automation, bank reconciliation, exchange-rate automation, OCR, autonomous database writes, auto-reply email, Gmail message modification, destructive cleanup automation, or AI-executed archive/delete/cancel actions.
 
 Phase 3 finance entries are manual. The app stores currencies per charge and flags mixed-currency totals, but it does not convert exchange rates automatically.
 

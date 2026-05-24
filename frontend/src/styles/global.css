@@ -458,10 +458,22 @@ label {
   color: #b42318;
 }
 
+.danger-button {
+  background: #b42318;
+}
+
 .toolbar {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
+}
+
+.filter-toolbar {
+  align-items: center;
+}
+
+.filter-toolbar input {
+  max-width: 220px;
 }
 
 .search-box {
@@ -524,6 +536,12 @@ label {
   align-items: center;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.button-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(140px, 1fr));
+  gap: 0.7rem;
 }
 
 .email-status-row {
@@ -617,6 +635,92 @@ label {
 
 .info-item strong {
   overflow-wrap: anywhere;
+}
+
+.cleanup-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.metadata-cell {
+  max-width: 320px;
+  color: #475467;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.settings-form {
+  max-width: 760px;
+}
+
+.state-box {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid #dbe2ea;
+  border-radius: 8px;
+  color: #475467;
+  background: #ffffff;
+  padding: 0.85rem 1rem;
+}
+
+.state-box strong {
+  display: block;
+  color: #172033;
+}
+
+.state-box p {
+  margin-top: 0.15rem;
+}
+
+.error-state {
+  border-color: #fecaca;
+  color: #b42318;
+  background: #fef2f2;
+}
+
+.empty-state {
+  justify-content: center;
+  min-height: 140px;
+  text-align: center;
+}
+
+.spin-icon {
+  animation: spin 1s linear infinite;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 23, 42, 0.42);
+  padding: 1rem;
+}
+
+.dialog-panel {
+  display: grid;
+  gap: 0.9rem;
+  width: min(100%, 440px);
+  border: 1px solid #e1e7ef;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.2);
+  padding: 1rem;
+}
+
+.dialog-actions {
+  justify-content: flex-end;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .tabs {
@@ -890,8 +994,13 @@ label {
 
   .split-grid,
   .info-grid,
-  .demurrage-summary {
+  .demurrage-summary,
+  .cleanup-grid {
     grid-template-columns: 1fr;
+  }
+
+  .button-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -944,6 +1053,22 @@ label {
   }
 
   .data-point-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .toolbar,
+  .email-status-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .filter-toolbar input,
+  .search-box {
+    max-width: none;
+    width: 100%;
+  }
+
+  .button-grid {
     grid-template-columns: 1fr;
   }
 }

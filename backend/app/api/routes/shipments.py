@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
@@ -18,6 +18,7 @@ from app.schemas.shipment import (
 )
 from app.services.dashboard_service import get_dashboard_summary, invalidate_dashboard_cache
 from app.services.shipment_service import create_shipment_with_defaults
+from app.services.audit_service import changed_fields, record_audit_log
 from app.services.workflow_service import update_workflow_status
 
 
@@ -70,12 +71,24 @@ def list_shipments(
 @router.post("", response_model=ShipmentRead, status_code=status.HTTP_201_CREATED)
 def create_shipment(
     shipment_in: ShipmentCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = Depends(require_write_access),
 ) -> Shipment:
     _validate_party_ids(db, shipment_in.exporter_id, shipment_in.importer_id)
     shipment = create_shipment_with_defaults(db, shipment_in, current_user.id)
     invalidate_dashboard_cache()
+    record_audit_log(
+        db,
+        current_user,
+        "shipment.created",
+        "shipment",
+        entity_id=shipment.id,
+        entity_label=shipment.shipment_code,
+        description="Shipment created.",
+        metadata={"type": shipment.type, "status": shipment.status},
+        request=request,
+    )
     return shipment
 
 
@@ -100,19 +113,32 @@ def get_shipment(
 def update_shipment(
     shipment_id: int,
     shipment_in: ShipmentUpdate,
+    request: Request,
     db: Session = Depends(get_db),
-    _: AuthenticatedUser = Depends(require_write_access),
+    current_user: AuthenticatedUser = Depends(require_write_access),
 ) -> Shipment:
     shipment = db.query(Shipment).filter(Shipment.id == shipment_id).first()
     if not shipment:
         raise HTTPException(status_code=404, detail="Shipment not found")
     data = shipment_in.model_dump(exclude_unset=True)
     _validate_party_ids(db, data.get("exporter_id"), data.get("importer_id"))
+    before = {field: getattr(shipment, field, None) for field in data}
     for field, value in data.items():
         setattr(shipment, field, value)
     db.commit()
     db.refresh(shipment)
     invalidate_dashboard_cache()
+    record_audit_log(
+        db,
+        current_user,
+        "shipment.updated",
+        "shipment",
+        entity_id=shipment.id,
+        entity_label=shipment.shipment_code,
+        description="Shipment updated.",
+        metadata={"fields_changed": changed_fields(before, {field: getattr(shipment, field, None) for field in data})},
+        request=request,
+    )
     return shipment
 
 
@@ -120,6 +146,7 @@ def update_shipment(
 def archive_shipment(
     shipment_id: int,
     archive_in: ShipmentArchiveRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = Depends(require_roles("ADMIN")),
 ) -> Shipment:
@@ -133,14 +160,26 @@ def archive_shipment(
     db.commit()
     db.refresh(shipment)
     invalidate_dashboard_cache()
+    record_audit_log(
+        db,
+        current_user,
+        "shipment.archived",
+        "shipment",
+        entity_id=shipment.id,
+        entity_label=shipment.shipment_code,
+        description="Shipment archived.",
+        metadata={"reason_present": bool(archive_in.reason)},
+        request=request,
+    )
     return shipment
 
 
 @router.patch("/{shipment_id}/restore", response_model=ShipmentRead)
 def restore_shipment(
     shipment_id: int,
+    request: Request,
     db: Session = Depends(get_db),
-    _: AuthenticatedUser = Depends(require_roles("ADMIN")),
+    current_user: AuthenticatedUser = Depends(require_roles("ADMIN")),
 ) -> Shipment:
     shipment = db.query(Shipment).filter(Shipment.id == shipment_id).first()
     if not shipment:
@@ -152,6 +191,17 @@ def restore_shipment(
     db.commit()
     db.refresh(shipment)
     invalidate_dashboard_cache()
+    record_audit_log(
+        db,
+        current_user,
+        "shipment.restored",
+        "shipment",
+        entity_id=shipment.id,
+        entity_label=shipment.shipment_code,
+        description="Shipment restored from archive.",
+        metadata={"restored": True},
+        request=request,
+    )
     return shipment
 
 
@@ -159,12 +209,25 @@ def restore_shipment(
 def update_shipment_workflow_status(
     shipment_id: int,
     workflow_in: WorkflowStatusUpdate,
+    request: Request,
     db: Session = Depends(get_db),
-    _: AuthenticatedUser = Depends(require_write_access),
+    current_user: AuthenticatedUser = Depends(require_write_access),
 ) -> Shipment:
     shipment = db.query(Shipment).filter(Shipment.id == shipment_id).first()
     if not shipment:
         raise HTTPException(status_code=404, detail="Shipment not found")
+    previous_status = shipment.status
     updated = update_workflow_status(db, shipment, workflow_in)
     invalidate_dashboard_cache()
+    record_audit_log(
+        db,
+        current_user,
+        "shipment.workflow_status_updated",
+        "shipment",
+        entity_id=updated.id,
+        entity_label=updated.shipment_code,
+        description="Shipment workflow status updated.",
+        metadata={"from_status": previous_status, "to_status": updated.status},
+        request=request,
+    )
     return updated

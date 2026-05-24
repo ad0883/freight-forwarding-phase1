@@ -10,6 +10,7 @@ from app.api.deps import AuthenticatedUser, get_db, require_roles
 from app.core.config import settings
 from app.models.email import EmailConnection, EmailMessageCache, EmailSuggestion
 from app.models.shipment import Shipment
+from app.models.user import User
 from app.schemas.email import (
     EmailConnectionStatus,
     EmailDebugConfigResponse,
@@ -31,6 +32,7 @@ from app.services.email_suggestion_service import (
     process_cached_message,
     reject_suggestion,
 )
+from app.services.audit_service import record_audit_log
 from app.services.gmail_service import (
     GmailOAuthCallbackError,
     OAUTH_ERROR_CALLBACK_FAILED,
@@ -102,6 +104,7 @@ def email_oauth_start(
 
 @router.get("/oauth/callback")
 def email_oauth_callback(
+    request: Request,
     code: Optional[str] = None,
     state: Optional[str] = None,
     error: Optional[str] = None,
@@ -135,7 +138,19 @@ def email_oauth_callback(
                 "callback_validation",
                 "Gmail OAuth callback code is missing.",
             )
-        handle_oauth_callback(db, code, state)
+        connection = handle_oauth_callback(db, code, state)
+        audit_user = _authenticated_user_from_id(db, connection.user_id)
+        record_audit_log(
+            db,
+            audit_user,
+            "email.gmail_connected",
+            "email_connection",
+            entity_id=connection.id,
+            entity_label=connection.email_address,
+            description="Gmail account connected.",
+            metadata={"provider": connection.provider, "has_email_address": bool(connection.email_address)},
+            request=request,
+        )
     except GmailOAuthCallbackError as exc:
         logger.exception(
             (
@@ -171,15 +186,31 @@ def email_oauth_callback(
 
 @router.post("/disconnect", response_model=EmailDisconnectResponse)
 def email_disconnect(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = EmailUser,
 ) -> EmailDisconnectResponse:
-    return EmailDisconnectResponse(disconnected=disconnect_gmail(db, current_user.id))
+    connection = get_active_connection(db, current_user.id)
+    disconnected = disconnect_gmail(db, current_user.id)
+    if disconnected:
+        record_audit_log(
+            db,
+            current_user,
+            "email.gmail_disconnected",
+            "email_connection",
+            entity_id=connection.id if connection else None,
+            entity_label=connection.email_address if connection else None,
+            description="Gmail account disconnected.",
+            metadata={"provider": "gmail"},
+            request=request,
+        )
+    return EmailDisconnectResponse(disconnected=disconnected)
 
 
 @router.post("/scan", response_model=EmailScanResponse)
 def scan_email(
     payload: EmailScanRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = EmailUser,
 ) -> EmailScanResponse:
@@ -212,11 +243,30 @@ def scan_email(
         db.refresh(message)
         cached_count += 1
         suggestions_created += process_cached_message(db, message)
-    return EmailScanResponse(
+    response = EmailScanResponse(
         scanned=len(message_ids),
         cached=cached_count,
         suggestions_created=suggestions_created,
     )
+    record_audit_log(
+        db,
+        current_user,
+        "email.scan_completed",
+        "email_connection",
+        entity_id=connection.id,
+        entity_label=connection.email_address,
+        description="Gmail scan completed.",
+        metadata={
+            "query_present": bool(payload.query),
+            "lookback_days": payload.lookback_days or settings.EMAIL_LOOKBACK_DAYS,
+            "max_results": max_results,
+            "scanned": response.scanned,
+            "cached": response.cached,
+            "suggestions_created": response.suggestions_created,
+        },
+        request=request,
+    )
+    return response
 
 
 @router.get("/messages", response_model=list[EmailMessageListItem])
@@ -271,11 +321,27 @@ def list_email_suggestions(
 def update_email_suggestion(
     suggestion_id: int,
     payload: EmailSuggestionUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = EmailUser,
 ) -> EmailSuggestionRead:
     suggestion = _get_suggestion_for_user(db, suggestion_id, current_user.id)
     suggestion = patch_suggestion(db, suggestion, payload.shipment_id, payload.extracted_data_json)
+    record_audit_log(
+        db,
+        current_user,
+        "email_suggestion.updated",
+        "email_suggestion",
+        entity_id=suggestion.id,
+        entity_label=suggestion.suggestion_type,
+        description="Email suggestion review edits saved.",
+        metadata={
+            "suggestion_type": suggestion.suggestion_type,
+            "shipment_id": suggestion.shipment_id,
+            "extracted_data_updated": payload.extracted_data_json is not None,
+        },
+        request=request,
+    )
     return _suggestion_read(suggestion)
 
 
@@ -283,6 +349,7 @@ def update_email_suggestion(
 def apply_email_suggestion(
     suggestion_id: int,
     payload: EmailSuggestionApplyRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = EmailUser,
 ) -> EmailSuggestionApplyResponse:
@@ -294,17 +361,41 @@ def apply_email_suggestion(
             status_code=status.HTTP_409_CONFLICT,
             detail={"message": "Suggestion has conflicts.", "conflicts": exc.conflicts},
         ) from exc
+    record_audit_log(
+        db,
+        current_user,
+        "email_suggestion.applied",
+        "email_suggestion",
+        entity_id=applied.id,
+        entity_label=applied.suggestion_type,
+        description="Email suggestion applied.",
+        metadata={"suggestion_type": applied.suggestion_type, "shipment_id": applied.shipment_id, "force": payload.force},
+        request=request,
+    )
     return EmailSuggestionApplyResponse(applied=True, suggestion=_suggestion_read(applied), conflicts=[])
 
 
 @router.post("/suggestions/{suggestion_id}/reject", response_model=EmailSuggestionRead)
 def reject_email_suggestion(
     suggestion_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = EmailUser,
 ) -> EmailSuggestionRead:
     suggestion = _get_suggestion_for_user(db, suggestion_id, current_user.id)
-    return _suggestion_read(reject_suggestion(db, suggestion, current_user.id))
+    rejected = reject_suggestion(db, suggestion, current_user.id)
+    record_audit_log(
+        db,
+        current_user,
+        "email_suggestion.rejected",
+        "email_suggestion",
+        entity_id=rejected.id,
+        entity_label=rejected.suggestion_type,
+        description="Email suggestion rejected.",
+        metadata={"suggestion_type": rejected.suggestion_type, "shipment_id": rejected.shipment_id},
+        request=request,
+    )
+    return _suggestion_read(rejected)
 
 
 def _message_query(db: Session, user_id: int):
@@ -413,6 +504,20 @@ def _token_encryption_key_valid() -> bool:
     except TokenCryptoError:
         return False
     return True
+
+
+def _authenticated_user_from_id(db: Session, user_id: int) -> Optional[AuthenticatedUser]:
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return None
+    return AuthenticatedUser(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        role=user.role,
+        is_active=user.is_active,
+        created_at=user.created_at,
+    )
 
 
 def _frontend_base_url_from_request(request: Request) -> Optional[str]:

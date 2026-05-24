@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.api.deps import AuthenticatedUser, get_current_user, get_db, require_write_access
 from app.models.document import Document
 from app.models.shipment import Shipment
 from app.schemas.document import DocumentRead, DocumentUpdate
+from app.services.audit_service import changed_fields, record_audit_log
 
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -31,14 +32,31 @@ def list_documents_for_shipment(
 def update_document(
     document_id: int,
     document_in: DocumentUpdate,
+    request: Request,
     db: Session = Depends(get_db),
-    _: AuthenticatedUser = Depends(require_write_access),
+    current_user: AuthenticatedUser = Depends(require_write_access),
 ) -> Document:
     document = db.query(Document).filter(Document.id == document_id).first()
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
-    for field, value in document_in.model_dump(exclude_unset=True).items():
+    data = document_in.model_dump(exclude_unset=True)
+    before = {field: getattr(document, field, None) for field in data}
+    for field, value in data.items():
         setattr(document, field, value)
     db.commit()
     db.refresh(document)
+    record_audit_log(
+        db,
+        current_user,
+        "document.updated",
+        "document",
+        entity_id=document.id,
+        entity_label=document.doc_type,
+        description="Document updated.",
+        metadata={
+            "shipment_id": document.shipment_id,
+            "fields_changed": changed_fields(before, {field: getattr(document, field, None) for field in data}),
+        },
+        request=request,
+    )
     return document

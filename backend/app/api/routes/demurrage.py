@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.api.deps import AuthenticatedUser, get_current_user, get_db, require_write_access
 from app.models.shipment import Shipment
 from app.schemas.demurrage import DemurrageRead, DemurrageUpdate
+from app.services.audit_service import changed_fields, record_audit_log
 from app.services.dashboard_service import invalidate_dashboard_cache
 from app.services.demurrage_service import calculate_demurrage, get_or_create_demurrage
 
@@ -35,14 +36,28 @@ def get_demurrage(
 def update_demurrage(
     shipment_id: int,
     demurrage_in: DemurrageUpdate,
+    request: Request,
     db: Session = Depends(get_db),
-    _: AuthenticatedUser = Depends(require_write_access),
+    current_user: AuthenticatedUser = Depends(require_write_access),
 ) -> DemurrageRead:
     shipment = _get_shipment(db, shipment_id)
     record = get_or_create_demurrage(db, shipment)
-    for field, value in demurrage_in.model_dump(exclude_unset=True).items():
+    data = demurrage_in.model_dump(exclude_unset=True)
+    before = {field: getattr(record, field, None) for field in data}
+    for field, value in data.items():
         setattr(record, field, value)
     db.commit()
     db.refresh(record)
     invalidate_dashboard_cache()
+    record_audit_log(
+        db,
+        current_user,
+        "demurrage.updated",
+        "demurrage",
+        entity_id=record.id,
+        entity_label=f"Shipment {shipment.shipment_code}",
+        description="Demurrage updated.",
+        metadata={"shipment_id": shipment.id, "fields_changed": changed_fields(before, {field: getattr(record, field, None) for field in data})},
+        request=request,
+    )
     return calculate_demurrage(record)

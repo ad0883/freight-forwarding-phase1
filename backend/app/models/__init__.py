@@ -1,5 +1,6 @@
 from app.models.alert import Alert
 from app.models.ai_log import AIInteractionLog
+from app.models.audit import AuditLog
 from app.models.bl_management import BLManagement
 from app.models.charge import Charge
 from app.models.demurrage import Demurrage
@@ -14,6 +15,7 @@ from app.models.user import User
 __all__ = [
     "Alert",
     "AIInteractionLog",
+    "AuditLog",
     "BLManagement",
     "Charge",
     "Demurrage",

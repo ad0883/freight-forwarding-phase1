@@ -22,6 +22,8 @@ function LoginPage() {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
       localStorage.setItem('access_token', response.data.access_token);
+      const meResponse = await api.get('/auth/me');
+      localStorage.setItem('current_user', JSON.stringify(meResponse.data));
       navigate('/');
     } catch (err) {
       setError(err.response?.data?.detail || 'Login failed');

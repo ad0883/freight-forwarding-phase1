@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import AuthenticatedUser, get_current_user, get_db, require_roles, require_write_access
@@ -9,6 +9,7 @@ from app.models.followup import FollowUpLog
 from app.models.party import Party
 from app.models.shipment import Shipment
 from app.schemas.party import PartyCreate, PartyDeactivationRequest, PartyRead, PartyUpdate
+from app.services.audit_service import changed_fields, record_audit_log
 
 
 router = APIRouter(prefix="/parties", tags=["parties"])
@@ -31,13 +32,25 @@ def list_parties(
 @router.post("", response_model=PartyRead, status_code=status.HTTP_201_CREATED)
 def create_party(
     party_in: PartyCreate,
+    request: Request,
     db: Session = Depends(get_db),
-    _: AuthenticatedUser = Depends(require_write_access),
+    current_user: AuthenticatedUser = Depends(require_write_access),
 ) -> Party:
     party = Party(**party_in.model_dump())
     db.add(party)
     db.commit()
     db.refresh(party)
+    record_audit_log(
+        db,
+        current_user,
+        "party.created",
+        "party",
+        entity_id=party.id,
+        entity_label=party.name,
+        description="Party created.",
+        metadata={"type": party.type, "is_active": party.is_active},
+        request=request,
+    )
     return party
 
 
@@ -45,6 +58,7 @@ def create_party(
 def deactivate_party(
     party_id: int,
     deactivate_in: PartyDeactivationRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = Depends(require_roles("ADMIN")),
 ) -> Party:
@@ -57,14 +71,26 @@ def deactivate_party(
     party.deactivation_reason = deactivate_in.reason
     db.commit()
     db.refresh(party)
+    record_audit_log(
+        db,
+        current_user,
+        "party.deactivated",
+        "party",
+        entity_id=party.id,
+        entity_label=party.name,
+        description="Party deactivated.",
+        metadata={"reason_present": bool(deactivate_in.reason)},
+        request=request,
+    )
     return party
 
 
 @router.patch("/{party_id}/reactivate", response_model=PartyRead)
 def reactivate_party(
     party_id: int,
+    request: Request,
     db: Session = Depends(get_db),
-    _: AuthenticatedUser = Depends(require_roles("ADMIN")),
+    current_user: AuthenticatedUser = Depends(require_roles("ADMIN")),
 ) -> Party:
     party = db.query(Party).filter(Party.id == party_id).first()
     if not party:
@@ -75,14 +101,26 @@ def reactivate_party(
     party.deactivation_reason = None
     db.commit()
     db.refresh(party)
+    record_audit_log(
+        db,
+        current_user,
+        "party.reactivated",
+        "party",
+        entity_id=party.id,
+        entity_label=party.name,
+        description="Party reactivated.",
+        metadata={"is_active": party.is_active},
+        request=request,
+    )
     return party
 
 
 @router.delete("/{party_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_party(
     party_id: int,
+    request: Request,
     db: Session = Depends(get_db),
-    _: AuthenticatedUser = Depends(require_roles("ADMIN")),
+    current_user: AuthenticatedUser = Depends(require_roles("ADMIN")),
 ) -> None:
     party = db.query(Party).filter(Party.id == party_id).first()
     if not party:
@@ -101,22 +139,48 @@ def delete_party(
             status_code=400,
             detail="Party is used in existing records. Deactivate it instead.",
         )
+    entity_label = party.name
     db.delete(party)
     db.commit()
+    record_audit_log(
+        db,
+        current_user,
+        "party.deleted",
+        "party",
+        entity_id=party_id,
+        entity_label=entity_label,
+        description="Party deleted.",
+        metadata={"deleted": True},
+        request=request,
+    )
 
 
 @router.patch("/{party_id}", response_model=PartyRead)
 def update_party(
     party_id: int,
     party_in: PartyUpdate,
+    request: Request,
     db: Session = Depends(get_db),
-    _: AuthenticatedUser = Depends(require_write_access),
+    current_user: AuthenticatedUser = Depends(require_write_access),
 ) -> Party:
     party = db.query(Party).filter(Party.id == party_id).first()
     if not party:
         raise HTTPException(status_code=404, detail="Party not found")
-    for field, value in party_in.model_dump(exclude_unset=True).items():
+    data = party_in.model_dump(exclude_unset=True)
+    before = {field: getattr(party, field, None) for field in data}
+    for field, value in data.items():
         setattr(party, field, value)
     db.commit()
     db.refresh(party)
+    record_audit_log(
+        db,
+        current_user,
+        "party.updated",
+        "party",
+        entity_id=party.id,
+        entity_label=party.name,
+        description="Party updated.",
+        metadata={"fields_changed": changed_fields(before, {field: getattr(party, field, None) for field in data})},
+        request=request,
+    )
     return party

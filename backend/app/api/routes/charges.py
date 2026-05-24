@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import AuthenticatedUser, get_current_user, get_db, require_write_access
@@ -8,6 +8,7 @@ from app.models.charge import Charge
 from app.models.party import Party
 from app.models.shipment import Shipment
 from app.schemas.charge import ChargeCreate, ChargeRead, ChargeUpdate, ShipmentPLSummary, is_valid_charge_status
+from app.services.audit_service import changed_fields, record_audit_log
 from app.services.dashboard_service import invalidate_dashboard_cache
 from app.services.finance_service import calculate_shipment_pnl
 
@@ -91,8 +92,9 @@ def list_charges_for_shipment(
 def create_charge(
     shipment_id: int,
     charge_in: ChargeCreate,
+    request: Request,
     db: Session = Depends(get_db),
-    _: AuthenticatedUser = Depends(require_write_access),
+    current_user: AuthenticatedUser = Depends(require_write_access),
 ) -> ChargeRead:
     _get_shipment(db, shipment_id)
     if charge_in.shipment_id is not None and charge_in.shipment_id != shipment_id:
@@ -106,15 +108,34 @@ def create_charge(
     db.commit()
     db.refresh(charge)
     invalidate_dashboard_cache()
-    return _charge_read(_get_charge(db, charge.id))
+    charge = _get_charge(db, charge.id)
+    record_audit_log(
+        db,
+        current_user,
+        "charge.created",
+        "charge",
+        entity_id=charge.id,
+        entity_label=charge.invoice_no or f"Charge #{charge.id}",
+        description="Charge created.",
+        metadata={
+            "shipment_id": charge.shipment_id,
+            "direction": charge.direction,
+            "status": charge.status,
+            "amount": charge.amount,
+            "currency": charge.currency,
+        },
+        request=request,
+    )
+    return _charge_read(charge)
 
 
 @router.patch("/charges/{charge_id}", response_model=ChargeRead)
 def update_charge(
     charge_id: int,
     charge_in: ChargeUpdate,
+    request: Request,
     db: Session = Depends(get_db),
-    _: AuthenticatedUser = Depends(require_write_access),
+    current_user: AuthenticatedUser = Depends(require_write_access),
 ) -> ChargeRead:
     charge = _get_charge(db, charge_id)
     data = charge_in.model_dump(exclude_unset=True)
@@ -122,26 +143,63 @@ def update_charge(
     direction = data.get("direction", charge.direction)
     status_value = data.get("status", charge.status)
     _validate_direction_status(direction, status_value)
+    before = {field: getattr(charge, field, None) for field in data}
+    previous_status = charge.status
     for field, value in data.items():
         setattr(charge, field, value)
     db.commit()
     db.refresh(charge)
     invalidate_dashboard_cache()
-    return _charge_read(_get_charge(db, charge.id))
+    charge = _get_charge(db, charge.id)
+    action = "charge.updated"
+    if previous_status != charge.status and charge.status == "paid":
+        action = "charge.marked_paid"
+    elif previous_status != charge.status and charge.status == "received":
+        action = "charge.marked_received"
+    record_audit_log(
+        db,
+        current_user,
+        action,
+        "charge",
+        entity_id=charge.id,
+        entity_label=charge.invoice_no or f"Charge #{charge.id}",
+        description="Charge updated.",
+        metadata={
+            "shipment_id": charge.shipment_id,
+            "fields_changed": changed_fields(before, {field: getattr(charge, field, None) for field in data}),
+            "previous_status": previous_status,
+            "status": charge.status,
+        },
+        request=request,
+    )
+    return _charge_read(charge)
 
 
 @router.delete("/charges/{charge_id}", response_model=ChargeRead)
 def cancel_charge(
     charge_id: int,
+    request: Request,
     db: Session = Depends(get_db),
-    _: AuthenticatedUser = Depends(require_write_access),
+    current_user: AuthenticatedUser = Depends(require_write_access),
 ) -> ChargeRead:
     charge = _get_charge(db, charge_id)
     charge.status = "cancelled"
     db.commit()
     db.refresh(charge)
     invalidate_dashboard_cache()
-    return _charge_read(_get_charge(db, charge.id))
+    charge = _get_charge(db, charge.id)
+    record_audit_log(
+        db,
+        current_user,
+        "charge.cancelled",
+        "charge",
+        entity_id=charge.id,
+        entity_label=charge.invoice_no or f"Charge #{charge.id}",
+        description="Charge cancelled.",
+        metadata={"shipment_id": charge.shipment_id, "status": charge.status},
+        request=request,
+    )
+    return _charge_read(charge)
 
 
 @router.get("/shipments/{shipment_id}/pnl", response_model=ShipmentPLSummary)

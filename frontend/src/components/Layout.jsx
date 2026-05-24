@@ -1,13 +1,18 @@
 import {
+  Activity,
   Bot,
   BarChart3,
   ClipboardList,
+  FileClock,
   LayoutDashboard,
   LogOut,
   Mail,
   PackagePlus,
+  Settings,
   Ship,
+  ShieldCheck,
   Users,
+  UserCog,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
@@ -16,25 +21,51 @@ import api from '../api/client.js';
 const links = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/shipments', label: 'Shipments', icon: Ship },
-  { to: '/shipments/new', label: 'New Shipment', icon: PackagePlus },
+  { to: '/shipments/new', label: 'New Shipment', icon: PackagePlus, writeRoleOnly: true },
   { to: '/parties', label: 'Parties', icon: Users },
   { to: '/tasks', label: 'Tasks', icon: ClipboardList },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/ai', label: 'AI Assistant', icon: Bot },
   { to: '/email', label: 'Email Automation', icon: Mail, writeRoleOnly: true },
+  { to: '/admin/audit-logs', label: 'Audit Logs', icon: FileClock, adminOnly: true },
+  { to: '/admin/users', label: 'Users', icon: UserCog, adminOnly: true },
+  { to: '/admin/status', label: 'Status', icon: Activity, adminOnly: true },
+  { to: '/admin/tools', label: 'Admin Tools', icon: ShieldCheck, adminOnly: true },
+  { to: '/settings', label: 'Settings', icon: Settings },
 ];
+
+function cachedUser() {
+  try {
+    return JSON.parse(localStorage.getItem('current_user') || 'null');
+  } catch {
+    return null;
+  }
+}
+
+function canShowLink(link, currentUser, userLoading) {
+  if (link.adminOnly) return currentUser?.role === 'ADMIN';
+  if (link.writeRoleOnly) {
+    if (!currentUser) return userLoading;
+    return ['ADMIN', 'STAFF'].includes(currentUser.role);
+  }
+  return true;
+}
 
 function Layout() {
   const navigate = useNavigate();
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(cachedUser);
   const [userLoading, setUserLoading] = useState(true);
 
   useEffect(() => {
     api
       .get('/auth/me')
-      .then((response) => setCurrentUser(response.data))
+      .then((response) => {
+        setCurrentUser(response.data);
+        localStorage.setItem('current_user', JSON.stringify(response.data));
+      })
       .catch(() => {
         localStorage.removeItem('access_token');
+        localStorage.removeItem('current_user');
         setCurrentUser(null);
         navigate('/login');
       })
@@ -43,6 +74,7 @@ function Layout() {
 
   function logout() {
     localStorage.removeItem('access_token');
+    localStorage.removeItem('current_user');
     navigate('/login');
   }
 
@@ -58,7 +90,7 @@ function Layout() {
         </div>
         <nav className="nav-links">
           {links
-            .filter((link) => !link.writeRoleOnly || userLoading || ['ADMIN', 'STAFF'].includes(currentUser?.role))
+            .filter((link) => canShowLink(link, currentUser, userLoading))
             .map(({ to, label, icon: Icon }) => (
               <NavLink key={to} to={to} end={to === '/'}>
                 <Icon size={18} />

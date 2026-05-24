@@ -9,12 +9,16 @@ from sqlalchemy.orm import Session
 from app.api.routes import (
     ai,
     alerts,
+    admin,
+    audit,
     auth,
     bl_management,
     demurrage,
     documents,
     email,
+    exports,
     followups,
+    health,
     parties,
     charges,
     reports,
@@ -121,6 +125,10 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix="/api")
+app.include_router(health.router, prefix="/api")
+app.include_router(audit.router, prefix="/api")
+app.include_router(admin.router, prefix="/api")
+app.include_router(exports.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(parties.router, prefix="/api")
 app.include_router(shipments.router, prefix="/api")

@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import AuthenticatedUser, get_current_user, get_db, require_write_access
@@ -8,6 +8,7 @@ from app.models.followup import FollowUpLog
 from app.models.party import Party
 from app.models.shipment import Shipment
 from app.schemas.followup import FollowUpCreate, FollowUpRead, FollowUpUpdate
+from app.services.audit_service import changed_fields, record_audit_log
 
 
 router = APIRouter(tags=["follow-ups"])
@@ -48,6 +49,7 @@ def list_followups(
 def create_followup(
     shipment_id: int,
     followup_in: FollowUpCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = Depends(require_write_access),
 ) -> FollowUpLog:
@@ -61,6 +63,17 @@ def create_followup(
     db.add(followup)
     db.commit()
     db.refresh(followup)
+    record_audit_log(
+        db,
+        current_user,
+        "followup.created",
+        "followup",
+        entity_id=followup.id,
+        entity_label=followup.summary,
+        description="Follow-up created.",
+        metadata={"shipment_id": shipment_id, "channel": followup.channel, "status": followup.status},
+        request=request,
+    )
     return followup
 
 
@@ -68,29 +81,59 @@ def create_followup(
 def update_followup(
     followup_id: int,
     followup_in: FollowUpUpdate,
+    request: Request,
     db: Session = Depends(get_db),
-    _: AuthenticatedUser = Depends(require_write_access),
+    current_user: AuthenticatedUser = Depends(require_write_access),
 ) -> FollowUpLog:
     followup = db.query(FollowUpLog).filter(FollowUpLog.id == followup_id).first()
     if not followup:
         raise HTTPException(status_code=404, detail="Follow-up not found")
     data = followup_in.model_dump(exclude_unset=True)
     _validate_party(db, data.get("party_id"))
+    before = {field: getattr(followup, field, None) for field in data}
     for field, value in data.items():
         setattr(followup, field, value)
     db.commit()
     db.refresh(followup)
+    record_audit_log(
+        db,
+        current_user,
+        "followup.updated",
+        "followup",
+        entity_id=followup.id,
+        entity_label=followup.summary,
+        description="Follow-up updated.",
+        metadata={
+            "shipment_id": followup.shipment_id,
+            "fields_changed": changed_fields(before, {field: getattr(followup, field, None) for field in data}),
+        },
+        request=request,
+    )
     return followup
 
 
 @router.delete("/followups/{followup_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_followup(
     followup_id: int,
+    request: Request,
     db: Session = Depends(get_db),
-    _: AuthenticatedUser = Depends(require_write_access),
+    current_user: AuthenticatedUser = Depends(require_write_access),
 ) -> None:
     followup = db.query(FollowUpLog).filter(FollowUpLog.id == followup_id).first()
     if not followup:
         raise HTTPException(status_code=404, detail="Follow-up not found")
+    entity_label = followup.summary
+    shipment_id = followup.shipment_id
     db.delete(followup)
     db.commit()
+    record_audit_log(
+        db,
+        current_user,
+        "followup.deleted",
+        "followup",
+        entity_id=followup_id,
+        entity_label=entity_label,
+        description="Follow-up deleted.",
+        metadata={"shipment_id": shipment_id},
+        request=request,
+    )

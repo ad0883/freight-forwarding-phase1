@@ -11,6 +11,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../api/client.js';
+import { ConfirmDialog } from '../components/States.jsx';
 
 const initialScan = {
   query: '',
@@ -54,6 +55,7 @@ function EmailAutomationPage() {
   const [reviewJson, setReviewJson] = useState('{}');
   const [scanForm, setScanForm] = useState(initialScan);
   const [conflicts, setConflicts] = useState([]);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
@@ -122,9 +124,11 @@ function EmailAutomationPage() {
     try {
       await api.post('/email/disconnect');
       setNotice('Gmail disconnected');
+      setConfirmDisconnect(false);
       await refresh();
     } catch (err) {
       setError(err.response?.data?.detail || 'Unable to disconnect Gmail');
+      setConfirmDisconnect(false);
     }
   }
 
@@ -287,7 +291,7 @@ function EmailAutomationPage() {
           </div>
           <div className="row-actions">
             {connection?.connected ? (
-              <button className="secondary-button danger-text" type="button" onClick={disconnectGmail}>
+              <button className="secondary-button danger-text" type="button" onClick={() => setConfirmDisconnect(true)}>
                 <Plug size={18} />
                 <span>Disconnect</span>
               </button>
@@ -503,6 +507,15 @@ function EmailAutomationPage() {
           </table>
         </div>
       </section>
+      <ConfirmDialog
+        open={confirmDisconnect}
+        title="Disconnect Gmail"
+        message="Disconnect this Gmail account from email automation?"
+        confirmLabel="Disconnect"
+        danger
+        onCancel={() => setConfirmDisconnect(false)}
+        onConfirm={disconnectGmail}
+      />
     </div>
   );
 }
