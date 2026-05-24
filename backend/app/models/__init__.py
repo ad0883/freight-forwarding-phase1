@@ -4,6 +4,7 @@ from app.models.bl_management import BLManagement
 from app.models.charge import Charge
 from app.models.demurrage import Demurrage
 from app.models.document import Document
+from app.models.email import EmailConnection, EmailMessageCache, EmailSuggestion
 from app.models.followup import FollowUpLog
 from app.models.party import Party
 from app.models.shipment import Shipment
@@ -17,6 +18,9 @@ __all__ = [
     "Charge",
     "Demurrage",
     "Document",
+    "EmailConnection",
+    "EmailMessageCache",
+    "EmailSuggestion",
     "FollowUpLog",
     "Party",
     "Shipment",

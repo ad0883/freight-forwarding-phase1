@@ -67,3 +67,25 @@ ChargeType = Literal[
 ]
 ChargeDirection = Literal["payable", "receivable"]
 ChargeStatus = Literal["pending", "paid", "received", "cancelled"]
+EmailClassification = Literal[
+    "booking_confirmation",
+    "bl_draft",
+    "arrival_notice",
+    "freight_invoice",
+    "delivery_order",
+    "pre_alert",
+    "general_followup",
+    "unknown",
+]
+EmailProcessedStatus = Literal["new", "suggested", "approved", "rejected", "ignored"]
+EmailSuggestionType = Literal[
+    "update_shipment",
+    "update_document",
+    "update_bl",
+    "update_demurrage",
+    "create_charge",
+    "create_followup",
+    "create_task",
+    "unknown",
+]
+EmailSuggestionStatus = Literal["pending", "approved", "rejected", "applied", "ignored"]

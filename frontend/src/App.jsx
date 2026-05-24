@@ -3,6 +3,7 @@ import Layout from './components/Layout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import CreateShipmentPage from './pages/CreateShipmentPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
+import EmailAutomationPage from './pages/EmailAutomationPage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import MockAiPage from './pages/MockAiPage.jsx';
 import PartiesPage from './pages/PartiesPage.jsx';
@@ -31,6 +32,7 @@ function App() {
         <Route path="tasks" element={<TasksPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="ai" element={<MockAiPage />} />
+        <Route path="email" element={<EmailAutomationPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
