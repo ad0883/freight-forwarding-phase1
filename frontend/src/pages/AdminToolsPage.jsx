@@ -15,12 +15,15 @@ function AdminToolsPage() {
   const [cleanup, setCleanup] = useState(null);
   const [confirmCleanup, setConfirmCleanup] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
   async function runCleanupDryRun() {
     setError('');
+    setNotice('');
     try {
       const response = await api.post('/admin/cleanup-test-data', null, { params: { dry_run: true } });
       setCleanup(response.data);
+      setNotice('Dry-run scan complete');
     } catch (err) {
       setError(err.response?.data?.detail || 'Unable to run cleanup dry-run');
     } finally {
@@ -37,10 +40,13 @@ function AdminToolsPage() {
         </div>
       </div>
       <ErrorState message={error} />
+      {notice && <p className="success-text">{notice}</p>}
+
       <section className="panel">
         <div className="panel-header">
           <h2>CSV Exports</h2>
         </div>
+        <p className="muted" style={{ marginBottom: '0.75rem' }}>Download data exports as CSV files.</p>
         <div className="button-grid">
           {exports.map((item) => (
             <button className="secondary-button" type="button" key={item.path} onClick={() => downloadExport(item.path, item.filename)}>
@@ -50,12 +56,13 @@ function AdminToolsPage() {
           ))}
         </div>
       </section>
+
       <section className="panel">
         <div className="panel-header">
           <h2>Test Data Cleanup</h2>
         </div>
         <p className="muted">Cleanup is dry-run only and does not modify records.</p>
-        <div className="row-actions">
+        <div className="row-actions" style={{ marginTop: '0.75rem' }}>
           <button className="primary-button" type="button" onClick={() => setConfirmCleanup(true)}>
             <Database size={18} />
             <span>Run Dry-Run</span>
@@ -67,7 +74,7 @@ function AdminToolsPage() {
               <article className="info-item" key={key}>
                 <span>{key}</span>
                 <strong>{value.count}</strong>
-                <p className="muted">{(value.sample || []).map((item) => item.label).join(', ') || 'No matches'}</p>
+                <p className="muted" style={{ fontSize: '0.8rem' }}>{(value.sample || []).map((item) => item.label).join(', ') || 'No matches'}</p>
               </article>
             ))}
           </div>

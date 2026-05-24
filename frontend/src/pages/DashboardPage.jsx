@@ -2,6 +2,7 @@ import { AlertTriangle, CheckCircle2, Clock, DollarSign, Ship, Timer, WalletCard
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client.js';
+import { EmptyState, ErrorState, LoadingState } from '../components/States.jsx';
 
 function DashboardPage() {
   const [summary, setSummary] = useState(null);
@@ -9,29 +10,51 @@ function DashboardPage() {
   const [alerts, setAlerts] = useState([]);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const [dashboardResponse, financialResponse] = await Promise.all([
-          api.get('/shipments/dashboard'),
-          api.get('/reports/dashboard-financials'),
-        ]);
-        setSummary(dashboardResponse.data);
-        setFinancials(financialResponse.data);
-        setAlerts(dashboardResponse.data.recent_alerts || []);
-      } catch (err) {
-        setError(err.response?.data?.detail || 'Unable to load dashboard');
-      }
+  async function load() {
+    setError('');
+    try {
+      const [dashboardResponse, financialResponse] = await Promise.all([
+        api.get('/shipments/dashboard'),
+        api.get('/reports/dashboard-financials'),
+      ]);
+      setSummary(dashboardResponse.data);
+      setFinancials(financialResponse.data);
+      setAlerts(dashboardResponse.data.recent_alerts || []);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to load dashboard');
     }
+  }
+
+  useEffect(() => {
     load();
   }, []);
 
   if (error) {
-    return <p className="error-text">{error}</p>;
+    return (
+      <div className="page-stack">
+        <div className="page-header">
+          <div>
+            <p className="eyebrow">Operations</p>
+            <h1>Dashboard</h1>
+          </div>
+        </div>
+        <ErrorState message={error} onRetry={load} />
+      </div>
+    );
   }
 
   if (!summary || !financials) {
-    return <p className="muted">Loading dashboard...</p>;
+    return (
+      <div className="page-stack">
+        <div className="page-header">
+          <div>
+            <p className="eyebrow">Operations</p>
+            <h1>Dashboard</h1>
+          </div>
+        </div>
+        <LoadingState label="Loading dashboard..." />
+      </div>
+    );
   }
 
   const cards = [
@@ -39,7 +62,7 @@ function DashboardPage() {
     { label: 'Pending Tasks', value: summary.pending_tasks, icon: Clock },
     { label: 'Future Bookings', value: summary.future_bookings, icon: Timer },
     { label: 'Alerts Today', value: summary.alerts_today, icon: AlertTriangle },
-    { label: 'Completed Shipments This Month', value: summary.completed_this_month, icon: CheckCircle2 },
+    { label: 'Completed This Month', value: summary.completed_this_month, icon: CheckCircle2 },
   ];
   const formatMoney = (amount, currency = 'INR') =>
     `${currency} ${Number(amount || 0).toLocaleString('en-IN', {
@@ -132,7 +155,7 @@ function DashboardPage() {
                 ))}
                 {!summary.shipments.length && (
                   <tr>
-                    <td colSpan="6">No shipments yet.</td>
+                    <td colSpan="6" style={{ textAlign: 'center', color: '#718096' }}>No shipments yet.</td>
                   </tr>
                 )}
               </tbody>
@@ -151,7 +174,7 @@ function DashboardPage() {
                 <article className="alert-item" key={task.id}>
                   <span className={`badge priority-${task.priority}`}>{task.priority}</span>
                   <strong>{task.title}</strong>
-                  <p>Shipment #{task.shipment_id}{task.due_date ? ` due ${task.due_date}` : ''}</p>
+                  <p>Shipment #{task.shipment_id}{task.due_date ? ` · due ${task.due_date}` : ''}</p>
                 </article>
               ))}
               {!(summary.urgent_tasks || []).length && <p className="muted">No pending tasks.</p>}

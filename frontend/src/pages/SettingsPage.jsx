@@ -1,7 +1,7 @@
 import { KeyRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import api from '../api/client.js';
-import { ErrorState, LoadingState } from '../components/States.jsx';
+import { ErrorState, LoadingState, RoleBadge } from '../components/States.jsx';
 
 function SettingsPage() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -32,7 +32,7 @@ function SettingsPage() {
         new_password: form.new_password,
       });
       setForm({ current_password: '', new_password: '', confirm_password: '' });
-      setNotice('Password changed');
+      setNotice('Password changed successfully');
     } catch (err) {
       setError(err.response?.data?.detail || 'Unable to change password');
     } finally {
@@ -52,6 +52,9 @@ function SettingsPage() {
         <LoadingState label="Loading account..." />
       ) : (
         <section className="panel">
+          <div className="panel-header">
+            <h2>Profile</h2>
+          </div>
           <div className="info-grid">
             <div className="info-item">
               <span>Name</span>
@@ -63,43 +66,53 @@ function SettingsPage() {
             </div>
             <div className="info-item">
               <span>Role</span>
-              <strong>{currentUser.role}</strong>
+              <strong><RoleBadge role={currentUser.role} /></strong>
             </div>
             <div className="info-item">
               <span>Status</span>
-              <strong>{currentUser.is_active ? 'Active' : 'Inactive'}</strong>
+              <strong>
+                <span className={`badge ${currentUser.is_active ? 'status-completed' : 'state-inactive'}`}>
+                  {currentUser.is_active ? 'Active' : 'Inactive'}
+                </span>
+              </strong>
             </div>
           </div>
         </section>
       )}
       <form className="panel form-grid settings-form" onSubmit={submit}>
+        <div className="panel-header span-2 no-margin">
+          <h2>Change Password</h2>
+        </div>
         <label>
-          Current Password
+          Current Password <span style={{ color: 'var(--color-danger)' }}>*</span>
           <input
             type="password"
             value={form.current_password}
             onChange={(event) => setForm((current) => ({ ...current, current_password: event.target.value }))}
             required
+            placeholder="Enter current password"
           />
         </label>
         <label>
-          New Password
+          New Password <span style={{ color: 'var(--color-danger)' }}>*</span>
           <input
             type="password"
             minLength="6"
             value={form.new_password}
             onChange={(event) => setForm((current) => ({ ...current, new_password: event.target.value }))}
             required
+            placeholder="Minimum 6 characters"
           />
         </label>
         <label>
-          Confirm New Password
+          Confirm New Password <span style={{ color: 'var(--color-danger)' }}>*</span>
           <input
             type="password"
             minLength="6"
             value={form.confirm_password}
             onChange={(event) => setForm((current) => ({ ...current, confirm_password: event.target.value }))}
             required
+            placeholder="Repeat new password"
           />
         </label>
         <div className="form-actions">

@@ -7,17 +7,20 @@ import {
   LayoutDashboard,
   LogOut,
   Mail,
+  Menu,
   Settings,
   Ship,
   ShieldCheck,
   Users,
   UserCog,
+  X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import api from '../api/client.js';
+import { RoleBadge } from './States.jsx';
 
-const links = [
+const mainLinks = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/shipments', label: 'Shipments', icon: Ship },
   { to: '/parties', label: 'Parties', icon: Users },
@@ -25,10 +28,16 @@ const links = [
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/ai', label: 'AI Assistant', icon: Bot },
   { to: '/email', label: 'Email Automation', icon: Mail, writeRoleOnly: true },
+];
+
+const adminLinks = [
   { to: '/users', label: 'Users', icon: UserCog, adminOnly: true },
   { to: '/audit-logs', label: 'Audit Logs', icon: FileClock, adminOnly: true },
   { to: '/status', label: 'Status', icon: Activity, adminOnly: true },
   { to: '/admin/tools', label: 'Admin Tools', icon: ShieldCheck, adminOnly: true },
+];
+
+const bottomLinks = [
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -51,8 +60,10 @@ function canShowLink(link, currentUser, userLoading) {
 
 function Layout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [currentUser, setCurrentUser] = useState(cachedUser);
   const [userLoading, setUserLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     api
@@ -70,24 +81,32 @@ function Layout() {
       .finally(() => setUserLoading(false));
   }, [navigate]);
 
+  // Close sidebar on route change (mobile)
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
+
   function logout() {
     localStorage.removeItem('access_token');
     localStorage.removeItem('current_user');
     navigate('/login');
   }
 
+  const visibleAdminLinks = adminLinks.filter((link) => canShowLink(link, currentUser, userLoading));
+
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
+      <aside className={`sidebar${sidebarOpen ? ' open' : ''}`}>
         <div className="brand">
-          <div className="brand-mark">FF</div>
+          <div className="brand-mark">LM</div>
           <div>
-            <strong>Forwarding</strong>
-            <span>Phase 1 Ops</span>
+            <strong>Logistics Manager</strong>
+            <span>Freight Operations</span>
           </div>
         </div>
         <nav className="nav-links">
-          {links
+          {mainLinks
             .filter((link) => canShowLink(link, currentUser, userLoading))
             .map(({ to, label, icon: Icon }) => (
               <NavLink key={to} to={to} end={to === '/'}>
@@ -95,15 +114,51 @@ function Layout() {
                 <span>{label}</span>
               </NavLink>
             ))}
+          {visibleAdminLinks.length > 0 && (
+            <>
+              <span className="nav-section-label">Administration</span>
+              {visibleAdminLinks.map(({ to, label, icon: Icon }) => (
+                <NavLink key={to} to={to}>
+                  <Icon size={18} />
+                  <span>{label}</span>
+                </NavLink>
+              ))}
+            </>
+          )}
+          {bottomLinks.map(({ to, label, icon: Icon }) => (
+            <NavLink key={to} to={to}>
+              <Icon size={18} />
+              <span>{label}</span>
+            </NavLink>
+          ))}
         </nav>
-        <button className="sidebar-logout" type="button" onClick={logout} title="Logout">
-          <LogOut size={18} />
-          <span>Logout</span>
-        </button>
+        <div className="sidebar-footer">
+          {currentUser && (
+            <div className="sidebar-user">
+              <div className="sidebar-user-info">
+                <span className="sidebar-user-name">{currentUser.name}</span>
+                <span className="sidebar-user-role">{currentUser.role}</span>
+              </div>
+              <RoleBadge role={currentUser.role} />
+            </div>
+          )}
+          <button className="sidebar-logout" type="button" onClick={logout} title="Logout">
+            <LogOut size={18} />
+            <span>Logout</span>
+          </button>
+        </div>
       </aside>
       <main className="main-content">
         <Outlet />
       </main>
+      <button
+        className="mobile-menu-toggle"
+        type="button"
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        title={sidebarOpen ? 'Close menu' : 'Open menu'}
+      >
+        {sidebarOpen ? <X size={22} /> : <Menu size={22} />}
+      </button>
     </div>
   );
 }

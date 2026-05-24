@@ -1,6 +1,7 @@
 import { RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import api from '../api/client.js';
+import { EmptyState, ErrorState, LoadingState } from '../components/States.jsx';
 
 function formatMoney(amount, currency = 'INR') {
   return `${currency} ${Number(amount || 0).toLocaleString('en-IN', {
@@ -10,6 +11,9 @@ function formatMoney(amount, currency = 'INR') {
 }
 
 function PendingTable({ rows }) {
+  if (!rows.length) {
+    return <EmptyState title="No pending records" />;
+  }
   return (
     <div className="table-wrap">
       <table>
@@ -26,7 +30,7 @@ function PendingTable({ rows }) {
         <tbody>
           {rows.map((row) => (
             <tr key={row.charge_id}>
-              <td>{row.shipment_code}</td>
+              <td><strong>{row.shipment_code}</strong></td>
               <td>{row.party_name || '-'}</td>
               <td>{formatMoney(row.amount, row.currency)}</td>
               <td>{row.invoice_no || '-'}</td>
@@ -34,11 +38,6 @@ function PendingTable({ rows }) {
               <td>{row.notes || '-'}</td>
             </tr>
           ))}
-          {!rows.length && (
-            <tr>
-              <td colSpan="6">No pending records.</td>
-            </tr>
-          )}
         </tbody>
       </table>
     </div>
@@ -53,10 +52,12 @@ function ReportsPage() {
   const [receivables, setReceivables] = useState([]);
   const [payables, setPayables] = useState([]);
   const [shipmentPnl, setShipmentPnl] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   async function loadReports() {
     setError('');
+    setLoading(true);
     try {
       const [monthlyResponse, receivablesResponse, payablesResponse, pnlResponse] = await Promise.all([
         api.get('/reports/monthly', { params: { month: Number(month), year: Number(year) } }),
@@ -70,16 +71,14 @@ function ReportsPage() {
       setShipmentPnl(pnlResponse.data);
     } catch (err) {
       setError(err.response?.data?.detail || 'Unable to load reports');
+    } finally {
+      setLoading(false);
     }
   }
 
   useEffect(() => {
     loadReports();
   }, []);
-
-  if (error) {
-    return <p className="error-text">{error}</p>;
-  }
 
   return (
     <div className="page-stack">
@@ -89,6 +88,8 @@ function ReportsPage() {
           <h1>Reports</h1>
         </div>
       </div>
+
+      <ErrorState message={error} onRetry={loadReports} />
 
       <section className="panel form-grid">
         <label>
@@ -106,14 +107,16 @@ function ReportsPage() {
           <input type="number" min="2000" max="2100" value={year} onChange={(event) => setYear(event.target.value)} />
         </label>
         <div className="form-actions span-2">
-          <button className="primary-button" type="button" onClick={loadReports}>
+          <button className="primary-button" type="button" onClick={loadReports} disabled={loading}>
             <RefreshCw size={18} />
-            <span>Refresh</span>
+            <span>{loading ? 'Loading...' : 'Refresh'}</span>
           </button>
         </div>
       </section>
 
-      {monthly ? (
+      {loading && !monthly ? (
+        <LoadingState label="Loading reports..." />
+      ) : monthly ? (
         <>
           <section className="metric-grid finance-grid">
             <article className="metric-card">
@@ -141,9 +144,7 @@ function ReportsPage() {
             <p className="finance-note">Multiple currencies are present. Totals are not converted automatically.</p>
           )}
         </>
-      ) : (
-        <p className="muted">Loading reports...</p>
-      )}
+      ) : null}
 
       <section className="split-grid">
         <div className="panel">
@@ -164,41 +165,42 @@ function ReportsPage() {
         <div className="panel-header">
           <h2>Shipment-wise P&L</h2>
         </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Shipment Code</th>
-                <th>Type</th>
-                <th>Status</th>
-                <th>Total Receivable</th>
-                <th>Total Payable</th>
-                <th>Net Profit</th>
-                <th>Pending Receivable</th>
-                <th>Pending Payable</th>
-              </tr>
-            </thead>
-            <tbody>
-              {shipmentPnl.map((row) => (
-                <tr key={row.shipment_id}>
-                  <td>{row.shipment_code}</td>
-                  <td>{row.type}</td>
-                  <td>{row.status}</td>
-                  <td>{formatMoney(row.total_receivable, row.currency)}</td>
-                  <td>{formatMoney(row.total_payable, row.currency)}</td>
-                  <td>{formatMoney(row.net_profit, row.currency)}</td>
-                  <td>{formatMoney(row.pending_receivable, row.currency)}</td>
-                  <td>{formatMoney(row.pending_payable, row.currency)}</td>
-                </tr>
-              ))}
-              {!shipmentPnl.length && (
+        {!shipmentPnl.length ? (
+          <EmptyState title="No shipment P&L records yet" />
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
                 <tr>
-                  <td colSpan="8">No shipment P&L records yet.</td>
+                  <th>Shipment Code</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Total Receivable</th>
+                  <th>Total Payable</th>
+                  <th>Net Profit</th>
+                  <th>Pending Receivable</th>
+                  <th>Pending Payable</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {shipmentPnl.map((row) => (
+                  <tr key={row.shipment_id}>
+                    <td><strong>{row.shipment_code}</strong></td>
+                    <td>{row.type}</td>
+                    <td><span className={`badge status-${row.status}`}>{row.status}</span></td>
+                    <td>{formatMoney(row.total_receivable, row.currency)}</td>
+                    <td>{formatMoney(row.total_payable, row.currency)}</td>
+                    <td style={{ color: Number(row.net_profit) < 0 ? 'var(--color-danger)' : 'var(--color-success)', fontWeight: 600 }}>
+                      {formatMoney(row.net_profit, row.currency)}
+                    </td>
+                    <td>{formatMoney(row.pending_receivable, row.currency)}</td>
+                    <td>{formatMoney(row.pending_payable, row.currency)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </div>
   );

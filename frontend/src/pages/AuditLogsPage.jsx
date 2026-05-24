@@ -28,6 +28,15 @@ function AuditLogsPage() {
     return () => clearTimeout(timeout);
   }, [filters.search, filters.action, filters.entity_type]);
 
+  function formatMetadata(metadata) {
+    if (!metadata || !Object.keys(metadata).length) return '-';
+    try {
+      return JSON.stringify(metadata, null, 1);
+    } catch {
+      return '-';
+    }
+  }
+
   return (
     <div className="page-stack">
       <div className="page-header">
@@ -52,15 +61,15 @@ function AuditLogsPage() {
         <input
           value={filters.action}
           onChange={(event) => setFilters((current) => ({ ...current, action: event.target.value }))}
-          placeholder="Action"
+          placeholder="Action filter"
         />
         <input
           value={filters.entity_type}
           onChange={(event) => setFilters((current) => ({ ...current, entity_type: event.target.value }))}
-          placeholder="Entity type"
+          placeholder="Entity type filter"
         />
       </div>
-      <ErrorState message={error} />
+      <ErrorState message={error} onRetry={load} />
       {loading ? (
         <LoadingState label="Loading audit logs..." />
       ) : (
@@ -81,12 +90,12 @@ function AuditLogsPage() {
                 <tbody>
                   {logs.map((log) => (
                     <tr key={log.id}>
-                      <td>{new Date(log.created_at).toLocaleString()}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{new Date(log.created_at).toLocaleString()}</td>
                       <td>{log.actor_email || 'system'}</td>
-                      <td>{log.action}</td>
+                      <td><span className="badge status-active">{log.action}</span></td>
                       <td>{log.entity_type}{log.entity_label ? `: ${log.entity_label}` : ''}</td>
                       <td>{log.description || '-'}</td>
-                      <td className="metadata-cell">{JSON.stringify(log.metadata_json || {})}</td>
+                      <td className="metadata-cell">{formatMetadata(log.metadata_json)}</td>
                     </tr>
                   ))}
                 </tbody>

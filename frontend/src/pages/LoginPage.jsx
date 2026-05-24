@@ -36,17 +36,20 @@ function LoginPage() {
     <main className="login-page">
       <section className="login-panel">
         <div className="brand login-brand">
-          <div className="brand-mark">FF</div>
+          <div className="brand-mark">LM</div>
           <div>
-            <strong>Freight Forwarding</strong>
-            <span>Operations MVP</span>
+            <strong>Logistics Manager</strong>
+            <span>Freight Operations</span>
           </div>
         </div>
         <form onSubmit={handleSubmit} className="form-card">
           <h1>Sign in</h1>
+          <p className="muted" style={{ textAlign: 'center', marginTop: '-0.3rem' }}>
+            Enter your credentials to continue
+          </p>
           <label>
-            Email
-            <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" required />
+            Email address
+            <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" required placeholder="you@company.com" />
           </label>
           <label>
             Password
@@ -55,12 +58,13 @@ function LoginPage() {
               onChange={(event) => setPassword(event.target.value)}
               type="password"
               required
+              placeholder="••••••••"
             />
           </label>
           {error && <p className="error-text">{error}</p>}
-          <button className="primary-button" type="submit" disabled={loading}>
+          <button className="primary-button" type="submit" disabled={loading} style={{ width: '100%', justifyContent: 'center' }}>
             <LogIn size={18} />
-            <span>{loading ? 'Signing in...' : 'Login'}</span>
+            <span>{loading ? 'Signing in...' : 'Sign in'}</span>
           </button>
         </form>
       </section>

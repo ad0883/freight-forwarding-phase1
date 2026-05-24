@@ -1,4 +1,4 @@
-import { AlertTriangle, Inbox, Loader2, X } from 'lucide-react';
+import { AlertTriangle, Inbox, Loader2, RefreshCw, X } from 'lucide-react';
 
 export function LoadingState({ label = 'Loading...' }) {
   return (
@@ -9,12 +9,18 @@ export function LoadingState({ label = 'Loading...' }) {
   );
 }
 
-export function ErrorState({ message }) {
+export function ErrorState({ message, onRetry }) {
   if (!message) return null;
   return (
     <div className="state-box error-state">
       <AlertTriangle size={18} />
       <span>{typeof message === 'string' ? message : JSON.stringify(message)}</span>
+      {onRetry && (
+        <button className="secondary-button" type="button" onClick={onRetry} style={{ marginLeft: 'auto' }}>
+          <RefreshCw size={15} />
+          <span>Retry</span>
+        </button>
+      )}
     </div>
   );
 }
@@ -22,7 +28,7 @@ export function ErrorState({ message }) {
 export function EmptyState({ title = 'No records found', detail = '' }) {
   return (
     <div className="state-box empty-state">
-      <Inbox size={18} />
+      <Inbox size={28} />
       <div>
         <strong>{title}</strong>
         {detail && <p>{detail}</p>}
@@ -42,8 +48,14 @@ export function ConfirmDialog({
 }) {
   if (!open) return null;
   return (
-    <div className="dialog-backdrop" role="presentation">
-      <section className="dialog-panel" role="dialog" aria-modal="true" aria-label={title}>
+    <div className="dialog-backdrop" role="presentation" onClick={onCancel}>
+      <section
+        className="dialog-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="panel-header">
           <h2>{title}</h2>
           <button className="icon-button" type="button" onClick={onCancel} title="Close">
@@ -62,4 +74,16 @@ export function ConfirmDialog({
       </section>
     </div>
   );
+}
+
+export function StatusBadge({ status, className = '' }) {
+  if (!status) return null;
+  const slug = String(status).toLowerCase().replace(/\s+/g, '_');
+  return <span className={`badge status-${slug} ${className}`.trim()}>{status}</span>;
+}
+
+export function RoleBadge({ role }) {
+  if (!role) return null;
+  const slug = String(role).toLowerCase();
+  return <span className={`badge role-${slug}`}>{role}</span>;
 }

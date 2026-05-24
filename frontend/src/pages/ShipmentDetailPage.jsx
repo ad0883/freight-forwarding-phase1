@@ -14,6 +14,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../api/client.js';
+import { ConfirmDialog, EmptyState, ErrorState, LoadingState } from '../components/States.jsx';
 
 const exportStatuses = [
   'Booking Received',
@@ -137,6 +138,8 @@ function ShipmentDetailPage() {
   const [activeTab, setActiveTab] = useState('overview');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [confirmDeleteTask, setConfirmDeleteTask] = useState(null);
 
   const canWrite = currentUser && currentUser.role !== 'VIEW_ONLY';
   const canAdmin = currentUser?.role === 'ADMIN';
@@ -274,15 +277,17 @@ function ShipmentDetailPage() {
     }
   }
 
-  async function deleteManualTask(task) {
-    if (!window.confirm(`Delete manual task "${task.title}" permanently?`)) return;
+  async function deleteManualTask() {
+    if (!confirmDeleteTask) return;
     setNotice('');
     try {
-      await api.delete(`/tasks/${task.id}`);
+      await api.delete(`/tasks/${confirmDeleteTask.id}`);
       await loadTasks();
       setNotice('Manual task deleted');
+      setConfirmDeleteTask(null);
     } catch (err) {
       setError(err.response?.data?.detail || 'Unable to delete task');
+      setConfirmDeleteTask(null);
     }
   }
 
@@ -479,12 +484,32 @@ function ShipmentDetailPage() {
     }
   }
 
-  if (error) {
-    return <p className="error-text">{error}</p>;
+  if (error && !shipment) {
+    return (
+      <div className="page-stack">
+        <div className="page-header">
+          <div>
+            <p className="eyebrow">Shipment</p>
+            <h1>Shipment Detail</h1>
+          </div>
+        </div>
+        <ErrorState message={error} onRetry={() => { setError(''); loadAll().catch((err) => setError(err.response?.data?.detail || 'Unable to load shipment')); }} />
+      </div>
+    );
   }
 
   if (!shipment) {
-    return <p className="muted">Loading shipment...</p>;
+    return (
+      <div className="page-stack">
+        <div className="page-header">
+          <div>
+            <p className="eyebrow">Shipment</p>
+            <h1>Shipment Detail</h1>
+          </div>
+        </div>
+        <LoadingState label="Loading shipment..." />
+      </div>
+    );
   }
 
   return (
@@ -495,23 +520,25 @@ function ShipmentDetailPage() {
           <h1>{shipment.shipment_code}</h1>
         </div>
         <div className="header-actions">
-          <span className="badge status-active">{shipment.status}</span>
+          <span className={`badge status-${shipment.status === 'Completed' ? 'completed' : 'active'}`}>{shipment.status}</span>
           {shipment.is_archived && <span className="badge status-archived">Archived</span>}
           {canAdmin && (
             shipment.is_archived ? (
               <button className="secondary-button" type="button" onClick={restoreShipment}>
-                <ArchiveRestore size={17} />
-                <span>Restore Shipment</span>
+                <ArchiveRestore size={16} />
+                <span>Restore</span>
               </button>
             ) : (
               <button className="secondary-button danger-text" type="button" onClick={archiveShipment}>
-                <Archive size={17} />
-                <span>Archive Shipment</span>
+                <Archive size={16} />
+                <span>Archive</span>
               </button>
             )
           )}
         </div>
       </div>
+
+      <ErrorState message={error} />
       {notice && <p className="success-text">{notice}</p>}
 
       <div className="tabs" role="tablist">
@@ -524,6 +551,9 @@ function ShipmentDetailPage() {
 
       {activeTab === 'overview' && (
         <section className="panel form-grid">
+          <div className="panel-header span-2 no-margin">
+            <h2>Workflow Status</h2>
+          </div>
           <label>
             Current Status
             <select value={workflowStatus} disabled={!canWrite} onChange={(event) => setWorkflowStatus(event.target.value)}>
@@ -565,67 +595,74 @@ function ShipmentDetailPage() {
 
       {activeTab === 'documents' && (
         <section className="panel">
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Document Type</th>
-                  <th>Status</th>
-                  <th>File Link</th>
-                  <th>Notes</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {documents.map((document) => (
-                  <tr key={document.id}>
-                    <td>{document.doc_type}</td>
-                    <td>
-                      <select
-                        value={document.status}
-                        disabled={!canWrite}
-                        onChange={(event) => updateDocument(document.id, 'status', event.target.value)}
-                      >
-                        <option value="pending">pending</option>
-                        <option value="received">received</option>
-                        <option value="sent">sent</option>
-                        <option value="approved">approved</option>
-                        <option value="not_required">not_required</option>
-                      </select>
-                    </td>
-                    <td className="link-cell">
-                      <input
-                        value={document.file_url || ''}
-                        disabled={!canWrite}
-                        onChange={(event) => updateDocument(document.id, 'file_url', event.target.value)}
-                        placeholder="Paste Google Drive URL"
-                      />
-                      {document.file_url && (
-                        <a href={document.file_url} target="_blank" rel="noreferrer" title="Open link">
-                          <ExternalLink size={17} />
-                        </a>
-                      )}
-                    </td>
-                    <td>
-                      <input
-                        value={document.notes || ''}
-                        disabled={!canWrite}
-                        onChange={(event) => updateDocument(document.id, 'notes', event.target.value)}
-                        placeholder="Notes"
-                      />
-                    </td>
-                    <td>
-                      {canWrite && (
-                        <button className="icon-button" type="button" onClick={() => saveDocument(document)} title="Save">
-                          <Save size={17} />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="panel-header">
+            <h2>Documents</h2>
           </div>
+          {!documents.length ? (
+            <EmptyState title="No documents for this shipment" />
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Document Type</th>
+                    <th>Status</th>
+                    <th>File Link</th>
+                    <th>Notes</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {documents.map((document) => (
+                    <tr key={document.id}>
+                      <td><strong>{document.doc_type}</strong></td>
+                      <td>
+                        <select
+                          value={document.status}
+                          disabled={!canWrite}
+                          onChange={(event) => updateDocument(document.id, 'status', event.target.value)}
+                        >
+                          <option value="pending">pending</option>
+                          <option value="received">received</option>
+                          <option value="sent">sent</option>
+                          <option value="approved">approved</option>
+                          <option value="not_required">not_required</option>
+                        </select>
+                      </td>
+                      <td className="link-cell">
+                        <input
+                          value={document.file_url || ''}
+                          disabled={!canWrite}
+                          onChange={(event) => updateDocument(document.id, 'file_url', event.target.value)}
+                          placeholder="Paste Google Drive URL"
+                        />
+                        {document.file_url && (
+                          <a href={document.file_url} target="_blank" rel="noreferrer" title="Open link">
+                            <ExternalLink size={16} />
+                          </a>
+                        )}
+                      </td>
+                      <td>
+                        <input
+                          value={document.notes || ''}
+                          disabled={!canWrite}
+                          onChange={(event) => updateDocument(document.id, 'notes', event.target.value)}
+                          placeholder="Notes"
+                        />
+                      </td>
+                      <td>
+                        {canWrite && (
+                          <button className="icon-button" type="button" onClick={() => saveDocument(document)} title="Save">
+                            <Save size={16} />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       )}
 
@@ -642,72 +679,74 @@ function ShipmentDetailPage() {
               Include Cancelled
             </label>
           </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Task Title</th>
-                  <th>Description</th>
-                  <th>Priority</th>
-                  <th>Status</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tasks.map((task) => (
-                  <tr key={task.id}>
-                    <td>{task.title}</td>
-                    <td>{task.description || '-'}</td>
-                    <td>
-                      <span className={`badge priority-${task.priority}`}>{task.priority}</span>
-                    </td>
-                    <td>
-                      <span className={`badge task-${task.status}`}>{task.status}</span>
-                    </td>
-                    <td>
-                      {canWrite && (
-                        <div className="row-actions">
-                          {task.status === 'cancelled' ? (
-                            <button className="secondary-button" type="button" onClick={() => restoreTask(task)}>
-                              <RotateCcw size={17} />
-                              <span>Restore Task</span>
-                            </button>
-                          ) : (
-                            <>
-                              <button className="secondary-button" type="button" onClick={() => toggleTask(task)}>
-                                {task.status === 'open' ? <ToggleRight size={17} /> : <RotateCcw size={17} />}
-                                <span>{task.status === 'open' ? 'Mark done' : 'Reopen'}</span>
-                              </button>
-                              <button className="secondary-button danger-text" type="button" onClick={() => cancelTask(task)}>
-                                <Ban size={17} />
-                                <span>Cancel Task</span>
-                              </button>
-                            </>
-                          )}
-                          {!task.auto_generated && (
-                            <button className="secondary-button danger-text" type="button" onClick={() => deleteManualTask(task)}>
-                              <Trash2 size={17} />
-                              <span>Delete Manual Task</span>
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {!tasks.length && (
+          {!tasks.length ? (
+            <EmptyState title="No tasks for this shipment" />
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
                   <tr>
-                    <td colSpan="5">No tasks for this shipment.</td>
+                    <th>Task Title</th>
+                    <th>Description</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Action</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {tasks.map((task) => (
+                    <tr key={task.id}>
+                      <td><strong>{task.title}</strong></td>
+                      <td>{task.description || '-'}</td>
+                      <td>
+                        <span className={`badge priority-${task.priority}`}>{task.priority}</span>
+                      </td>
+                      <td>
+                        <span className={`badge task-${task.status}`}>{task.status}</span>
+                      </td>
+                      <td>
+                        {canWrite && (
+                          <div className="row-actions">
+                            {task.status === 'cancelled' ? (
+                              <button className="secondary-button" type="button" onClick={() => restoreTask(task)}>
+                                <RotateCcw size={16} />
+                                <span>Restore</span>
+                              </button>
+                            ) : (
+                              <>
+                                <button className="secondary-button" type="button" onClick={() => toggleTask(task)}>
+                                  {task.status === 'open' ? <ToggleRight size={16} /> : <RotateCcw size={16} />}
+                                  <span>{task.status === 'open' ? 'Done' : 'Reopen'}</span>
+                                </button>
+                                <button className="secondary-button danger-text" type="button" onClick={() => cancelTask(task)}>
+                                  <Ban size={16} />
+                                  <span>Cancel</span>
+                                </button>
+                              </>
+                            )}
+                            {!task.auto_generated && (
+                              <button className="secondary-button danger-text" type="button" onClick={() => setConfirmDeleteTask(task)}>
+                                <Trash2 size={16} />
+                                <span>Delete</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       )}
 
       {activeTab === 'bl' && bl && (
         <section className="panel form-grid">
+          <div className="panel-header span-2 no-margin">
+            <h2>BL Management</h2>
+          </div>
           <label>
             BL Type
             <select value={bl.bl_type || 'Ocean'} disabled={!canWrite} onChange={(event) => setBl({ ...bl, bl_type: event.target.value })}>
@@ -740,11 +779,11 @@ function ShipmentDetailPage() {
           </label>
           <label className="span-2">
             Final BL Google Drive Link
-            <input value={bl.file_url || ''} disabled={!canWrite} onChange={(event) => setBl({ ...bl, file_url: event.target.value })} />
+            <input value={bl.file_url || ''} disabled={!canWrite} onChange={(event) => setBl({ ...bl, file_url: event.target.value })} placeholder="Paste Google Drive link" />
           </label>
           <label className="span-2">
             Corrections
-            <textarea value={bl.corrections || ''} disabled={!canWrite} onChange={(event) => setBl({ ...bl, corrections: event.target.value })} />
+            <textarea value={bl.corrections || ''} disabled={!canWrite} onChange={(event) => setBl({ ...bl, corrections: event.target.value })} placeholder="Note any BL corrections" />
           </label>
           {canWrite && (
             <div className="form-actions span-2">
@@ -760,7 +799,7 @@ function ShipmentDetailPage() {
       {activeTab === 'demurrage' && (
         <section className="panel">
           {shipment.type === 'export' ? (
-            <p className="muted">Demurrage tracking is mainly applicable to import shipments.</p>
+            <EmptyState title="Not applicable" detail="Demurrage tracking is mainly applicable to import shipments." />
           ) : (
             demurrage && (
               <div className="page-stack">
@@ -824,6 +863,9 @@ function ShipmentDetailPage() {
         <section className="page-stack">
           {canWrite && (
             <form className="panel form-grid" onSubmit={createFollowup}>
+              <div className="panel-header span-2 no-margin">
+                <h2>Log Follow-up</h2>
+              </div>
               <label>
                 Party
                 <select value={followupForm.party_id} onChange={(event) => setFollowupForm({ ...followupForm, party_id: event.target.value })}>
@@ -856,12 +898,12 @@ function ShipmentDetailPage() {
                 </select>
               </label>
               <label className="span-2">
-                Summary
-                <textarea required value={followupForm.summary} onChange={(event) => setFollowupForm({ ...followupForm, summary: event.target.value })} />
+                Summary <span style={{ color: 'var(--color-danger)' }}>*</span>
+                <textarea required value={followupForm.summary} onChange={(event) => setFollowupForm({ ...followupForm, summary: event.target.value })} placeholder="What was discussed or communicated" />
               </label>
               <label className="span-2">
                 Next Action
-                <textarea value={followupForm.next_action} onChange={(event) => setFollowupForm({ ...followupForm, next_action: event.target.value })} />
+                <textarea value={followupForm.next_action} onChange={(event) => setFollowupForm({ ...followupForm, next_action: event.target.value })} placeholder="What needs to happen next" />
               </label>
               <div className="form-actions span-2">
                 <button className="primary-button" type="submit">
@@ -871,53 +913,57 @@ function ShipmentDetailPage() {
               </div>
             </form>
           )}
-          <div className="panel table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Party</th>
-                  <th>Channel</th>
-                  <th>Summary</th>
-                  <th>Next Action</th>
-                  <th>Status</th>
-                  <th>Logged By</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {followups.map((followup) => (
-                  <tr key={followup.id}>
-                    <td>{followup.date}</td>
-                    <td>{followup.party?.name || '-'}</td>
-                    <td>{followup.channel}</td>
-                    <td>{followup.summary}</td>
-                    <td>{followup.next_action || '-'}</td>
-                    <td>
-                      <span className={`badge task-${followup.status === 'open' ? 'open' : 'done'}`}>{followup.status}</span>
-                    </td>
-                    <td>{followup.logger?.name || followup.logged_by}</td>
-                    <td>
-                      {canWrite && (
-                        <div className="row-actions">
-                          <button className="secondary-button" type="button" onClick={() => updateFollowupStatus(followup, followup.status === 'open' ? 'closed' : 'open')}>
-                            {followup.status === 'open' ? 'Close' : 'Reopen'}
-                          </button>
-                          <button className="icon-button danger" type="button" onClick={() => deleteFollowup(followup.id)} title="Delete">
-                            <Trash2 size={17} />
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {!followups.length && (
-                  <tr>
-                    <td colSpan="8">No follow-ups yet.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          <div className="panel">
+            <div className="panel-header">
+              <h2>Follow-up History</h2>
+            </div>
+            {!followups.length ? (
+              <EmptyState title="No follow-ups yet" />
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Party</th>
+                      <th>Channel</th>
+                      <th>Summary</th>
+                      <th>Next Action</th>
+                      <th>Status</th>
+                      <th>Logged By</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {followups.map((followup) => (
+                      <tr key={followup.id}>
+                        <td style={{ whiteSpace: 'nowrap' }}>{followup.date}</td>
+                        <td>{followup.party?.name || '-'}</td>
+                        <td>{followup.channel}</td>
+                        <td>{followup.summary}</td>
+                        <td>{followup.next_action || '-'}</td>
+                        <td>
+                          <span className={`badge task-${followup.status === 'open' ? 'open' : 'done'}`}>{followup.status}</span>
+                        </td>
+                        <td>{followup.logger?.name || followup.logged_by}</td>
+                        <td>
+                          {canWrite && (
+                            <div className="row-actions">
+                              <button className="secondary-button" type="button" onClick={() => updateFollowupStatus(followup, followup.status === 'open' ? 'closed' : 'open')}>
+                                {followup.status === 'open' ? 'Close' : 'Reopen'}
+                              </button>
+                              <button className="icon-button danger" type="button" onClick={() => deleteFollowup(followup.id)} title="Delete">
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </section>
       )}
@@ -956,6 +1002,9 @@ function ShipmentDetailPage() {
 
           {canWrite && (
             <form className="panel form-grid" onSubmit={saveCharge}>
+              <div className="panel-header span-2 no-margin">
+                <h2>{editingChargeId ? 'Edit Charge' : 'Add Charge'}</h2>
+              </div>
               <label>
                 Charge Type
                 <select value={chargeForm.charge_type} onChange={(event) => updateChargeForm('charge_type', event.target.value)}>
@@ -974,7 +1023,7 @@ function ShipmentDetailPage() {
                 </select>
               </label>
               <label>
-                Amount
+                Amount <span style={{ color: 'var(--color-danger)' }}>*</span>
                 <input
                   required
                   min="0"
@@ -982,6 +1031,7 @@ function ShipmentDetailPage() {
                   type="number"
                   value={chargeForm.amount}
                   onChange={(event) => updateChargeForm('amount', event.target.value)}
+                  placeholder="0.00"
                 />
               </label>
               <label>
@@ -1011,7 +1061,7 @@ function ShipmentDetailPage() {
               </label>
               <label>
                 Invoice No
-                <input value={chargeForm.invoice_no} onChange={(event) => updateChargeForm('invoice_no', event.target.value)} />
+                <input value={chargeForm.invoice_no} onChange={(event) => updateChargeForm('invoice_no', event.target.value)} placeholder="Invoice number" />
               </label>
               <label>
                 Date
@@ -1019,7 +1069,7 @@ function ShipmentDetailPage() {
               </label>
               <label className="span-2">
                 Notes
-                <textarea value={chargeForm.notes} onChange={(event) => updateChargeForm('notes', event.target.value)} />
+                <textarea value={chargeForm.notes} onChange={(event) => updateChargeForm('notes', event.target.value)} placeholder="Optional notes" />
               </label>
               <div className="form-actions span-2">
                 {editingChargeId && (
@@ -1035,71 +1085,85 @@ function ShipmentDetailPage() {
             </form>
           )}
 
-          <div className="panel table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Type</th>
-                  <th>Direction</th>
-                  <th>Amount</th>
-                  <th>Party</th>
-                  <th>Status</th>
-                  <th>Invoice No</th>
-                  <th>Date</th>
-                  <th>Notes</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {charges.map((charge) => (
-                  <tr key={charge.id}>
-                    <td>{chargeTypeLabels[charge.charge_type] || charge.charge_type}</td>
-                    <td>{charge.direction}</td>
-                    <td>{formatMoney(charge.amount, charge.currency)}</td>
-                    <td>{charge.party_name || '-'}</td>
-                    <td>
-                      <span className={`badge charge-${charge.status}`}>{charge.status}</span>
-                    </td>
-                    <td>{charge.invoice_no || '-'}</td>
-                    <td>{charge.date || '-'}</td>
-                    <td>{charge.notes || '-'}</td>
-                    <td>
-                      {canWrite && charge.status !== 'cancelled' && (
-                        <div className="row-actions">
-                          <button className="icon-button" type="button" onClick={() => editCharge(charge)} title="Edit charge">
-                            <Edit3 size={17} />
-                          </button>
-                          {charge.direction === 'payable' && charge.status !== 'paid' && (
-                            <button className="secondary-button" type="button" onClick={() => updateChargeStatus(charge, 'paid')}>
-                              <CheckCircle2 size={17} />
-                              <span>Mark Paid</span>
-                            </button>
+          <div className="panel">
+            <div className="panel-header">
+              <h2>Charges</h2>
+            </div>
+            {!charges.length ? (
+              <EmptyState title="No charges for this shipment" />
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Type</th>
+                      <th>Direction</th>
+                      <th>Amount</th>
+                      <th>Party</th>
+                      <th>Status</th>
+                      <th>Invoice No</th>
+                      <th>Date</th>
+                      <th>Notes</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {charges.map((charge) => (
+                      <tr key={charge.id}>
+                        <td>{chargeTypeLabels[charge.charge_type] || charge.charge_type}</td>
+                        <td>{charge.direction}</td>
+                        <td><strong>{formatMoney(charge.amount, charge.currency)}</strong></td>
+                        <td>{charge.party_name || '-'}</td>
+                        <td>
+                          <span className={`badge charge-${charge.status}`}>{charge.status}</span>
+                        </td>
+                        <td>{charge.invoice_no || '-'}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>{charge.date || '-'}</td>
+                        <td>{charge.notes || '-'}</td>
+                        <td>
+                          {canWrite && charge.status !== 'cancelled' && (
+                            <div className="row-actions">
+                              <button className="icon-button" type="button" onClick={() => editCharge(charge)} title="Edit charge">
+                                <Edit3 size={16} />
+                              </button>
+                              {charge.direction === 'payable' && charge.status !== 'paid' && (
+                                <button className="secondary-button" type="button" onClick={() => updateChargeStatus(charge, 'paid')}>
+                                  <CheckCircle2 size={16} />
+                                  <span>Paid</span>
+                                </button>
+                              )}
+                              {charge.direction === 'receivable' && charge.status !== 'received' && (
+                                <button className="secondary-button" type="button" onClick={() => updateChargeStatus(charge, 'received')}>
+                                  <CheckCircle2 size={16} />
+                                  <span>Received</span>
+                                </button>
+                              )}
+                              <button className="secondary-button danger-text" type="button" onClick={() => cancelCharge(charge)}>
+                                <Ban size={16} />
+                                <span>Cancel</span>
+                              </button>
+                            </div>
                           )}
-                          {charge.direction === 'receivable' && charge.status !== 'received' && (
-                            <button className="secondary-button" type="button" onClick={() => updateChargeStatus(charge, 'received')}>
-                              <CheckCircle2 size={17} />
-                              <span>Mark Received</span>
-                            </button>
-                          )}
-                          <button className="secondary-button danger-text" type="button" onClick={() => cancelCharge(charge)}>
-                            <Ban size={17} />
-                            <span>Cancel Charge</span>
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {!charges.length && (
-                  <tr>
-                    <td colSpan="9">No charges for this shipment.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </section>
       )}
+
+      <ConfirmDialog
+        open={Boolean(confirmDeleteTask)}
+        title="Delete Manual Task"
+        message={`Delete "${confirmDeleteTask?.title}" permanently? This cannot be undone.`}
+        confirmLabel="Delete"
+        danger
+        onCancel={() => setConfirmDeleteTask(null)}
+        onConfirm={deleteManualTask}
+      />
     </div>
   );
 }

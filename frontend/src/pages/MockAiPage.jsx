@@ -1,6 +1,7 @@
 import { Bot, Send } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import api from '../api/client.js';
+import { ErrorState } from '../components/States.jsx';
 
 const fallbackPrompts = [
   'What shipments need attention today?',
@@ -26,7 +27,7 @@ function AssistantMessage({ message }) {
       <div className="message-meta">
         <span>AI Assistant</span>
         <PriorityBadge priority={response.priority} />
-        {response.fallback_used && <span className="badge ai-fallback">Fallback mode used</span>}
+        {response.fallback_used && <span className="badge ai-fallback">Fallback mode</span>}
       </div>
       <p>{message.text}</p>
       {!!suggestedActions.length && (
@@ -60,6 +61,7 @@ function MockAiPage() {
   const [status, setStatus] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const chatEndRef = useRef(null);
 
   useEffect(() => {
     async function loadAssistantMeta() {
@@ -76,6 +78,10 @@ function MockAiPage() {
     }
     loadAssistantMeta();
   }, []);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   async function ask(event, promptOverride) {
     event?.preventDefault();
@@ -131,7 +137,7 @@ function MockAiPage() {
         <div className="chat-window">
           {!messages.length && (
             <div className="empty-chat">
-              <Bot size={30} />
+              <Bot size={32} />
               <p>Ask about shipments, risks, tasks, finance, follow-ups, or next actions.</p>
             </div>
           )}
@@ -145,9 +151,16 @@ function MockAiPage() {
               </div>
             )
           )}
+          {loading && (
+            <div className="chat-message assistant">
+              <span>AI Assistant</span>
+              <p className="muted">Thinking...</p>
+            </div>
+          )}
+          <div ref={chatEndRef} />
         </div>
 
-        {error && <p className="error-text">{error}</p>}
+        <ErrorState message={error} />
         <form className="ask-form" onSubmit={ask}>
           <input
             value={question}

@@ -11,7 +11,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../api/client.js';
-import { ConfirmDialog } from '../components/States.jsx';
+import { ConfirmDialog, EmptyState, ErrorState, LoadingState } from '../components/States.jsx';
 
 const initialScan = {
   query: '',
@@ -59,6 +59,7 @@ function EmailAutomationPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
 
   const canUseEmail = currentUser && ['ADMIN', 'STAFF'].includes(currentUser.role);
   const selectedShipment = useMemo(
@@ -90,7 +91,9 @@ function EmailAutomationPage() {
   }
 
   useEffect(() => {
-    loadBase().catch((err) => setError(err.response?.data?.detail || 'Unable to load email automation'));
+    loadBase()
+      .catch((err) => setError(err.response?.data?.detail || 'Unable to load email automation'))
+      .finally(() => setInitialLoading(false));
   }, []);
 
   useEffect(() => {
@@ -243,6 +246,20 @@ function EmailAutomationPage() {
     }
   }
 
+  if (initialLoading) {
+    return (
+      <div className="page-stack">
+        <div className="page-header">
+          <div>
+            <p className="eyebrow">Gmail</p>
+            <h1>Email Automation</h1>
+          </div>
+        </div>
+        <LoadingState label="Loading email automation..." />
+      </div>
+    );
+  }
+
   if (currentUser && !canUseEmail) {
     return (
       <div className="page-stack">
@@ -269,12 +286,12 @@ function EmailAutomationPage() {
         <div className="header-actions">
           <button className="secondary-button" type="button" onClick={refresh} disabled={loading}>
             <RefreshCw size={18} />
-            <span>Refresh</span>
+            <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
           </button>
         </div>
       </div>
 
-      {error && <p className="error-text">{typeof error === 'string' ? error : JSON.stringify(error)}</p>}
+      <ErrorState message={typeof error === 'string' ? error : JSON.stringify(error)} />
       {notice && <p className="success-text">{notice}</p>}
 
       <section className="panel">
@@ -307,6 +324,9 @@ function EmailAutomationPage() {
 
       {connection?.connected && (
         <form className="panel form-grid" onSubmit={scanEmail}>
+          <div className="panel-header span-2 no-margin">
+            <h2>Scan Settings</h2>
+          </div>
           <label className="span-2">
             Search Query
             <input
@@ -347,47 +367,46 @@ function EmailAutomationPage() {
           <div className="panel-header">
             <h2>Pending Suggestions</h2>
           </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Type</th>
-                  <th>Shipment</th>
-                  <th>Confidence</th>
-                  <th>Extracted Summary</th>
-                  <th>Status</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {suggestions.map((suggestion) => (
-                  <tr key={suggestion.id}>
-                    <td>{suggestion.suggestion_type}</td>
-                    <td>
-                      {suggestion.shipment_code || '-'}
-                      {suggestion.shipment_is_archived && <span className="badge status-archived">Archived</span>}
-                    </td>
-                    <td>{Math.round(Number(suggestion.confidence || 0) * 100)}%</td>
-                    <td>{summarizeData(suggestion.extracted_data_json)}</td>
-                    <td>
-                      <span className={`badge suggestion-${suggestion.status}`}>{suggestion.status}</span>
-                    </td>
-                    <td>
-                      <button className="secondary-button" type="button" onClick={() => reviewSuggestion(suggestion)}>
-                        <Mail size={17} />
-                        <span>Review</span>
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {!suggestions.length && (
+          {!suggestions.length ? (
+            <EmptyState title="No pending suggestions" detail="Run a Gmail scan to generate suggestions." />
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
                   <tr>
-                    <td colSpan="6">No pending suggestions.</td>
+                    <th>Type</th>
+                    <th>Shipment</th>
+                    <th>Confidence</th>
+                    <th>Extracted Summary</th>
+                    <th>Status</th>
+                    <th>Action</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {suggestions.map((suggestion) => (
+                    <tr key={suggestion.id}>
+                      <td>{suggestion.suggestion_type}</td>
+                      <td>
+                        {suggestion.shipment_code || '-'}
+                        {suggestion.shipment_is_archived && <span className="badge status-archived">Archived</span>}
+                      </td>
+                      <td>{Math.round(Number(suggestion.confidence || 0) * 100)}%</td>
+                      <td>{summarizeData(suggestion.extracted_data_json)}</td>
+                      <td>
+                        <span className={`badge suggestion-${suggestion.status}`}>{suggestion.status}</span>
+                      </td>
+                      <td>
+                        <button className="secondary-button" type="button" onClick={() => reviewSuggestion(suggestion)}>
+                          <Mail size={16} />
+                          <span>Review</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         <div className="panel">
@@ -448,7 +467,7 @@ function EmailAutomationPage() {
               </div>
             </div>
           ) : (
-            <p className="muted">Select a pending suggestion to review.</p>
+            <EmptyState title="Select a suggestion" detail="Click Review on a pending suggestion to begin." />
           )}
           {selectedMessage && (
             <div className="email-preview">
@@ -464,48 +483,47 @@ function EmailAutomationPage() {
         <div className="panel-header">
           <h2>Cached Emails</h2>
         </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Received</th>
-                <th>From</th>
-                <th>Subject</th>
-                <th>Classification</th>
-                <th>Shipment</th>
-                <th>Status</th>
-                <th>Suggestions</th>
-                <th>Open</th>
-              </tr>
-            </thead>
-            <tbody>
-              {messages.map((message) => (
-                <tr key={message.id}>
-                  <td>{formatDate(message.received_at)}</td>
-                  <td>{message.sender || '-'}</td>
-                  <td>{message.subject || '-'}</td>
-                  <td>
-                    <span className={`badge email-${message.classification}`}>{message.classification}</span>
-                  </td>
-                  <td>{message.matched_shipment_code || '-'}</td>
-                  <td>{message.processed_status}</td>
-                  <td>{message.suggestion_count}</td>
-                  <td>
-                    <button className="secondary-button" type="button" onClick={() => openMessage(message)}>
-                      <Mail size={17} />
-                      <span>Open</span>
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {!messages.length && (
+        {!messages.length ? (
+          <EmptyState title="No cached emails" detail="Run a Gmail scan to cache emails." />
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
                 <tr>
-                  <td colSpan="8">No cached emails.</td>
+                  <th>Received</th>
+                  <th>From</th>
+                  <th>Subject</th>
+                  <th>Classification</th>
+                  <th>Shipment</th>
+                  <th>Status</th>
+                  <th>Suggestions</th>
+                  <th>Open</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {messages.map((message) => (
+                  <tr key={message.id}>
+                    <td style={{ whiteSpace: 'nowrap' }}>{formatDate(message.received_at)}</td>
+                    <td>{message.sender || '-'}</td>
+                    <td>{message.subject || '-'}</td>
+                    <td>
+                      <span className={`badge email-${message.classification}`}>{message.classification}</span>
+                    </td>
+                    <td>{message.matched_shipment_code || '-'}</td>
+                    <td>{message.processed_status}</td>
+                    <td>{message.suggestion_count}</td>
+                    <td>
+                      <button className="secondary-button" type="button" onClick={() => openMessage(message)}>
+                        <Mail size={16} />
+                        <span>Open</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
       <ConfirmDialog
         open={confirmDisconnect}

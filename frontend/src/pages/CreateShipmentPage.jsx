@@ -2,6 +2,7 @@ import { Save } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client.js';
+import { ErrorState } from '../components/States.jsx';
 
 const initialForm = {
   type: 'export',
@@ -76,9 +77,14 @@ function CreateShipmentPage() {
         </div>
       </div>
 
+      <ErrorState message={error} />
+
       <form className="panel form-grid" onSubmit={handleSubmit}>
+        <div className="panel-header span-2 no-margin">
+          <h2>Shipment Details</h2>
+        </div>
         <label>
-          Type
+          Type <span style={{ color: 'var(--color-danger)' }}>*</span>
           <select value={form.type} onChange={(event) => updateField('type', event.target.value)}>
             <option value="export">Export</option>
             <option value="import">Import</option>
@@ -108,27 +114,27 @@ function CreateShipmentPage() {
         </label>
         <label>
           Shipping Line
-          <input value={form.shipping_line} onChange={(event) => updateField('shipping_line', event.target.value)} />
+          <input value={form.shipping_line} onChange={(event) => updateField('shipping_line', event.target.value)} placeholder="e.g. Maersk, MSC" />
         </label>
         <label>
           Vessel Name
-          <input value={form.vessel_name} onChange={(event) => updateField('vessel_name', event.target.value)} />
+          <input value={form.vessel_name} onChange={(event) => updateField('vessel_name', event.target.value)} placeholder="Vessel name" />
         </label>
         <label>
           Voyage No
-          <input value={form.voyage_no} onChange={(event) => updateField('voyage_no', event.target.value)} />
+          <input value={form.voyage_no} onChange={(event) => updateField('voyage_no', event.target.value)} placeholder="Voyage number" />
         </label>
         <label>
           Origin Port
-          <input value={form.origin_port} onChange={(event) => updateField('origin_port', event.target.value)} />
+          <input value={form.origin_port} onChange={(event) => updateField('origin_port', event.target.value)} placeholder="e.g. INNSA" />
         </label>
         <label>
           Destination Port
-          <input value={form.dest_port} onChange={(event) => updateField('dest_port', event.target.value)} />
+          <input value={form.dest_port} onChange={(event) => updateField('dest_port', event.target.value)} placeholder="e.g. USLAX" />
         </label>
         <label>
           Container No
-          <input value={form.container_no} onChange={(event) => updateField('container_no', event.target.value)} />
+          <input value={form.container_no} onChange={(event) => updateField('container_no', event.target.value)} placeholder="Container number" />
         </label>
         <label>
           Container Type
@@ -149,14 +155,16 @@ function CreateShipmentPage() {
         </label>
         <label>
           Booking Ref
-          <input value={form.booking_ref} onChange={(event) => updateField('booking_ref', event.target.value)} />
+          <input value={form.booking_ref} onChange={(event) => updateField('booking_ref', event.target.value)} placeholder="Booking reference" />
         </label>
         <label className="span-2">
           Commodity
-          <textarea value={form.commodity} onChange={(event) => updateField('commodity', event.target.value)} />
+          <textarea value={form.commodity} onChange={(event) => updateField('commodity', event.target.value)} placeholder="Describe commodity" />
         </label>
-        {error && <p className="error-text span-2">{error}</p>}
         <div className="form-actions span-2">
+          <button className="secondary-button" type="button" onClick={() => navigate('/shipments')}>
+            Cancel
+          </button>
           <button className="primary-button" type="submit" disabled={saving}>
             <Save size={18} />
             <span>{saving ? 'Creating...' : 'Create Shipment'}</span>

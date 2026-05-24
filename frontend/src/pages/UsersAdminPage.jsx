@@ -1,7 +1,7 @@
 import { KeyRound, Plus, ShieldCheck, UserCheck, UserX } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import api from '../api/client.js';
-import { ConfirmDialog, EmptyState, ErrorState, LoadingState } from '../components/States.jsx';
+import { ConfirmDialog, EmptyState, ErrorState, LoadingState, RoleBadge } from '../components/States.jsx';
 
 const initialForm = {
   name: '',
@@ -117,18 +117,22 @@ function UsersAdminPage() {
       </div>
       <ErrorState message={error} />
       {notice && <p className="success-text">{notice}</p>}
+
       <form className="panel form-grid" onSubmit={createUser}>
+        <div className="panel-header span-2 no-margin">
+          <h2>Create User</h2>
+        </div>
         <label>
-          Name
-          <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required />
+          Name <span style={{ color: 'var(--color-danger)' }}>*</span>
+          <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required placeholder="Full name" />
         </label>
         <label>
-          Email
-          <input value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} type="email" required />
+          Email <span style={{ color: 'var(--color-danger)' }}>*</span>
+          <input value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} type="email" required placeholder="user@company.com" />
         </label>
         <label>
-          Password
-          <input value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} type="password" minLength="6" required />
+          Password <span style={{ color: 'var(--color-danger)' }}>*</span>
+          <input value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} type="password" minLength="6" required placeholder="Minimum 6 characters" />
         </label>
         <label>
           Role
@@ -145,7 +149,11 @@ function UsersAdminPage() {
           </button>
         </div>
       </form>
+
       <section className="panel">
+        <div className="panel-header">
+          <h2>User Directory</h2>
+        </div>
         {loading ? (
           <LoadingState label="Loading users..." />
         ) : users.length ? (
@@ -196,7 +204,7 @@ function UsersAdminPage() {
                         {user.is_active ? 'active' : 'inactive'}
                       </span>
                     </td>
-                    <td>{new Date(user.created_at).toLocaleString()}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{new Date(user.created_at).toLocaleString()}</td>
                     <td>
                       <div className="row-actions">
                         <button
@@ -209,7 +217,7 @@ function UsersAdminPage() {
                             })
                           }
                         >
-                          <UserCheck size={17} />
+                          <UserCheck size={16} />
                           <span>Save</span>
                         </button>
                         <button
@@ -217,7 +225,7 @@ function UsersAdminPage() {
                           type="button"
                           onClick={() => setReset({ user, password: '', confirm_password: '' })}
                         >
-                          <KeyRound size={17} />
+                          <KeyRound size={16} />
                           <span>Reset</span>
                         </button>
                         {user.is_active ? (
@@ -226,12 +234,12 @@ function UsersAdminPage() {
                             type="button"
                             onClick={() => setConfirm({ user, active: false })}
                           >
-                            <UserX size={17} />
+                            <UserX size={16} />
                             <span>Deactivate</span>
                           </button>
                         ) : (
                           <button className="secondary-button" type="button" onClick={() => setConfirm({ user, active: true })}>
-                            <UserCheck size={17} />
+                            <UserCheck size={16} />
                             <span>Reactivate</span>
                           </button>
                         )}
@@ -246,26 +254,31 @@ function UsersAdminPage() {
           <EmptyState title="No users found" />
         )}
       </section>
+
       {reset.user && (
         <form className="panel form-grid" onSubmit={resetPassword}>
           <div className="panel-header span-2 no-margin">
             <h2>Reset Password: {reset.user.email}</h2>
           </div>
           <label>
-            New Password
-            <input value={reset.password} onChange={(event) => setReset((current) => ({ ...current, password: event.target.value }))} type="password" minLength="6" required />
+            New Password <span style={{ color: 'var(--color-danger)' }}>*</span>
+            <input value={reset.password} onChange={(event) => setReset((current) => ({ ...current, password: event.target.value }))} type="password" minLength="6" required placeholder="Minimum 6 characters" />
           </label>
           <label>
-            Confirm New Password
+            Confirm New Password <span style={{ color: 'var(--color-danger)' }}>*</span>
             <input
               value={reset.confirm_password}
               onChange={(event) => setReset((current) => ({ ...current, confirm_password: event.target.value }))}
               type="password"
               minLength="6"
               required
+              placeholder="Repeat new password"
             />
           </label>
-          <div className="form-actions">
+          <div className="form-actions span-2">
+            <button className="secondary-button" type="button" onClick={() => setReset({ user: null, password: '', confirm_password: '' })}>
+              Cancel
+            </button>
             <button className="primary-button" type="submit">
               <ShieldCheck size={18} />
               <span>Save Password</span>
