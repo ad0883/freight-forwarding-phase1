@@ -24,6 +24,7 @@ Phase 1 implementation of a freight forwarding operations system with a FastAPI 
 - Financial dashboard cards and reports page
 - AI finance questions backed by database context
 - Phase 3.5 admin cleanup controls for shipment archive/restore, party deactivate/reactivate, safe party delete, task cancel/restore, and manual task delete
+- Phase 5 Gmail email automation for read-only scanning, deterministic extraction, and reviewable suggestions
 
 ## Backend Local Setup
 
@@ -176,11 +177,62 @@ Supported examples include:
 - `Show inactive parties.`
 - `Show cancelled tasks.`
 
+## Phase 5 Gmail Email Automation
+
+Phase 5 adds a backend-only Gmail integration for turning freight emails into reviewable suggestions.
+
+- Gmail access uses OAuth on the backend only. The frontend never receives Google client secrets, access tokens, or refresh tokens.
+- The only Gmail scope is `https://www.googleapis.com/auth/gmail.readonly`.
+- The app reads freight-related Gmail messages, caches safe previews, classifies them, extracts fields deterministically, and creates suggestions.
+- Email scans never update shipments, documents, BL records, demurrage, charges, follow-ups, or tasks by themselves.
+- Business records change only when an `ADMIN` or `STAFF` user reviews a suggestion and clicks Apply.
+- `VIEW_ONLY` users cannot access Gmail automation.
+- Phase 5 does not send, delete, archive, label, forward, or modify Gmail messages.
+- Phase 5 does not send email content to Groq.
+
+Backend-only Gmail environment variables:
+
+```env
+GMAIL_ENABLED=true
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+GOOGLE_REDIRECT_URI=http://localhost:8000/api/email/oauth/callback
+FRONTEND_BASE_URL=http://localhost:5173
+GMAIL_SCOPES=https://www.googleapis.com/auth/gmail.readonly
+EMAIL_MAX_RESULTS=20
+EMAIL_LOOKBACK_DAYS=30
+TOKEN_ENCRYPTION_KEY=your_fernet_key
+```
+
+Generate a Fernet key for `TOKEN_ENCRYPTION_KEY`:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+For Render, set:
+
+```env
+GOOGLE_REDIRECT_URI=https://freight-backend-au6c.onrender.com/api/email/oauth/callback
+FRONTEND_BASE_URL=https://freight-frontend-u051.onrender.com
+```
+
+The Google Cloud OAuth client must include both the local and Render callback URLs if you use both environments:
+
+```txt
+http://localhost:8000/api/email/oauth/callback
+https://freight-backend-au6c.onrender.com/api/email/oauth/callback
+```
+
+Keep downloaded Google OAuth JSON files untracked. Copy only the client ID and client secret into backend environment variables. `client_secret*.json` is ignored by git.
+
 ## Phase 1 Limitations
 
-The app still intentionally does not include OpenAI as the primary AI provider, real file uploads, Google Drive API upload, S3, Celery, Redis, courier automation, invoice PDF generation, payment gateway integration, accounting software integration, GST invoice automation, bank reconciliation, exchange-rate automation, email/Gmail parsing, OCR, autonomous database writes, or AI-executed archive/delete/cancel actions.
+The app still intentionally does not include OpenAI as the primary AI provider, real file uploads, Google Drive API upload, S3, Celery, Redis, courier automation, invoice PDF generation, payment gateway integration, accounting software integration, GST invoice automation, bank reconciliation, exchange-rate automation, OCR, autonomous database writes, auto-reply email, Gmail message modification, or AI-executed archive/delete/cancel actions.
 
 Phase 3 finance entries are manual. The app stores currencies per charge and flags mixed-currency totals, but it does not convert exchange rates automatically.
+
+Phase 5 email extraction is deterministic and limited to subject/snippet/body previews. Gmail readonly is a restricted Google scope, so production usage may require Google verification and additional security review.
 
 Shipment codes are unique in the database, but the current counter-based generator can race if two shipments of the same type are created at exactly the same time. Use single-user/admin workflows for Phase 1; replace this with a database sequence before high-concurrency production use.
 
@@ -213,13 +265,22 @@ GROQ_MODEL=llama-3.3-70b-versatile
 AI_TIMEOUT_SECONDS=30
 AI_MAX_CONTEXT_ROWS=30
 AI_LOG_INTERACTIONS=true
+GMAIL_ENABLED=true
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+GOOGLE_REDIRECT_URI=https://freight-backend-au6c.onrender.com/api/email/oauth/callback
+FRONTEND_BASE_URL=https://freight-frontend-u051.onrender.com
+GMAIL_SCOPES=https://www.googleapis.com/auth/gmail.readonly
+EMAIL_MAX_RESULTS=20
+EMAIL_LOOKBACK_DAYS=30
+TOKEN_ENCRYPTION_KEY=your_fernet_key
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=change-this-password
 ```
 
 For production speed, use Neon's pooled connection URL, deploy the backend in the same or nearest region as the database, and run without `--reload`.
 Set a long random `JWT_SECRET_KEY`, and change `ADMIN_PASSWORD` before the service starts for the first time.
-Add Groq variables only to the backend Render service. Do not add Groq or OpenAI API keys to the frontend Render service.
+Add Groq and Google variables only to the backend Render service. Do not add Groq, OpenAI, or Google client secrets to the frontend Render service.
 
 Frontend static site:
 

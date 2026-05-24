@@ -8,6 +8,7 @@ __pycache__/
 .ruff_cache/
 backend/.venv/
 backend/.env
+client_secret*.json
 
 # Node
 node_modules/

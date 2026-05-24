@@ -12,6 +12,7 @@ from app.api.routes import (
     bl_management,
     demurrage,
     documents,
+    email,
     followups,
     parties,
     charges,
@@ -103,6 +104,7 @@ app.include_router(shipments.router, prefix="/api")
 app.include_router(bl_management.router, prefix="/api")
 app.include_router(demurrage.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
+app.include_router(email.router, prefix="/api")
 app.include_router(charges.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
 app.include_router(tasks.router, prefix="/api")

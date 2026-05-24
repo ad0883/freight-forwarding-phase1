@@ -31,6 +31,16 @@ class Settings(BaseSettings):
     AI_MAX_CONTEXT_ROWS: int = 30
     AI_LOG_INTERACTIONS: bool = True
 
+    GMAIL_ENABLED: bool = False
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/email/oauth/callback"
+    FRONTEND_BASE_URL: str = "http://localhost:5173"
+    GMAIL_SCOPES: str = "https://www.googleapis.com/auth/gmail.readonly"
+    EMAIL_MAX_RESULTS: int = 20
+    EMAIL_LOOKBACK_DAYS: int = 30
+    TOKEN_ENCRYPTION_KEY: str = ""
+
     ADMIN_NAME: str = "Admin"
     ADMIN_EMAIL: str = "admin@example.com"
     ADMIN_PASSWORD: str = "admin123"
@@ -43,6 +53,10 @@ class Settings(BaseSettings):
         if value.startswith("["):
             return json.loads(value)
         return [origin.strip() for origin in value.split(",") if origin.strip()]
+
+    @property
+    def gmail_scopes(self) -> list[str]:
+        return [scope.strip() for scope in self.GMAIL_SCOPES.split(",") if scope.strip()]
 
 
 @lru_cache

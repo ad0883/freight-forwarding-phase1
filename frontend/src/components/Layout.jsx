@@ -4,11 +4,14 @@ import {
   ClipboardList,
   LayoutDashboard,
   LogOut,
+  Mail,
   PackagePlus,
   Ship,
   Users,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import api from '../api/client.js';
 
 const links = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -18,10 +21,16 @@ const links = [
   { to: '/tasks', label: 'Tasks', icon: ClipboardList },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/ai', label: 'AI Assistant', icon: Bot },
+  { to: '/email', label: 'Email Automation', icon: Mail, writeRoleOnly: true },
 ];
 
 function Layout() {
   const navigate = useNavigate();
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => {
+    api.get('/auth/me').then((response) => setCurrentUser(response.data)).catch(() => setCurrentUser(null));
+  }, []);
 
   function logout() {
     localStorage.removeItem('access_token');
@@ -39,12 +48,14 @@ function Layout() {
           </div>
         </div>
         <nav className="nav-links">
-          {links.map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to} end={to === '/'}>
-              <Icon size={18} />
-              <span>{label}</span>
-            </NavLink>
-          ))}
+          {links
+            .filter((link) => !link.writeRoleOnly || ['ADMIN', 'STAFF'].includes(currentUser?.role))
+            .map(({ to, label, icon: Icon }) => (
+              <NavLink key={to} to={to} end={to === '/'}>
+                <Icon size={18} />
+                <span>{label}</span>
+              </NavLink>
+            ))}
         </nav>
         <button className="sidebar-logout" type="button" onClick={logout} title="Logout">
           <LogOut size={18} />
