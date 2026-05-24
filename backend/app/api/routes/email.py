@@ -137,7 +137,17 @@ def email_oauth_callback(
         handle_oauth_callback(db, code, state)
     except GmailOAuthCallbackError as exc:
         logger.exception(
-            "Gmail OAuth callback failed",
+            (
+                "Gmail OAuth callback failed error_code=%s stage=%s cause_type=%s "
+                "oauth_exception_class=%s provider_error_code=%s error_description=%s http_status=%s"
+            ),
+            exc.error_code,
+            exc.stage,
+            exc.cause_type,
+            exc.diagnostics.get("gmail_oauth_exception_class"),
+            exc.diagnostics.get("gmail_oauth_provider_error_code"),
+            exc.diagnostics.get("gmail_oauth_error_description"),
+            exc.diagnostics.get("gmail_oauth_http_status"),
             extra={
                 "gmail_oauth_error_code": exc.error_code,
                 "gmail_oauth_stage": exc.stage,

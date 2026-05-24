@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -32,6 +33,28 @@ from app.services.dashboard_service import warm_dashboard_cache
 
 
 scheduler = BackgroundScheduler()
+
+
+class OAuthCallbackAccessLogFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not isinstance(record.args, tuple) or len(record.args) < 3:
+            return True
+        path = record.args[2]
+        if not isinstance(path, str) or not path.startswith("/api/email/oauth/callback?"):
+            return True
+        args = list(record.args)
+        args[2] = "/api/email/oauth/callback?[redacted]"
+        record.args = tuple(args)
+        return True
+
+
+def install_access_log_filters() -> None:
+    access_logger = logging.getLogger("uvicorn.access")
+    if not any(isinstance(log_filter, OAuthCallbackAccessLogFilter) for log_filter in access_logger.filters):
+        access_logger.addFilter(OAuthCallbackAccessLogFilter())
+
+
+install_access_log_filters()
 
 
 def create_default_admin(db: Session) -> None:

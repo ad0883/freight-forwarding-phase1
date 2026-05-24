@@ -1,5 +1,8 @@
 import base64
+import hashlib
+import hmac
 import logging
+import secrets
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, Optional
@@ -43,11 +46,13 @@ class GmailOAuthCallbackError(Exception):
         stage: str,
         message: str,
         cause_type: Optional[str] = None,
+        diagnostics: Optional[dict[str, Any]] = None,
     ) -> None:
         super().__init__(message)
         self.error_code = error_code
         self.stage = stage
         self.cause_type = cause_type
+        self.diagnostics = diagnostics or {}
 
 
 def _ensure_gmail_configured() -> None:
@@ -75,15 +80,22 @@ def _client_config() -> dict[str, Any]:
     }
 
 
-def _build_flow(state: Optional[str] = None) -> Flow:
+def _build_flow(state: Optional[str] = None, code_verifier: Optional[str] = None) -> Flow:
     _ensure_gmail_configured()
-    flow = Flow.from_client_config(_client_config(), scopes=settings.gmail_scopes, state=state)
+    flow = Flow.from_client_config(
+        _client_config(),
+        scopes=settings.gmail_scopes,
+        state=state,
+        code_verifier=code_verifier,
+        autogenerate_code_verifier=code_verifier is None,
+    )
     flow.redirect_uri = settings.GOOGLE_REDIRECT_URI
     return flow
 
 
 def get_authorization_url(user_id: int, frontend_base_url: Optional[str] = None) -> str:
-    claims: dict[str, Any] = {"uid": user_id, "purpose": "gmail_oauth"}
+    pkce_nonce = secrets.token_urlsafe(32)
+    claims: dict[str, Any] = {"uid": user_id, "purpose": "gmail_oauth", "pkce_nonce": pkce_nonce}
     if frontend_base_url:
         claims["frontend_base_url"] = frontend_base_url
     state = create_access_token(
@@ -91,7 +103,7 @@ def get_authorization_url(user_id: int, frontend_base_url: Optional[str] = None)
         expires_delta=timedelta(minutes=10),
         additional_claims=claims,
     )
-    flow = _build_flow(state=state)
+    flow = _build_flow(state=state, code_verifier=_pkce_code_verifier(user_id, pkce_nonce))
     authorization_url, _ = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
@@ -124,9 +136,26 @@ def _oauth_state_payload(state: str) -> dict[str, Any]:
     return payload
 
 
+def _pkce_code_verifier_from_state(user_id: int, payload: dict[str, Any]) -> Optional[str]:
+    pkce_nonce = payload.get("pkce_nonce")
+    if not isinstance(pkce_nonce, str) or not pkce_nonce:
+        return None
+    return _pkce_code_verifier(user_id, pkce_nonce)
+
+
+def _pkce_code_verifier(user_id: int, pkce_nonce: str) -> str:
+    digest = hmac.new(
+        settings.JWT_SECRET_KEY.encode("utf-8"),
+        f"gmail-oauth-pkce:{user_id}:{pkce_nonce}".encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+
+
 def handle_oauth_callback(db: Session, code: str, state: str) -> EmailConnection:
     try:
-        user_id = user_id_from_oauth_state(state)
+        state_payload = _oauth_state_payload(state)
+        user_id = int(state_payload["uid"])
     except Exception as exc:
         raise GmailOAuthCallbackError(
             OAUTH_ERROR_STATE_INVALID,
@@ -136,7 +165,10 @@ def handle_oauth_callback(db: Session, code: str, state: str) -> EmailConnection
         ) from None
 
     try:
-        flow = _build_flow(state=state)
+        flow = _build_flow(
+            state=state,
+            code_verifier=_pkce_code_verifier_from_state(user_id, state_payload),
+        )
     except HTTPException as exc:
         error_code = (
             OAUTH_ERROR_TOKEN_ENCRYPTION_FAILED
@@ -178,6 +210,7 @@ def handle_oauth_callback(db: Session, code: str, state: str) -> EmailConnection
             "token_exchange",
             "Gmail OAuth token exchange failed.",
             type(exc).__name__,
+            diagnostics=error_details,
         ) from None
     credentials = flow.credentials
     logger.info(
