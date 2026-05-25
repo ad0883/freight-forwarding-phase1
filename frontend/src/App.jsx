@@ -8,6 +8,7 @@ import DashboardPage from './pages/DashboardPage.jsx';
 import EmailAutomationPage from './pages/EmailAutomationPage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import MockAiPage from './pages/MockAiPage.jsx';
+import NotificationsPage from './pages/NotificationsPage.jsx';
 import PartiesPage from './pages/PartiesPage.jsx';
 import ReportsPage from './pages/ReportsPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
@@ -42,6 +43,7 @@ function App() {
         <Route path="shipments/:id" element={<ShipmentDetailPage />} />
         <Route path="parties" element={<PartiesPage />} />
         <Route path="tasks" element={<TasksPage />} />
+        <Route path="notifications" element={<NotificationsPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="ai" element={<MockAiPage />} />
         <Route

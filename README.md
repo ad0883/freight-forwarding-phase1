@@ -26,6 +26,7 @@ Phase 1 implementation of a freight forwarding operations system with a FastAPI 
 - Phase 3.5 admin cleanup controls for shipment archive/restore, party deactivate/reactivate, safe party delete, task cancel/restore, and manual task delete
 - Phase 5 Gmail email automation for read-only scanning, deterministic extraction, and reviewable suggestions
 - Phase 6 production hardening with audit logs, admin user lifecycle controls, status checks, CSV exports, dry-run cleanup, and password-change settings
+- Phase 7 internal notification center with per-user read/dismiss state, workflow reminder checks, daily operations summary, notification rules, and AI read-only attention summaries
 
 ## Backend Local Setup
 
@@ -238,6 +239,27 @@ Phase 6 adds safer production operations around the existing freight workflows:
 - Audit metadata is allowlisted and redacted. Password changes and resets only log that the action happened with actor/target metadata.
 - Audit logs must never include old passwords, new passwords, password hashes, JWTs, Gmail access or refresh tokens, OAuth codes, Google client secrets, API keys, database URLs, or environment values.
 - Health checks are available at public `GET /api/health` and admin-only `GET /api/health/details`.
+
+## Phase 7 Notifications And Workflow Automation
+
+Phase 7 adds an internal notification and reminder layer without replacing legacy alerts.
+
+- Existing `/api/alerts` endpoints and dashboard alert panels remain backward-compatible.
+- `/api/notifications` provides notification list, unread count, read/unread, dismiss, mark-all-read, manual run checks, daily summary, and notification rule APIs.
+- Notification rules are stored in `notification_rules` and can be enabled, disabled, and tuned by `ADMIN` users.
+- Notification read and dismiss state is per user through `notification_user_states`, so one staff member marking a notification read or dismissed does not hide it for another staff member.
+- Ongoing issues use stable dedupe keys such as `overdue_task:{task_id}`, `demurrage_running:{shipment_id}`, `bl_approval_pending:{shipment_id}`, and `pending_receivable:{charge_id}`. Repeated hourly checks do not create duplicate active notifications for the same unchanged issue.
+- Daily reminder rules use date-specific dedupe keys only when a fresh daily reminder is intended, such as tasks due today and Gmail suggestions pending.
+- The scheduler runs best-effort hourly notification checks and a daily operations summary job. Render free services may sleep, so `ADMIN` and `STAFF` users can also run checks manually from the Notifications page.
+- Daily summary is available inside the Notifications page and as a dashboard widget. It includes overdue tasks, demurrage risk, pending BL approvals, pending receivables, pending payables, Gmail review count, and top urgent notification items.
+- The AI Assistant can answer questions like `What needs attention today?`, `Show my notifications`, and `What are today's urgent issues?` from notification and summary data only.
+
+Phase 7 automation is intentionally limited:
+
+- Notification checks may create internal notifications and summaries only.
+- Notification checks must not automatically mutate shipments, documents, BL records, tasks, charges, parties, users, Gmail records, or AI-managed state.
+- Gmail remains read-only and suggestion review-based. Phase 7 does not send, modify, delete, archive, label, or auto-apply Gmail messages or suggestions.
+- Phase 7 does not add n8n, WhatsApp, SMS, Drive upload, OCR, Celery, Redis, payment gateways, invoice PDFs, external webhooks, or autonomous AI writes.
 - Admin CSV exports are available for shipments, parties, charges, tasks, and audit logs.
 - Admin test-data cleanup is dry-run only at `POST /api/admin/cleanup-test-data`; it reports candidates and does not modify records.
 - Risky admin actions in the frontend use confirmation dialogs.

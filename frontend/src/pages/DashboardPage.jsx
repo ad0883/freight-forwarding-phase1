@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Clock, DollarSign, Ship, Timer, WalletCards } from 'lucide-react';
+import { AlertTriangle, Bell, CheckCircle2, Clock, DollarSign, Ship, Timer, WalletCards } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client.js';
@@ -7,6 +7,7 @@ import { EmptyState, ErrorState, LoadingState } from '../components/States.jsx';
 function DashboardPage() {
   const [summary, setSummary] = useState(null);
   const [financials, setFinancials] = useState(null);
+  const [dailySummary, setDailySummary] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [error, setError] = useState('');
 
@@ -20,6 +21,10 @@ function DashboardPage() {
       setSummary(dashboardResponse.data);
       setFinancials(financialResponse.data);
       setAlerts(dashboardResponse.data.recent_alerts || []);
+      api
+        .get('/notifications/daily-summary')
+        .then((response) => setDailySummary(response.data))
+        .catch(() => setDailySummary(null));
     } catch (err) {
       setError(err.response?.data?.detail || 'Unable to load dashboard');
     }
@@ -118,6 +123,49 @@ function DashboardPage() {
       </section>
       {financials.multiple_currencies && (
         <p className="finance-note">Multiple currencies are present. Totals are not converted automatically.</p>
+      )}
+
+      {dailySummary && (
+        <section className="panel">
+          <div className="panel-header">
+            <h2>Today's Operations Summary</h2>
+            <Link to="/notifications">View notifications</Link>
+          </div>
+          <div className="dashboard-summary-strip">
+            <div>
+              <Bell size={18} />
+              <span>Unread</span>
+              <strong>{dailySummary.totals.unread_notifications}</strong>
+            </div>
+            <div>
+              <AlertTriangle size={18} />
+              <span>Overdue</span>
+              <strong>{dailySummary.totals.overdue_tasks}</strong>
+            </div>
+            <div>
+              <Timer size={18} />
+              <span>Demurrage</span>
+              <strong>{dailySummary.totals.demurrage_risks}</strong>
+            </div>
+            <div>
+              <Clock size={18} />
+              <span>BL Pending</span>
+              <strong>{dailySummary.totals.pending_bl_approvals}</strong>
+            </div>
+          </div>
+          <div className="notification-list compact">
+            {(dailySummary.top_urgent_items || []).slice(0, 3).map((item, index) => (
+              <article className="notification-row" key={`${item.title}-${index}`}>
+                <span className={`badge priority-${item.priority}`}>{item.priority}</span>
+                <div>
+                  <strong>{item.title}</strong>
+                  <p>{item.message}</p>
+                </div>
+              </article>
+            ))}
+            {!dailySummary.top_urgent_items?.length && <p className="muted">No urgent notification items.</p>}
+          </div>
+        </section>
       )}
 
       <section className="split-grid">

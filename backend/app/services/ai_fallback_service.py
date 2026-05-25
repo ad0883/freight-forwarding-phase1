@@ -26,6 +26,8 @@ def _answer_for_context(context: AIContextBundle) -> str:
         return context.result_note
     if context.intent == "general_dashboard_summary":
         return _dashboard_answer(context)
+    if context.intent == "notifications_summary":
+        return _notifications_summary_answer(context)
     if context.intent in {"shipment_status", "shipment_detail"}:
         return _shipment_answer(context)
     if context.intent == "workflow_next_action":
@@ -68,6 +70,18 @@ def _dashboard_answer(context: AIContextBundle) -> str:
         f"Dashboard summary: {totals.get('live_shipments', 0)} live shipments, "
         f"{totals.get('pending_tasks', 0)} pending tasks, {totals.get('alerts_today', 0)} alerts today, "
         f"and this month profit {totals.get('currency', 'INR')} {totals.get('this_month_profit', 0)}."
+    )
+
+
+def _notifications_summary_answer(context: AIContextBundle) -> str:
+    totals = context.totals
+    return (
+        f"Today needs attention: {totals.get('unread_notifications', 0)} unread notifications, "
+        f"{totals.get('overdue_tasks', 0)} overdue tasks, "
+        f"{totals.get('demurrage_risks', 0)} demurrage risk(s), "
+        f"{totals.get('pending_bl_approvals', 0)} pending BL approval(s), "
+        f"pending receivables {totals.get('currency', 'INR')} {totals.get('pending_receivables_total', 0)}, "
+        f"and pending payables {totals.get('currency', 'INR')} {totals.get('pending_payables_total', 0)}."
     )
 
 

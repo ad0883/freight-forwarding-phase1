@@ -23,6 +23,9 @@ PERFORMANCE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS ix_charges_shipment_status ON charges (shipment_id, status)",
     "CREATE INDEX IF NOT EXISTS ix_charges_direction_status ON charges (direction, status)",
     "CREATE INDEX IF NOT EXISTS ix_charges_date_created_at ON charges (date, created_at)",
+    "CREATE INDEX IF NOT EXISTS ix_notifications_target_created_at ON notifications (target_role, target_user_id, created_at)",
+    "CREATE INDEX IF NOT EXISTS ix_notifications_category_priority ON notifications (category, priority)",
+    "CREATE INDEX IF NOT EXISTS ix_notification_user_states_user_notification ON notification_user_states (user_id, notification_id)",
 ]
 
 

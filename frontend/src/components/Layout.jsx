@@ -2,6 +2,8 @@ import {
   Activity,
   Bot,
   BarChart3,
+  Bell,
+  Check,
   ClipboardList,
   FileClock,
   LayoutDashboard,
@@ -64,6 +66,9 @@ function Layout() {
   const [currentUser, setCurrentUser] = useState(cachedUser);
   const [userLoading, setUserLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [recentNotifications, setRecentNotifications] = useState([]);
 
   useEffect(() => {
     api
@@ -81,6 +86,32 @@ function Layout() {
       .finally(() => setUserLoading(false));
   }, [navigate]);
 
+  useEffect(() => {
+    if (!currentUser) return undefined;
+    let alive = true;
+    async function loadNotifications() {
+      try {
+        const [countResponse, notificationsResponse] = await Promise.all([
+          api.get('/notifications/unread-count'),
+          api.get('/notifications', { params: { status: 'unread', limit: 5 } }),
+        ]);
+        if (!alive) return;
+        setUnreadCount(countResponse.data.unread_count || 0);
+        setRecentNotifications(notificationsResponse.data || []);
+      } catch {
+        if (!alive) return;
+        setUnreadCount(0);
+        setRecentNotifications([]);
+      }
+    }
+    loadNotifications();
+    const interval = window.setInterval(loadNotifications, 60000);
+    return () => {
+      alive = false;
+      window.clearInterval(interval);
+    };
+  }, [currentUser, location.pathname]);
+
   // Close sidebar on route change (mobile)
   useEffect(() => {
     setSidebarOpen(false);
@@ -90,6 +121,18 @@ function Layout() {
     localStorage.removeItem('access_token');
     localStorage.removeItem('current_user');
     navigate('/login');
+  }
+
+  async function openNotification(notification) {
+    if (['ADMIN', 'STAFF'].includes(currentUser?.role)) {
+      try {
+        await api.patch(`/notifications/${notification.id}/read`);
+      } catch {
+        // Keep navigation responsive even if the read marker fails.
+      }
+    }
+    setNotificationOpen(false);
+    navigate(notification.action_url || '/notifications');
   }
 
   const visibleAdminLinks = adminLinks.filter((link) => canShowLink(link, currentUser, userLoading));
@@ -133,6 +176,47 @@ function Layout() {
           ))}
         </nav>
         <div className="sidebar-footer">
+          {currentUser && (
+            <div className="notification-bell-wrap">
+              <button
+                className="notification-bell"
+                type="button"
+                onClick={() => setNotificationOpen((value) => !value)}
+                title="Notifications"
+              >
+                <Bell size={18} />
+                <span>Notifications</span>
+                {unreadCount > 0 && <strong>{unreadCount > 99 ? '99+' : unreadCount}</strong>}
+              </button>
+              {notificationOpen && (
+                <div className="notification-popover">
+                  <div className="panel-header">
+                    <h2>Unread</h2>
+                    <button className="icon-button" type="button" onClick={() => navigate('/notifications')} title="Open notifications">
+                      <Check size={16} />
+                    </button>
+                  </div>
+                  <div className="notification-popover-list">
+                    {recentNotifications.map((notification) => (
+                      <button
+                        type="button"
+                        key={notification.id}
+                        onClick={() => openNotification(notification)}
+                      >
+                        <span className={`badge priority-${notification.priority}`}>{notification.priority}</span>
+                        <strong>{notification.title}</strong>
+                        <p>{notification.message}</p>
+                      </button>
+                    ))}
+                    {!recentNotifications.length && <p className="muted">No unread notifications.</p>}
+                  </div>
+                  <button className="secondary-button" type="button" onClick={() => navigate('/notifications')}>
+                    View all
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           {currentUser && (
             <div className="sidebar-user">
               <div className="sidebar-user-info">

@@ -20,7 +20,9 @@ def get_or_create_demurrage(db: Session, shipment: Shipment) -> Demurrage:
     return record
 
 
-def calculate_demurrage(record: Demurrage, today: Optional[date] = None) -> DemurrageRead:
+def calculate_demurrage(
+    record: Demurrage, today: Optional[date] = None, persist_status: bool = True
+) -> DemurrageRead:
     today = today or date.today()
     free_days_end_date = None
     days_used = 0
@@ -44,7 +46,8 @@ def calculate_demurrage(record: Demurrage, today: Optional[date] = None) -> Demu
         else:
             status = "within_free_days"
 
-    record.status = status
+    if persist_status:
+        record.status = status
     return DemurrageRead(
         id=record.id,
         shipment_id=record.shipment_id,

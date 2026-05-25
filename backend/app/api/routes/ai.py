@@ -16,6 +16,8 @@ router = APIRouter(prefix="/ai", tags=["ai-assistant"])
 
 AI_EXAMPLES = [
     "What shipments need attention today?",
+    "Show my notifications.",
+    "What are today's urgent issues?",
     "Which tasks are overdue?",
     "Which shipments have demurrage running?",
     "Which BL approvals are pending?",
@@ -53,7 +55,7 @@ def ask_ai(
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = Depends(get_current_user),
 ) -> AIAskResponse:
-    context = build_ai_context(db, payload, settings.AI_MAX_CONTEXT_ROWS)
+    context = build_ai_context(db, payload, settings.AI_MAX_CONTEXT_ROWS, current_user=current_user)
     fallback_reason = None
     response: AIAskResponse
 

@@ -7,6 +7,7 @@ from app.models.demurrage import Demurrage
 from app.models.document import Document
 from app.models.email import EmailConnection, EmailMessageCache, EmailSuggestion
 from app.models.followup import FollowUpLog
+from app.models.notification import Notification, NotificationRule, NotificationUserState
 from app.models.party import Party
 from app.models.shipment import Shipment
 from app.models.task import Task
@@ -24,6 +25,9 @@ __all__ = [
     "EmailMessageCache",
     "EmailSuggestion",
     "FollowUpLog",
+    "Notification",
+    "NotificationRule",
+    "NotificationUserState",
     "Party",
     "Shipment",
     "Task",

@@ -14,6 +14,8 @@ from app.models.party import Party
 from app.models.shipment import Shipment
 from app.models.task import Task
 from app.schemas.ai import AIAskRequest, AIDataPoint, AIPriority
+from app.api.deps import AuthenticatedUser
+from app.services.daily_summary_service import build_daily_summary
 from app.services.dashboard_service import get_dashboard_summary
 from app.services.demurrage_service import calculate_demurrage
 from app.services.finance_service import (
@@ -57,12 +59,19 @@ class AIContextBundle:
         }
 
 
-def build_ai_context(db: Session, request: AIAskRequest, max_rows: int) -> AIContextBundle:
+def build_ai_context(
+    db: Session,
+    request: AIAskRequest,
+    max_rows: int,
+    current_user: Optional[AuthenticatedUser] = None,
+) -> AIContextBundle:
     question = request.question.strip()
     shipment_code = _shipment_code_from_request(request)
     intent = _detect_intent(question, shipment_code)
     limit = max(1, min(max_rows, DEFAULT_TOP_LIMIT))
 
+    if intent == "notifications_summary" and current_user:
+        return _notifications_summary_context(db, question, current_user)
     if intent == "general_dashboard_summary":
         return _dashboard_context(db, question)
     if intent in {"shipment_status", "shipment_detail"}:
@@ -109,6 +118,8 @@ def _shipment_code_from_request(request: AIAskRequest) -> Optional[str]:
 
 def _detect_intent(question: str, shipment_code: Optional[str]) -> str:
     text = question.lower()
+    if "notification" in text or "urgent issue" in text or "needs attention" in text or "need attention" in text:
+        return "notifications_summary"
     if "archived" in text and "shipment" in text:
         return "archived_shipments"
     if "inactive" in text and ("part" in text or "vendor" in text or "client" in text):
@@ -146,6 +157,38 @@ def _detect_intent(question: str, shipment_code: Optional[str]) -> str:
     if "shipment" in text and "status" in text:
         return "shipment_status"
     return "unknown"
+
+
+def _notifications_summary_context(
+    db: Session, question: str, current_user: AuthenticatedUser
+) -> AIContextBundle:
+    summary = build_daily_summary(db, current_user)
+    totals = summary.totals
+    records = [item.model_dump() for item in summary.top_urgent_items]
+    priority: AIPriority = "none"
+    if any(item.priority == "critical" for item in summary.top_urgent_items):
+        priority = "critical"
+    elif totals.overdue_tasks or totals.demurrage_risks or totals.pending_bl_approvals:
+        priority = "warning"
+    elif totals.unread_notifications or summary.top_urgent_items:
+        priority = "info"
+    return AIContextBundle(
+        intent="notifications_summary",
+        question=question,
+        summary="Today's notification-backed operations summary.",
+        totals=totals.model_dump(),
+        records=records,
+        data_points=[
+            AIDataPoint(label="Unread notifications", value=str(totals.unread_notifications)),
+            AIDataPoint(label="Overdue tasks", value=str(totals.overdue_tasks)),
+            AIDataPoint(label="Demurrage risks", value=str(totals.demurrage_risks)),
+            AIDataPoint(label="Pending BL approvals", value=str(totals.pending_bl_approvals)),
+        ],
+        suggested_actions=[
+            item.title for item in summary.top_urgent_items[:3]
+        ],
+        priority=priority,
+    )
 
 
 def _has_bl_keyword(text: str) -> bool:
