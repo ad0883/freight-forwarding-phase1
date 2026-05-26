@@ -36,6 +36,10 @@ function formatMoney(amount, currency = 'INR') {
   })}`;
 }
 
+function errorMessage(err, fallback) {
+  return err?.response?.data?.detail || err?.message || fallback;
+}
+
 function NotificationsPage() {
   const navigate = useNavigate();
   const [currentUser] = useState(cachedUser);
@@ -54,21 +58,34 @@ function NotificationsPage() {
   async function load() {
     setError('');
     setLoading(true);
-    try {
-      const params = Object.fromEntries(
-        Object.entries(filters).filter(([, value]) => value !== '')
-      );
-      const [notificationResponse, summaryResponse] = await Promise.all([
-        api.get('/notifications', { params: { ...params, limit: 100 } }),
-        api.get('/notifications/daily-summary'),
-      ]);
+    const hadNotifications = notifications.length > 0;
+    const params = Object.fromEntries(
+      Object.entries(filters).filter(([, value]) => value !== '')
+    );
+    const [notificationResult, summaryResult] = await Promise.allSettled([
+      api.get('/notifications', { params: { ...params, limit: 100 } }),
+      api.get('/notifications/daily-summary'),
+    ]);
+
+    if (notificationResult.status === 'fulfilled') {
+      const notificationResponse = notificationResult.value;
       setNotifications(notificationResponse.data);
-      setSummary(summaryResponse.data);
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Unable to load notifications');
-    } finally {
-      setLoading(false);
+    } else {
+      const message = errorMessage(notificationResult.reason, 'Unable to load notifications');
+      if (hadNotifications) {
+        setActionMessage(message);
+      } else {
+        setError(message);
+      }
     }
+
+    if (summaryResult.status === 'fulfilled') {
+      setSummary(summaryResult.value.data);
+    } else if (notificationResult.status === 'fulfilled') {
+      setActionMessage(errorMessage(summaryResult.reason, 'Notifications loaded, but the daily summary could not refresh.'));
+    }
+
+    setLoading(false);
   }
 
   async function loadRules() {
@@ -99,22 +116,34 @@ function NotificationsPage() {
 
   async function updateNotification(id, action) {
     setActionMessage('');
-    await api.patch(`/notifications/${id}/${action}`);
-    await load();
+    try {
+      await api.patch(`/notifications/${id}/${action}`);
+      await load();
+    } catch (err) {
+      setActionMessage(errorMessage(err, 'Unable to update notification'));
+    }
   }
 
   async function markAllRead() {
     setActionMessage('');
-    const response = await api.post('/notifications/mark-all-read');
-    setActionMessage(`${response.data.updated} notification(s) marked read.`);
-    await load();
+    try {
+      const response = await api.post('/notifications/mark-all-read');
+      setActionMessage(`${response.data.updated} notification(s) marked read.`);
+      await load();
+    } catch (err) {
+      setActionMessage(errorMessage(err, 'Unable to mark notifications read'));
+    }
   }
 
   async function runChecks() {
     setActionMessage('');
-    const response = await api.post('/notifications/run-checks');
-    setActionMessage(`${response.data.created} notification(s) created.`);
-    await Promise.all([load(), loadRules()]);
+    try {
+      const response = await api.post('/notifications/run-checks');
+      setActionMessage(`${response.data.created} notification(s) created.`);
+      await Promise.all([load(), loadRules()]);
+    } catch (err) {
+      setActionMessage(errorMessage(err, 'Unable to run notification checks'));
+    }
   }
 
   async function updateRule(ruleId, patch) {
