@@ -287,50 +287,74 @@ function DashboardPage() {
       )}
 
       {financeOverview !== null && (
-        <section className="panel">
-          <div className="panel-header">
+        <>
+          <div className="panel-header no-margin">
             <h2>Finance &amp; Credit Control</h2>
             <Link to="/finance">Open finance</Link>
           </div>
-          <div className="metric-grid">
-            <div>
-              <WalletCards size={18} />
-              <span>Receivable overdue</span>
+          <section className="metric-grid finance-grid">
+            <article
+              className={`metric-card ${
+                Number(financeOverview.receivable_overdue) > 0 ? 'critical-card' : 'info-card'
+              }`}
+            >
+              <WalletCards size={20} />
+              <span>Receivable Overdue</span>
               <strong>
-                {financeOverview.currency} {Number(financeOverview.receivable_overdue || 0).toLocaleString('en-IN')}
+                {formatMoney(financeOverview.receivable_overdue, financeOverview.currency)}
               </strong>
-            </div>
-            <div>
-              <DollarSign size={18} />
-              <span>Payable overdue</span>
+            </article>
+            <article
+              className={`metric-card ${
+                Number(financeOverview.payable_overdue) > 0 ? 'warning-card' : 'info-card'
+              }`}
+            >
+              <DollarSign size={20} />
+              <span>Payable Overdue</span>
               <strong>
-                {financeOverview.currency} {Number(financeOverview.payable_overdue || 0).toLocaleString('en-IN')}
+                {formatMoney(financeOverview.payable_overdue, financeOverview.currency)}
               </strong>
-            </div>
-            <div>
-              <AlertTriangle size={18} />
-              <span>Active credit holds</span>
+            </article>
+            <article
+              className={`metric-card ${
+                financeOverview.active_holds > 0 ? 'critical-card' : 'success-card'
+              }`}
+            >
+              <AlertTriangle size={20} />
+              <span>Active Credit Holds</span>
               <strong>{financeOverview.active_holds}</strong>
-            </div>
-            <div>
-              <Bell size={18} />
-              <span>Open finance risks</span>
+            </article>
+            <article
+              className={`metric-card ${
+                financeOverview.open_risks > 0 ? 'warning-card' : 'success-card'
+              }`}
+            >
+              <Bell size={20} />
+              <span>Open Finance Risks</span>
               <strong>{financeOverview.open_risks}</strong>
-            </div>
-            <div>
-              <DollarSign size={18} />
-              <span>Unallocated payments</span>
+            </article>
+            <article
+              className={`metric-card ${
+                Number(financeOverview.unallocated_payments) > 0 ? 'info-card' : 'success-card'
+              }`}
+            >
+              <DollarSign size={20} />
+              <span>Unallocated Payments</span>
               <strong>
-                {financeOverview.currency} {Number(financeOverview.unallocated_payments || 0).toLocaleString('en-IN')}
+                {formatMoney(financeOverview.unallocated_payments, financeOverview.currency)}
               </strong>
-            </div>
-            <div>
-              <AlertTriangle size={18} />
-              <span>Negative-margin shipments</span>
+            </article>
+            <article
+              className={`metric-card ${
+                financeOverview.negative_margin_shipments > 0 ? 'critical-card' : 'success-card'
+              }`}
+            >
+              <AlertTriangle size={20} />
+              <span>Negative-Margin Shipments</span>
               <strong>{financeOverview.negative_margin_shipments}</strong>
-            </div>
-          </div>
-        </section>
+            </article>
+          </section>
+        </>
       )}
 
       {validationIssues !== null && (

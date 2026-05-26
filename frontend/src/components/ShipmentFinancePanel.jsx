@@ -115,7 +115,7 @@ function ShipmentFinancePanel({ shipmentId, canWrite }) {
             <strong>{summary.payment_count}</strong>
           </article>
           <article
-            className={`metric-card${summary.margin_negative ? ' accent-critical' : ''}`}
+            className={`metric-card${summary.margin_negative ? ' critical-card' : ''}`}
           >
             <span>Net P&amp;L</span>
             <strong>

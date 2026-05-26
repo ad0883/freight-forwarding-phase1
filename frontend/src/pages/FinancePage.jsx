@@ -24,9 +24,15 @@ const TABS = [
 ];
 
 function StatCard({ icon: Icon, label, value, accent }) {
+  const accentClass = {
+    critical: 'critical-card',
+    warning: 'warning-card',
+    success: 'success-card',
+    info: 'info-card',
+  }[accent] || '';
   return (
-    <article className={`metric-card${accent ? ` accent-${accent}` : ''}`}>
-      {Icon ? <Icon size={18} /> : null}
+    <article className={`metric-card ${accentClass}`.trim()}>
+      {Icon ? <Icon size={20} /> : null}
       <span>{label}</span>
       <strong>{value}</strong>
     </article>
