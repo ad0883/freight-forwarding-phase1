@@ -31,13 +31,14 @@ from app.api.deps import AuthenticatedUser
 from app.core.config import settings
 from app.core.security import get_password_hash
 from app.db.indexes import ensure_performance_indexes
-from app.db.schema import ensure_phase2_columns, ensure_phase35_columns
+from app.db.schema import ensure_phase2_columns, ensure_phase35_columns, ensure_phase8_organization_schema
 from app.db.session import Base, SessionLocal, engine
 from app.models import User
 from app.services.alert_service import create_overdue_task_alerts
 from app.services.daily_summary_service import build_daily_summary
 from app.services.dashboard_service import warm_dashboard_cache
 from app.services.notification_service import seed_default_notification_rules
+from app.services.organization_scope_service import assign_default_organization
 from app.services.workflow_notification_service import run_notification_checks
 
 
@@ -69,6 +70,8 @@ install_access_log_filters()
 def create_default_admin(db: Session) -> None:
     admin = db.query(User).filter(User.role == "ADMIN").first()
     if admin:
+        assign_default_organization(admin, db)
+        db.commit()
         return
     existing = db.query(User).filter(User.email == settings.ADMIN_EMAIL).first()
     if existing:
@@ -76,17 +79,19 @@ def create_default_admin(db: Session) -> None:
         existing.hashed_password = get_password_hash(settings.ADMIN_PASSWORD)
         existing.role = "ADMIN"
         existing.is_active = True
+        assign_default_organization(existing, db)
         db.commit()
         return
-    db.add(
-        User(
-            name=settings.ADMIN_NAME,
-            email=settings.ADMIN_EMAIL,
-            hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
-            role="ADMIN",
-            is_active=True,
-        )
+    user = User(
+        name=settings.ADMIN_NAME,
+        email=settings.ADMIN_EMAIL,
+        hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
+        role="ADMIN",
+        is_active=True,
     )
+    db.add(user)
+    db.flush()
+    assign_default_organization(user, db)
     db.commit()
 
 
@@ -133,6 +138,7 @@ async def lifespan(app: FastAPI):
         Base.metadata.create_all(bind=engine)
         ensure_phase2_columns(engine)
         ensure_phase35_columns(engine)
+        ensure_phase8_organization_schema(engine)
         ensure_performance_indexes(engine)
     db = SessionLocal()
     try:

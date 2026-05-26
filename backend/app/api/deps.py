@@ -22,6 +22,8 @@ class AuthenticatedUser:
     role: str
     is_active: bool
     created_at: datetime
+    organization_id: Optional[int] = None
+    organization_name: Optional[str] = None
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -43,6 +45,8 @@ def _user_from_token_payload(payload: dict) -> Optional[AuthenticatedUser]:
         role=payload["role"],
         is_active=bool(payload["is_active"]),
         created_at=datetime.fromisoformat(payload["created_at"]),
+        organization_id=payload.get("organization_id"),
+        organization_name=payload.get("organization_name"),
     )
 
 
@@ -62,7 +66,7 @@ def get_current_user(
     if not email:
         raise credentials_exception
     token_user = _user_from_token_payload(payload)
-    if token_user and token_user.is_active:
+    if token_user and token_user.is_active and token_user.organization_id is not None:
         return token_user
     user = db.query(User).filter(User.email == email).first()
     if not user or not user.is_active:
@@ -74,6 +78,8 @@ def get_current_user(
         role=user.role,
         is_active=user.is_active,
         created_at=user.created_at,
+        organization_id=user.organization_id,
+        organization_name=user.organization_name,
     )
 
 

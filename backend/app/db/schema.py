@@ -1,5 +1,13 @@
-from sqlalchemy import inspect, text
+from datetime import datetime
+
+from sqlalchemy import Boolean, Column, DateTime, Integer, MetaData, String, Table, inspect, text
 from sqlalchemy.engine import Engine
+
+from app.services.organization_scope_service import (
+    DEFAULT_ORGANIZATION_NAME,
+    DEFAULT_ORGANIZATION_SLUG,
+    DEFAULT_ORGANIZATION_TYPE,
+)
 
 
 SHIPMENT_PHASE2_COLUMNS = {
@@ -23,6 +31,38 @@ PARTY_PHASE35_COLUMNS = {
     "deactivated_by": "INTEGER NULL REFERENCES users(id)",
     "deactivation_reason": "TEXT NULL",
 }
+
+
+def ensure_phase8_organization_schema(engine: Engine) -> None:
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+
+    with engine.begin() as connection:
+        _ensure_organizations_table(connection)
+        connection.execute(
+            text("CREATE UNIQUE INDEX IF NOT EXISTS ix_organizations_slug ON organizations (slug)")
+        )
+
+        if "users" in table_names:
+            existing_user_columns = {column["name"] for column in inspector.get_columns("users")}
+            if "organization_id" not in existing_user_columns:
+                connection.execute(
+                    text("ALTER TABLE users ADD COLUMN organization_id INTEGER NULL REFERENCES organizations(id)")
+                )
+            connection.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_users_organization_id ON users (organization_id)")
+            )
+            default_org_id = _ensure_default_organization(connection)
+            connection.execute(
+                text(
+                    "UPDATE users "
+                    "SET organization_id = :organization_id "
+                    "WHERE organization_id IS NULL"
+                ),
+                {"organization_id": default_org_id},
+            )
+        else:
+            _ensure_default_organization(connection)
 
 
 def ensure_phase2_columns(engine: Engine) -> None:
@@ -93,3 +133,43 @@ def _ensure_cancelled_task_status_value(connection, inspector) -> None:
 
 def _quote_identifier(identifier: str) -> str:
     return '"' + identifier.replace('"', '""') + '"'
+
+
+def _ensure_organizations_table(connection) -> None:
+    metadata = MetaData()
+    organizations = Table(
+        "organizations",
+        metadata,
+        Column("id", Integer, primary_key=True, index=True),
+        Column("name", String(255), nullable=False),
+        Column("slug", String(255), nullable=False, unique=True, index=True),
+        Column("org_type", String(50), nullable=False),
+        Column("is_active", Boolean, nullable=False),
+        Column("created_at", DateTime, nullable=False),
+        Column("updated_at", DateTime, nullable=False),
+    )
+    organizations.create(connection, checkfirst=True)
+
+
+def _ensure_default_organization(connection) -> int:
+    now = datetime.utcnow()
+    connection.execute(
+        text(
+            "INSERT INTO organizations (name, slug, org_type, is_active, created_at, updated_at) "
+            "SELECT :name, :slug, :org_type, :is_active, :created_at, :updated_at "
+            "WHERE NOT EXISTS (SELECT 1 FROM organizations WHERE slug = :slug)"
+        ),
+        {
+            "name": DEFAULT_ORGANIZATION_NAME,
+            "slug": DEFAULT_ORGANIZATION_SLUG,
+            "org_type": DEFAULT_ORGANIZATION_TYPE,
+            "is_active": True,
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+    default_org_id = connection.execute(
+        text("SELECT id FROM organizations WHERE slug = :slug"),
+        {"slug": DEFAULT_ORGANIZATION_SLUG},
+    ).scalar_one()
+    return int(default_org_id)

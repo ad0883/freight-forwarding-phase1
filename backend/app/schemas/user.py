@@ -31,5 +31,7 @@ class AdminPasswordResetRequest(BaseModel):
 class UserRead(UserBase):
     id: int
     created_at: datetime
+    organization_id: Optional[int] = None
+    organization_name: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)

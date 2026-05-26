@@ -6,6 +6,7 @@ from app.core.security import get_password_hash
 from app.models.user import User
 from app.schemas.user import AdminPasswordResetRequest, UserCreate, UserRead, UserUpdate
 from app.services.audit_service import changed_fields, record_audit_log
+from app.services.organization_scope_service import assign_default_organization
 
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -36,6 +37,8 @@ def create_user(
         is_active=user_in.is_active,
     )
     db.add(user)
+    db.flush()
+    assign_default_organization(user, db)
     db.commit()
     db.refresh(user)
     record_audit_log(

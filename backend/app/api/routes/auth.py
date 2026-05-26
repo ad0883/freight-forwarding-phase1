@@ -11,6 +11,7 @@ from app.models.user import User
 from app.schemas.auth import ChangePasswordRequest, ChangePasswordResponse, Token, UserRegister
 from app.schemas.user import UserRead
 from app.services.audit_service import record_audit_log
+from app.services.organization_scope_service import assign_default_organization
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -34,6 +35,8 @@ def register(
         is_active=True,
     )
     db.add(user)
+    db.flush()
+    assign_default_organization(user, db)
     db.commit()
     db.refresh(user)
     record_audit_log(
@@ -72,6 +75,8 @@ def login(
             "role": user.role,
             "is_active": user.is_active,
             "created_at": user.created_at.isoformat(),
+            "organization_id": user.organization_id,
+            "organization_name": user.organization_name,
         },
     )
     return Token(access_token=access_token)
