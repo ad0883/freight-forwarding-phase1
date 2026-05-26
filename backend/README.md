@@ -94,7 +94,7 @@ issues. The AI assistant can summarize validation issues and recent events in
 read-only mode.
 
 For migration instructions, run `alembic upgrade head` to apply
-`phase9_event_validation_foundation`. Existing databases are not modified
+`phase9_event_validation`. Existing databases are not modified
 destructively. Local fresh databases keep working through `AUTO_CREATE_TABLES`.
 
 ## Default Admin

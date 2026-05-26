@@ -1,6 +1,6 @@
 """Add Phase 9 event validation foundation.
 
-Revision ID: phase9_event_validation_foundation
+Revision ID: phase9_event_validation
 Revises: phase8_organization_foundation
 Create Date: 2026-05-26
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy import inspect
 
 
-revision: str = "phase9_event_validation_foundation"
+revision: str = "phase9_event_validation"
 down_revision: Union[str, None] = "phase8_organization_foundation"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
