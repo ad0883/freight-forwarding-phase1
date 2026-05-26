@@ -594,6 +594,7 @@ def _audit_and_operational_event(
         },
         metadata=safe_metadata,
         request=request,
+        run_validation=False,
     )
 
 

@@ -304,19 +304,73 @@ function ShipmentDetailPage() {
       formData.append('version_label', uploadDraft.version_label || '');
       formData.append('notes', uploadDraft.notes || '');
       formData.append('review_status', uploadDraft.review_status);
-      await api.post(`/shipments/${id}/document-versions/upload`, formData);
-      const [documentsResponse] = await Promise.all([
-        api.get(`/documents/shipment/${id}`),
-        loadDocumentLibrary(),
-      ]);
-      setDocuments(documentsResponse.data);
+      const response = await api.post(`/shipments/${id}/document-versions/upload`, formData, {
+        timeout: 60000,
+      });
+      applyUploadedVersion(response.data);
       setUploadTarget(null);
       setUploadDraft(emptyUploadDraft());
       setNotice('Document version uploaded');
+      refreshDocumentsAfterUpload().catch(() => {
+        setNotice('Document version uploaded. Refresh the page if the latest details do not appear.');
+      });
     } catch (err) {
-      setError(err.response?.data?.detail || 'Unable to upload document version');
+      const recovered = await recoverUploadStateAfterError();
+      if (recovered) {
+        setUploadTarget(null);
+        setUploadDraft(emptyUploadDraft());
+        setNotice('Document upload completed, but the response was interrupted. The latest document state is loaded.');
+      } else {
+        setError(err.response?.data?.detail || 'Unable to upload document version');
+      }
     } finally {
       setDocumentBusy(false);
+    }
+  }
+
+  function applyUploadedVersion(version) {
+    setDocuments((current) =>
+      current.map((document) => {
+        if (document.id !== version.document_id) return document;
+        return {
+          ...document,
+          current_version_id: version.id,
+          current_version_no: version.version_no,
+          current_review_status: version.review_status,
+          uploaded_file_count: Number(document.uploaded_file_count || 0) + 1,
+          latest_uploaded_at: version.created_at,
+          latest_file_name: version.file?.sanitized_filename || document.latest_file_name,
+        };
+      })
+    );
+  }
+
+  async function refreshDocumentsAfterUpload() {
+    const [documentsResponse, libraryResponse] = await Promise.all([
+      api.get(`/documents/shipment/${id}`),
+      api.get(`/shipments/${id}/document-library`),
+    ]);
+    setDocuments(documentsResponse.data);
+    setDocumentLibrary(libraryResponse.data);
+  }
+
+  async function recoverUploadStateAfterError() {
+    if (!uploadTarget) return false;
+    try {
+      const beforeVersionId = uploadTarget.current_version_id || null;
+      const [documentsResponse, libraryResponse] = await Promise.all([
+        api.get(`/documents/shipment/${id}`),
+        api.get(`/shipments/${id}/document-library`).catch(() => ({ data: documentLibrary })),
+      ]);
+      setDocuments(documentsResponse.data);
+      setDocumentLibrary(libraryResponse.data);
+      const refreshed = documentsResponse.data.find((document) => document.id === uploadTarget.id);
+      return Boolean(
+        refreshed?.current_version_id
+        && refreshed.current_version_id !== beforeVersionId
+      );
+    } catch (_refreshError) {
+      return false;
     }
   }
 
