@@ -147,6 +147,7 @@ function ShipmentDetailPage() {
   const [uploadTarget, setUploadTarget] = useState(null);
   const [uploadDraft, setUploadDraft] = useState(emptyUploadDraft());
   const [historyTarget, setHistoryTarget] = useState(null);
+  const [detailTarget, setDetailTarget] = useState(null);
   const [versionHistory, setVersionHistory] = useState([]);
   const [historyEvents, setHistoryEvents] = useState({});
   const [documentBusy, setDocumentBusy] = useState(false);
@@ -284,6 +285,7 @@ function ShipmentDetailPage() {
     setUploadTarget(documentRow);
     setUploadDraft(emptyUploadDraft());
     setHistoryTarget(null);
+    setDetailTarget(null);
   }
 
   async function uploadDocumentVersion(event) {
@@ -322,6 +324,7 @@ function ShipmentDetailPage() {
     setDocumentBusy(true);
     setHistoryTarget(document);
     setUploadTarget(null);
+    setDetailTarget(null);
     setHistoryEvents({});
     try {
       const response = await api.get(`/shipments/${id}/document-versions`, {
@@ -390,7 +393,8 @@ function ShipmentDetailPage() {
     setNotice('');
     let payload = {};
     if (action === 'reject' || action === 'archive' || action === 'rollback') {
-      const reason = window.prompt(`${action} ${version.document_type} v${version.version_no}`, '');
+      const actionLabel = action === 'archive' ? 'Remove upload' : action === 'rollback' ? 'Restore version' : 'Reject version';
+      const reason = window.prompt(`${actionLabel}: ${version.document_type} v${version.version_no}`, '');
       if (reason === null) return;
       payload = action === 'archive' || action === 'rollback' ? { reason } : { notes: reason };
     }
@@ -405,7 +409,7 @@ function ShipmentDetailPage() {
       const pastTense = {
         approve: 'approved',
         reject: 'rejected',
-        archive: 'archived',
+        archive: 'removed from current documents',
         rollback: 'restored',
       }[action];
       setNotice(`Document version ${pastTense}`);
@@ -788,7 +792,6 @@ function ShipmentDetailPage() {
                     <th>Document</th>
                     <th>Checklist</th>
                     <th>Uploaded Version</th>
-                    <th>Link & Notes</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -827,34 +830,14 @@ function ShipmentDetailPage() {
                         )}
                       </td>
                       <td>
-                        <div className="document-link-notes">
-                          <div className="link-cell">
-                            <input
-                              value={document.file_url || ''}
-                              disabled={!canWrite}
-                              onChange={(event) => updateDocument(document.id, 'file_url', event.target.value)}
-                              placeholder="External file URL"
-                            />
-                            {document.file_url && (
-                              <a href={document.file_url} target="_blank" rel="noreferrer" title="Open link">
-                                <ExternalLink size={16} />
-                              </a>
-                            )}
-                          </div>
-                          <input
-                            value={document.notes || ''}
-                            disabled={!canWrite}
-                            onChange={(event) => updateDocument(document.id, 'notes', event.target.value)}
-                            placeholder="Notes"
-                          />
-                        </div>
-                      </td>
-                      <td>
                         <div className="row-actions document-row-actions">
                           {canWrite && (
                             <>
                               <button className="icon-button" type="button" onClick={() => saveDocument(document)} title="Save checklist row">
                                 <Save size={16} />
+                              </button>
+                              <button className="icon-button" type="button" onClick={() => setDetailTarget(detailTarget?.id === document.id ? null : document)} title="Edit link and notes">
+                                <Edit3 size={16} />
                               </button>
                               <button className="secondary-button" type="button" onClick={() => openUpload(document)}>
                                 <UploadCloud size={16} />
@@ -876,8 +859,8 @@ function ShipmentDetailPage() {
                                 status: 'active',
                               }, 'archive')}
                             >
-                              <Archive size={16} />
-                              <span>Archive upload</span>
+                              <Trash2 size={16} />
+                              <span>Remove upload</span>
                             </button>
                           )}
                         </div>
@@ -886,6 +869,55 @@ function ShipmentDetailPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+          {detailTarget && (
+            <div className="inline-panel document-details-panel">
+              <div className="panel-header">
+                <h3>{detailTarget.doc_type} Details</h3>
+                <button className="secondary-button" type="button" onClick={() => setDetailTarget(null)}>
+                  Close
+                </button>
+              </div>
+              <div className="form-grid">
+                <label>
+                  External File URL
+                  <div className="link-cell">
+                    <input
+                      value={(documents.find((item) => item.id === detailTarget.id)?.file_url) || ''}
+                      disabled={!canWrite}
+                      onChange={(event) => updateDocument(detailTarget.id, 'file_url', event.target.value)}
+                      placeholder="External file URL"
+                    />
+                    {documents.find((item) => item.id === detailTarget.id)?.file_url && (
+                      <a href={documents.find((item) => item.id === detailTarget.id)?.file_url} target="_blank" rel="noreferrer" title="Open link">
+                        <ExternalLink size={16} />
+                      </a>
+                    )}
+                  </div>
+                </label>
+                <label>
+                  Notes
+                  <input
+                    value={(documents.find((item) => item.id === detailTarget.id)?.notes) || ''}
+                    disabled={!canWrite}
+                    onChange={(event) => updateDocument(detailTarget.id, 'notes', event.target.value)}
+                    placeholder="Notes"
+                  />
+                </label>
+                {canWrite && (
+                  <div className="form-actions span-2">
+                    <button
+                      className="primary-button"
+                      type="button"
+                      onClick={() => saveDocument(documents.find((item) => item.id === detailTarget.id) || detailTarget)}
+                    >
+                      <Save size={18} />
+                      <span>Save Details</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
           {uploadTarget && (
@@ -1017,8 +1049,8 @@ function ShipmentDetailPage() {
                               )}
                               {canAdmin && version.status !== 'archived' && (
                                 <button className="secondary-button danger-text" type="button" onClick={() => runVersionAction(version, 'archive')}>
-                                  <Archive size={16} />
-                                  <span>Archive</span>
+                                  <Trash2 size={16} />
+                                  <span>Remove</span>
                                 </button>
                               )}
                               {canAdmin && !version.is_current && version.status !== 'archived' && version.status !== 'rejected' && (
@@ -1048,10 +1080,8 @@ function ShipmentDetailPage() {
             </div>
           )}
           {documentLibrary.length > 0 && (
-            <div className="inline-panel">
-              <div className="panel-header">
-                <h3>Document Library</h3>
-              </div>
+            <details className="inline-panel document-library-panel">
+              <summary>Document Library</summary>
               <div className="document-library-grid">
                 {documentLibrary.map((item) => (
                   <article className="document-library-row" key={`${item.document_id || 'custom'}-${item.document_type}`}>
@@ -1075,7 +1105,7 @@ function ShipmentDetailPage() {
                   </article>
                 ))}
               </div>
-            </div>
+            </details>
           )}
         </section>
       )}
