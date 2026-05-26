@@ -68,6 +68,25 @@ See:
 - `../MASTER_1_1_GAP_MAP.md`
 - `../docs/EVENT_VALIDATION_FOUNDATION.md`
 - `../docs/PHASE_9_EVENT_VALIDATION_RULE_ENGINE.md`
+- `../docs/PHASE_11_CONTAINER_LIFECYCLE_DEMURRAGE_DETENTION.md`
+
+## Phase 11 Container Lifecycle + Demurrage/Detention
+
+Phase 11 adds first-class containers, append-only container events, separated
+demurrage and detention engines, dedicated APIs at `/api/containers` and
+`/api/shipments/{id}/containers`, container risk notifications, validation
+rules, and a dashboard widget. It does not change Phase 3 charges, Phase 7
+notifications, Phase 9 events/validation pipelines, or the existing
+shipment-level `Demurrage` table - that table stays for legacy data.
+
+Run `alembic upgrade head` to apply `phase11_container_lifecycle`. Existing
+shipment fields like `shipment.container_no` and `shipment.container_type`
+remain untouched. Use the ADMIN-only backfill endpoint
+`POST /api/containers/backfill-from-shipments` (dry-run by default) to migrate
+legacy text into Container rows safely.
+
+See `../docs/PHASE_11_CONTAINER_LIFECYCLE_DEMURRAGE_DETENTION.md` for the full
+state lists, API contract, validation rules, and notification dedupe scheme.
 
 ## Phase 9 Event Validation Rule Engine
 

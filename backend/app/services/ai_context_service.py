@@ -74,6 +74,18 @@ def build_ai_context(
         return _validation_issues_context(db, question, limit)
     if intent == "events_recent":
         return _recent_events_context(db, question, limit)
+    if intent == "container_summary":
+        return _container_summary_context(db, question, shipment_code, request.shipment_id, limit)
+    if intent == "container_status_lookup":
+        return _container_status_context(db, question, limit)
+    if intent == "container_demurrage_risk":
+        return _container_risk_context(db, question, "demurrage", limit)
+    if intent == "container_detention_risk":
+        return _container_risk_context(db, question, "detention", limit)
+    if intent == "container_empty_return_overdue":
+        return _container_empty_return_overdue_context(db, question, limit)
+    if intent == "container_shipment_exposure":
+        return _container_shipment_exposure_context(db, question, shipment_code, request.shipment_id)
     if intent == "notifications_summary" and current_user:
         return _notifications_summary_context(db, question, current_user)
     if intent == "general_dashboard_summary":
@@ -131,6 +143,20 @@ def _detect_intent(question: str, shipment_code: Optional[str]) -> str:
         return "validation_issues_summary"
     if "recent event" in text or "recent events" in text or "what events" in text or "what recent events" in text:
         return "events_recent"
+    if "empty return" in text and ("overdue" in text or "late" in text):
+        return "container_empty_return_overdue"
+    if "container" in text and ("demurrage" in text and "risk" in text):
+        return "container_demurrage_risk"
+    if "container" in text and ("detention" in text and "risk" in text):
+        return "container_detention_risk"
+    if shipment_code and ("demurrage exposure" in text or "container exposure" in text):
+        return "container_shipment_exposure"
+    if "container" in text and "status" in text and not shipment_code:
+        return "container_status_lookup"
+    if "container" in text and shipment_code:
+        return "container_summary"
+    if "container" in text and ("status of" in text or "show container" in text):
+        return "container_status_lookup"
     if "notification" in text or "urgent issue" in text or "needs attention" in text or "need attention" in text:
         return "notifications_summary"
     if "archived" in text and "shipment" in text:
@@ -695,6 +721,216 @@ def _unknown_context(question: str) -> AIContextBundle:
         question=question,
         summary="No specific database context matched this question.",
         result_note="The system does not have enough scoped data to answer this question.",
+    )
+
+
+def _container_summary_context(
+    db: Session,
+    question: str,
+    shipment_code: Optional[str],
+    shipment_id: Optional[int],
+    limit: int,
+) -> AIContextBundle:
+    from app.models.container import Container
+
+    shipment = _get_shipment(db, shipment_code, shipment_id)
+    if not shipment:
+        return AIContextBundle(
+            intent="container_summary",
+            question=question,
+            summary="Shipment not found.",
+            result_note="I could not find that shipment.",
+        )
+    rows = (
+        db.query(Container)
+        .filter(Container.shipment_id == shipment.id, Container.is_active.is_(True))
+        .order_by(Container.id.asc())
+        .limit(limit)
+        .all()
+    )
+    records = [
+        {
+            "container_number": container.container_number,
+            "current_status": container.current_status,
+            "container_size": container.container_size,
+            "container_type": container.container_type,
+            "delivery_date": container.delivery_date,
+            "empty_return_deadline": container.empty_return_deadline,
+        }
+        for container in rows
+    ]
+    return AIContextBundle(
+        intent="container_summary",
+        question=question,
+        shipment_code=shipment.shipment_code,
+        summary=f"Showing {len(records)} container(s) for {shipment.shipment_code}.",
+        records=records,
+        data_points=[
+            AIDataPoint(label="Containers", value=str(len(records))),
+        ],
+        priority="info" if records else "none",
+    )
+
+
+def _container_status_context(db: Session, question: str, limit: int) -> AIContextBundle:
+    from app.models.container import Container
+
+    text = question.upper()
+    match = re.search(r"\b[A-Z]{4}\d{7}\b", text)
+    if not match:
+        return AIContextBundle(
+            intent="container_status_lookup",
+            question=question,
+            summary="No container number recognized.",
+            result_note="Please include an ISO container number (e.g. ABCD1234567).",
+        )
+    container_number = match.group(0)
+    container = (
+        db.query(Container)
+        .filter(Container.container_number == container_number)
+        .order_by(Container.updated_at.desc())
+        .first()
+    )
+    if not container:
+        return AIContextBundle(
+            intent="container_status_lookup",
+            question=question,
+            summary=f"Container {container_number} not found.",
+            result_note="No active container record matches that number.",
+        )
+    return AIContextBundle(
+        intent="container_status_lookup",
+        question=question,
+        summary=f"Status for container {container.container_number}.",
+        records=[
+            {
+                "container_number": container.container_number,
+                "shipment_id": container.shipment_id,
+                "current_status": container.current_status,
+                "delivery_date": container.delivery_date,
+                "empty_return_deadline": container.empty_return_deadline,
+            }
+        ],
+        data_points=[
+            AIDataPoint(label="Container", value=container.container_number),
+            AIDataPoint(label="Status", value=container.current_status),
+        ],
+        priority="info",
+    )
+
+
+def _container_risk_context(db: Session, question: str, kind: str, limit: int) -> AIContextBundle:
+    from app.services.demurrage_detention_service import list_recent_container_risk
+
+    rows = list_recent_container_risk(db, limit=limit * 4)
+    filtered: list[dict[str, Any]] = []
+    for row in rows:
+        status_value = row.get(f"{kind}_status")
+        if status_value in {"running", "estimated"} and row.get(f"{kind}_estimated_amount"):
+            filtered.append(row)
+        if len(filtered) >= limit:
+            break
+    if not filtered:
+        return AIContextBundle(
+            intent=f"container_{kind}_risk",
+            question=question,
+            summary=f"No containers currently show {kind} risk.",
+            priority="none",
+        )
+    return AIContextBundle(
+        intent=f"container_{kind}_risk",
+        question=question,
+        summary=f"{len(filtered)} container(s) with {kind} risk.",
+        records=filtered,
+        data_points=[
+            AIDataPoint(label=f"{kind.title()} risk containers", value=str(len(filtered))),
+        ],
+        priority="warning" if filtered else "none",
+    )
+
+
+def _container_empty_return_overdue_context(
+    db: Session, question: str, limit: int
+) -> AIContextBundle:
+    from app.models.container import Container
+
+    today = date.today()
+    rows = (
+        db.query(Container)
+        .filter(
+            Container.is_active.is_(True),
+            Container.empty_return_deadline.isnot(None),
+            Container.empty_return_date.is_(None),
+            Container.empty_return_deadline < today,
+        )
+        .order_by(Container.empty_return_deadline.asc())
+        .limit(limit)
+        .all()
+    )
+    records = [
+        {
+            "container_number": container.container_number,
+            "shipment_id": container.shipment_id,
+            "current_status": container.current_status,
+            "empty_return_deadline": container.empty_return_deadline,
+        }
+        for container in rows
+    ]
+    return AIContextBundle(
+        intent="container_empty_return_overdue",
+        question=question,
+        summary=f"{len(records)} container(s) overdue on empty return.",
+        records=records,
+        data_points=[
+            AIDataPoint(label="Overdue containers", value=str(len(records))),
+        ],
+        priority="critical" if records else "none",
+    )
+
+
+def _container_shipment_exposure_context(
+    db: Session,
+    question: str,
+    shipment_code: Optional[str],
+    shipment_id: Optional[int],
+) -> AIContextBundle:
+    shipment = _get_shipment(db, shipment_code, shipment_id)
+    if not shipment:
+        return AIContextBundle(
+            intent="container_shipment_exposure",
+            question=question,
+            summary="Shipment not found.",
+            result_note="I could not find that shipment.",
+        )
+    from app.services.demurrage_detention_service import refresh_shipment_container_exposure
+
+    snapshots = refresh_shipment_container_exposure(db, shipment.id)
+    if not snapshots:
+        return AIContextBundle(
+            intent="container_shipment_exposure",
+            question=question,
+            shipment_code=shipment.shipment_code,
+            summary=f"{shipment.shipment_code} has no containers yet.",
+        )
+    demurrage_total = sum(s.demurrage_estimated_amount for s in snapshots)
+    detention_total = sum(s.detention_estimated_amount for s in snapshots)
+    return AIContextBundle(
+        intent="container_shipment_exposure",
+        question=question,
+        shipment_code=shipment.shipment_code,
+        summary=f"Container exposure for {shipment.shipment_code}.",
+        totals={
+            "containers": len(snapshots),
+            "demurrage_total": demurrage_total,
+            "detention_total": detention_total,
+            "currency": snapshots[0].currency,
+        },
+        data_points=[
+            AIDataPoint(label="Containers", value=str(len(snapshots))),
+            AIDataPoint(label="Demurrage", value=f"{snapshots[0].currency} {demurrage_total}"),
+            AIDataPoint(label="Detention", value=f"{snapshots[0].currency} {detention_total}"),
+        ],
+        priority="warning" if (demurrage_total or detention_total) else "info",
     )
 
 

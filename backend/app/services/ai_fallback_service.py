@@ -32,6 +32,16 @@ def _answer_for_context(context: AIContextBundle) -> str:
         return _validation_issues_answer(context)
     if context.intent == "events_recent":
         return _recent_events_answer(context)
+    if context.intent == "container_summary":
+        return _container_summary_answer(context)
+    if context.intent == "container_status_lookup":
+        return _container_status_answer(context)
+    if context.intent in {"container_demurrage_risk", "container_detention_risk"}:
+        return _container_risk_answer(context)
+    if context.intent == "container_empty_return_overdue":
+        return _container_empty_return_answer(context)
+    if context.intent == "container_shipment_exposure":
+        return _container_shipment_exposure_answer(context)
     if context.intent in {"shipment_status", "shipment_detail"}:
         return _shipment_answer(context)
     if context.intent == "workflow_next_action":
@@ -210,3 +220,53 @@ def _recent_events_answer(context: AIContextBundle) -> str:
         for row in context.records[:5]
     ]
     return "Recent operational events: " + "; ".join(lines)
+
+
+def _container_summary_answer(context: AIContextBundle) -> str:
+    if not context.records:
+        return f"{context.shipment_code or 'This shipment'} has no containers yet."
+    lines = [
+        f"{row.get('container_number')} ({row.get('current_status')})"
+        for row in context.records[:5]
+    ]
+    return f"Containers for {context.shipment_code}: " + "; ".join(lines)
+
+
+def _container_status_answer(context: AIContextBundle) -> str:
+    if not context.records:
+        return context.result_note or "No container matches that number."
+    row = context.records[0]
+    return (
+        f"Container {row.get('container_number')} status is {row.get('current_status')}."
+    )
+
+
+def _container_risk_answer(context: AIContextBundle) -> str:
+    if not context.records:
+        return f"No containers currently show {context.intent.replace('_', ' ')}."
+    lines = [
+        f"{row.get('container_number')} on shipment {row.get('shipment_code')} ({row.get(context.intent.split('_')[1] + '_status')})"
+        for row in context.records[:5]
+    ]
+    return f"{context.intent.replace('_', ' ').title()}: " + "; ".join(lines)
+
+
+def _container_empty_return_answer(context: AIContextBundle) -> str:
+    if not context.records:
+        return "No containers are overdue on empty return."
+    lines = [
+        f"{row.get('container_number')} (deadline {row.get('empty_return_deadline')})"
+        for row in context.records[:5]
+    ]
+    return "Overdue empty returns: " + "; ".join(lines)
+
+
+def _container_shipment_exposure_answer(context: AIContextBundle) -> str:
+    totals = context.totals or {}
+    if not totals:
+        return f"No container exposure recorded for {context.shipment_code}."
+    return (
+        f"{context.shipment_code} has {totals.get('containers', 0)} container(s); "
+        f"demurrage estimate {totals.get('currency', 'INR')} {totals.get('demurrage_total', 0)}, "
+        f"detention estimate {totals.get('currency', 'INR')} {totals.get('detention_total', 0)}."
+    )

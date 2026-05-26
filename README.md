@@ -28,6 +28,7 @@ Phase 1 implementation of a freight forwarding operations system with a FastAPI 
 - Phase 6 production hardening with audit logs, admin user lifecycle controls, status checks, CSV exports, dry-run cleanup, and password-change settings
 - Phase 7 internal notification center with per-user read/dismiss state, workflow reminder checks, daily operations summary, notification rules, and AI read-only attention summaries
 - Phase 9 operational event log, deterministic validation rule engine, and reviewable validation issues feeding deduped manual-review notifications
+- Phase 11 multi-container support with append-only container events, separated demurrage/detention engines, container risk dashboard widget, and a safe legacy-field backfill
 
 ## Backend Local Setup
 
@@ -280,6 +281,19 @@ Phase 9 adds the first operational-brain layer beside the existing flows:
 - The AI assistant can summarize validation issues and recent events read-only.
 
 Phase 9 cannot mutate shipments, tasks, charges, documents, BL records, parties, users, or Gmail records. See `docs/PHASE_9_EVENT_VALIDATION_RULE_ENGINE.md` for architecture, models, default rules, and the planned Phase 10 transition.
+
+## Phase 11 Container Lifecycle + Demurrage/Detention
+
+Phase 11 makes containers first-class operational entities:
+
+- Each shipment can have multiple containers with their own lifecycle dates and append-only event history.
+- Demurrage and detention are calculated by separate engines using container-level overrides, optional `DemurrageDetentionRule` rows, and safe defaults (7 free days, INR 50/day).
+- Container risk surfaces through deduped notifications (`container_demurrage_running:{id}`, `container_detention_running:{id}`, `container_empty_return_overdue:{id}`) and a dashboard widget.
+- Validation rules cover ISO container number format, duplicate active containers, loaded-before-gate-in, delivered-before-DO, empty-return-before-delivery, gate-in-after-cutoff, and partial-delivery info.
+- `POST /api/containers/backfill-from-shipments` is ADMIN-only and dry-run by default. It splits comma-separated legacy container numbers into individual containers without overwriting existing records.
+- Container amounts and statuses never auto-create Phase 3 charges. Charges remain user-driven.
+
+See `../docs/PHASE_11_CONTAINER_LIFECYCLE_DEMURRAGE_DETENTION.md` for full state lists, APIs, and integration details.
 
 ## Phase 1 Limitations
 
