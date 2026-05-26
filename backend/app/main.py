@@ -16,6 +16,7 @@ from app.api.routes import (
     demurrage,
     documents,
     email,
+    events,
     exports,
     followups,
     health,
@@ -23,15 +24,22 @@ from app.api.routes import (
     parties,
     charges,
     reports,
+    rules,
     shipments,
     tasks,
     users,
+    validation_issues,
 )
 from app.api.deps import AuthenticatedUser
 from app.core.config import settings
 from app.core.security import get_password_hash
 from app.db.indexes import ensure_performance_indexes
-from app.db.schema import ensure_phase2_columns, ensure_phase35_columns, ensure_phase8_organization_schema
+from app.db.schema import (
+    ensure_phase2_columns,
+    ensure_phase35_columns,
+    ensure_phase8_organization_schema,
+    ensure_phase9_event_validation_schema,
+)
 from app.db.session import Base, SessionLocal, engine
 from app.models import User
 from app.services.alert_service import create_overdue_task_alerts
@@ -39,6 +47,7 @@ from app.services.daily_summary_service import build_daily_summary
 from app.services.dashboard_service import warm_dashboard_cache
 from app.services.notification_service import seed_default_notification_rules
 from app.services.organization_scope_service import assign_default_organization
+from app.services.rule_engine import seed_default_rule_definitions
 from app.services.workflow_notification_service import run_notification_checks
 
 
@@ -139,11 +148,13 @@ async def lifespan(app: FastAPI):
         ensure_phase2_columns(engine)
         ensure_phase35_columns(engine)
         ensure_phase8_organization_schema(engine)
+        ensure_phase9_event_validation_schema(engine)
         ensure_performance_indexes(engine)
     db = SessionLocal()
     try:
         create_default_admin(db)
         seed_default_notification_rules(db)
+        seed_default_rule_definitions(db)
         warm_dashboard_cache(db)
     finally:
         db.close()
@@ -199,6 +210,9 @@ app.include_router(tasks.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")
 app.include_router(ai.router, prefix="/api")
 app.include_router(followups.router, prefix="/api")
+app.include_router(events.router, prefix="/api")
+app.include_router(validation_issues.router, prefix="/api")
+app.include_router(rules.router, prefix="/api")
 
 
 @app.get("/")

@@ -70,6 +70,10 @@ def build_ai_context(
     intent = _detect_intent(question, shipment_code)
     limit = max(1, min(max_rows, DEFAULT_TOP_LIMIT))
 
+    if intent == "validation_issues_summary":
+        return _validation_issues_context(db, question, limit)
+    if intent == "events_recent":
+        return _recent_events_context(db, question, limit)
     if intent == "notifications_summary" and current_user:
         return _notifications_summary_context(db, question, current_user)
     if intent == "general_dashboard_summary":
@@ -118,6 +122,15 @@ def _shipment_code_from_request(request: AIAskRequest) -> Optional[str]:
 
 def _detect_intent(question: str, shipment_code: Optional[str]) -> str:
     text = question.lower()
+    if (
+        "validation issue" in text
+        or "manual review" in text
+        or "failed validation" in text
+        or "broken workflow" in text
+    ):
+        return "validation_issues_summary"
+    if "recent event" in text or "recent events" in text or "what events" in text or "what recent events" in text:
+        return "events_recent"
     if "notification" in text or "urgent issue" in text or "needs attention" in text or "need attention" in text:
         return "notifications_summary"
     if "archived" in text and "shipment" in text:
@@ -589,6 +602,90 @@ def _inactive_parties_context(db: Session, question: str, max_rows: int) -> AICo
         ],
         data_points=[AIDataPoint(label="Inactive parties", value=str(len(parties)))],
         priority="info" if parties else "none",
+    )
+
+
+def _validation_issues_context(db: Session, question: str, limit: int) -> AIContextBundle:
+    from app.models.validation_issue import ValidationIssue
+
+    rows = (
+        db.query(ValidationIssue)
+        .filter(ValidationIssue.status == "open")
+        .order_by(
+            ValidationIssue.severity.desc(),
+            ValidationIssue.created_at.desc(),
+            ValidationIssue.id.desc(),
+        )
+        .limit(limit)
+        .all()
+    )
+    critical = [row for row in rows if row.severity == "critical"]
+    warning = [row for row in rows if row.severity == "warning"]
+    info = [row for row in rows if row.severity == "info"]
+    priority: AIPriority = "critical" if critical else ("warning" if warning else ("info" if info else "none"))
+    records = [
+        {
+            "rule_key": row.rule_key,
+            "entity_type": row.entity_type,
+            "entity_id": row.entity_id,
+            "shipment_id": row.shipment_id,
+            "severity": row.severity,
+            "status": row.status,
+            "message": row.message,
+            "recommended_action": row.recommended_action,
+            "created_at": row.created_at,
+        }
+        for row in rows
+    ]
+    return AIContextBundle(
+        intent="validation_issues_summary",
+        question=question,
+        summary=f"Showing {len(records)} open validation issues.",
+        records=records,
+        totals={
+            "open_count": len(rows),
+            "critical": len(critical),
+            "warning": len(warning),
+            "info": len(info),
+        },
+        data_points=[
+            AIDataPoint(label="Open issues", value=str(len(rows))),
+            AIDataPoint(label="Critical", value=str(len(critical))),
+            AIDataPoint(label="Warning", value=str(len(warning))),
+        ],
+        suggested_actions=[row.message for row in critical[:3]],
+        priority=priority,
+    )
+
+
+def _recent_events_context(db: Session, question: str, limit: int) -> AIContextBundle:
+    from app.models.operational_event import OperationalEvent
+
+    rows = (
+        db.query(OperationalEvent)
+        .order_by(OperationalEvent.created_at.desc(), OperationalEvent.id.desc())
+        .limit(limit)
+        .all()
+    )
+    records = [
+        {
+            "event_type": row.event_type,
+            "entity_type": row.entity_type,
+            "entity_label": row.entity_label,
+            "validation_status": row.validation_status,
+            "source": row.source,
+            "actor_name": row.actor_name,
+            "created_at": row.created_at,
+        }
+        for row in rows
+    ]
+    return AIContextBundle(
+        intent="events_recent",
+        question=question,
+        summary=f"Showing {len(records)} most recent operational events.",
+        records=records,
+        data_points=[AIDataPoint(label="Recent events", value=str(len(records)))],
+        priority="info" if records else "none",
     )
 
 

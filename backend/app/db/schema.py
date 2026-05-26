@@ -33,6 +33,35 @@ PARTY_PHASE35_COLUMNS = {
 }
 
 
+def ensure_phase9_event_validation_schema(engine: Engine) -> None:
+    """Ensure Phase 9 indexes exist on databases booted via create_all."""
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+
+    with engine.begin() as connection:
+        if "operational_events" in table_names:
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_operational_events_validation_status "
+                    "ON operational_events (validation_status)"
+                )
+            )
+        if "rule_definitions" in table_names:
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_rule_definitions_rule_key "
+                    "ON rule_definitions (rule_key)"
+                )
+            )
+        if "validation_issues" in table_names:
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_validation_issues_status "
+                    "ON validation_issues (status)"
+                )
+            )
+
+
 def ensure_phase8_organization_schema(engine: Engine) -> None:
     inspector = inspect(engine)
     table_names = set(inspector.get_table_names())

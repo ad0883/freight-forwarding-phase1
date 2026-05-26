@@ -67,6 +67,35 @@ See:
 
 - `../MASTER_1_1_GAP_MAP.md`
 - `../docs/EVENT_VALIDATION_FOUNDATION.md`
+- `../docs/PHASE_9_EVENT_VALIDATION_RULE_ENGINE.md`
+
+## Phase 9 Event Validation Rule Engine
+
+Phase 9 records operational events for representative actions, runs deterministic
+validation rules against each event, and persists reviewable validation issues.
+
+- Events table: `operational_events`. Browse via `GET /api/events`.
+- Validation issues table: `validation_issues`. Browse via `GET /api/validation-issues`.
+- Rule definitions table: `rule_definitions`. Browse via `GET /api/rules`.
+
+Phase 9 rules ship as non-blocking warnings. Critical issues create deduped
+internal notifications under `category=system, priority=critical`. Phase 9
+cannot mutate shipments, tasks, charges, documents, BL records, parties, users,
+or Gmail records.
+
+Frontend pages:
+
+- `/events` (ADMIN, STAFF): operational event log with filters and detail drawer.
+- `/validation-issues` (ADMIN, STAFF): issue triage with acknowledge/resolve/dismiss.
+- `/rules` (ADMIN edits, STAFF reads): toggle rule enable/blocking and severity.
+
+The dashboard adds a Validation & Manual Review widget surfacing the latest open
+issues. The AI assistant can summarize validation issues and recent events in
+read-only mode.
+
+For migration instructions, run `alembic upgrade head` to apply
+`phase9_event_validation_foundation`. Existing databases are not modified
+destructively. Local fresh databases keep working through `AUTO_CREATE_TABLES`.
 
 ## Default Admin
 

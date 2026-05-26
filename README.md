@@ -27,6 +27,7 @@ Phase 1 implementation of a freight forwarding operations system with a FastAPI 
 - Phase 5 Gmail email automation for read-only scanning, deterministic extraction, and reviewable suggestions
 - Phase 6 production hardening with audit logs, admin user lifecycle controls, status checks, CSV exports, dry-run cleanup, and password-change settings
 - Phase 7 internal notification center with per-user read/dismiss state, workflow reminder checks, daily operations summary, notification rules, and AI read-only attention summaries
+- Phase 9 operational event log, deterministic validation rule engine, and reviewable validation issues feeding deduped manual-review notifications
 
 ## Backend Local Setup
 
@@ -265,6 +266,20 @@ Phase 7 automation is intentionally limited:
 - Risky admin actions in the frontend use confirmation dialogs.
 
 Phase 6 CSV exports intentionally omit password hashes, token fields, API keys, secrets, database URLs, and environment values.
+
+## Phase 9 Event Validation Rule Engine
+
+Phase 9 adds the first operational-brain layer beside the existing flows:
+
+- Operational events are recorded for representative actions across shipments, parties, tasks, charges, documents, BL, demurrage, Gmail suggestions, and notification runs.
+- Deterministic validation rules run for each event without blocking the original action.
+- Validation issues persist in `validation_issues` with statuses `open`, `acknowledged`, `resolved`, or `dismissed`.
+- Critical issues create deduped internal notifications under `category=system`, `priority=critical`, with action URL `/validation-issues`.
+- Phase 9 frontend pages: `/events`, `/validation-issues`, and `/rules`. ADMIN can edit rule severity, enable/disable, and the blocking flag. STAFF can read rules and triage issues.
+- All Phase 9 rules ship as non-blocking warnings by default. The blocking flag captures intent for Phase 10 and is not enforced anywhere in Phase 9.
+- The AI assistant can summarize validation issues and recent events read-only.
+
+Phase 9 cannot mutate shipments, tasks, charges, documents, BL records, parties, users, or Gmail records. See `docs/PHASE_9_EVENT_VALIDATION_RULE_ENGINE.md` for architecture, models, default rules, and the planned Phase 10 transition.
 
 ## Phase 1 Limitations
 

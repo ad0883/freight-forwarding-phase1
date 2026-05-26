@@ -9,6 +9,7 @@ function DashboardPage() {
   const [financials, setFinancials] = useState(null);
   const [dailySummary, setDailySummary] = useState(null);
   const [alerts, setAlerts] = useState([]);
+  const [validationIssues, setValidationIssues] = useState(null);
   const [error, setError] = useState('');
 
   async function load() {
@@ -25,6 +26,10 @@ function DashboardPage() {
         .get('/notifications/daily-summary')
         .then((response) => setDailySummary(response.data))
         .catch(() => setDailySummary(null));
+      api
+        .get('/validation-issues', { params: { status: 'open', limit: 5 } })
+        .then((response) => setValidationIssues(response.data))
+        .catch(() => setValidationIssues(null));
     } catch (err) {
       setError(err.response?.data?.detail || 'Unable to load dashboard');
     }
@@ -165,6 +170,30 @@ function DashboardPage() {
             ))}
             {!dailySummary.top_urgent_items?.length && <p className="muted">No urgent notification items.</p>}
           </div>
+        </section>
+      )}
+
+      {validationIssues !== null && (
+        <section className="panel">
+          <div className="panel-header">
+            <h2>Validation & Manual Review</h2>
+            <Link to="/validation-issues">View all</Link>
+          </div>
+          {validationIssues.length === 0 ? (
+            <p className="muted">No open validation issues.</p>
+          ) : (
+            <div className="notification-list compact">
+              {validationIssues.map((issue) => (
+                <article className="notification-row" key={issue.id}>
+                  <span className={`badge priority-${issue.severity}`}>{issue.severity}</span>
+                  <div>
+                    <strong>{issue.rule_key}</strong>
+                    <p>{issue.message}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </section>
       )}
 

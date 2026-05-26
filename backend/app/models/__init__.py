@@ -8,11 +8,14 @@ from app.models.document import Document
 from app.models.email import EmailConnection, EmailMessageCache, EmailSuggestion
 from app.models.followup import FollowUpLog
 from app.models.notification import Notification, NotificationRule, NotificationUserState
+from app.models.operational_event import OperationalEvent
 from app.models.organization import Organization
 from app.models.party import Party
+from app.models.rule_definition import RuleDefinition
 from app.models.shipment import Shipment
 from app.models.task import Task
 from app.models.user import User
+from app.models.validation_issue import ValidationIssue
 
 __all__ = [
     "Alert",
@@ -29,9 +32,12 @@ __all__ = [
     "Notification",
     "NotificationRule",
     "NotificationUserState",
+    "OperationalEvent",
     "Organization",
     "Party",
+    "RuleDefinition",
     "Shipment",
     "Task",
     "User",
+    "ValidationIssue",
 ]

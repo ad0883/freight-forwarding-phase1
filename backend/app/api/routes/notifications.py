@@ -18,6 +18,7 @@ from app.schemas.notification import (
 )
 from app.services.audit_service import changed_fields, record_audit_log
 from app.services.daily_summary_service import build_daily_summary
+from app.services.event_service import OperationalEventType, record_operational_event
 from app.services.notification_service import (
     dismiss,
     get_unread_count,
@@ -167,6 +168,20 @@ def run_checks(
         description="Notification checks manually run.",
         metadata=result,
         request=request,
+    )
+    record_operational_event(
+        db,
+        OperationalEventType.NOTIFICATION_CHECKS_RUN.value,
+        "notification",
+        actor_user=current_user,
+        source="notification",
+        metadata={
+            "created": result.get("created"),
+            "checked_rules_count": len(result.get("checked_rules", [])),
+            "skipped_rules_count": len(result.get("skipped_rules", [])),
+        },
+        request=request,
+        run_validation=False,
     )
     return NotificationRunChecksResponse(**result)
 

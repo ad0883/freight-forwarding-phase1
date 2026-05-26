@@ -7,6 +7,7 @@ from app.schemas.demurrage import DemurrageRead, DemurrageUpdate
 from app.services.audit_service import changed_fields, record_audit_log
 from app.services.dashboard_service import invalidate_dashboard_cache
 from app.services.demurrage_service import calculate_demurrage, get_or_create_demurrage
+from app.services.event_service import OperationalEventType, diff_state, record_operational_event
 
 
 router = APIRouter(prefix="/shipments/{shipment_id}/demurrage", tags=["demurrage"])
@@ -58,6 +59,21 @@ def update_demurrage(
         entity_label=f"Shipment {shipment.shipment_code}",
         description="Demurrage updated.",
         metadata={"shipment_id": shipment.id, "fields_changed": changed_fields(before, {field: getattr(record, field, None) for field in data})},
+        request=request,
+    )
+    after_state = {field: getattr(record, field, None) for field in data}
+    record_operational_event(
+        db,
+        OperationalEventType.DEMURRAGE_UPDATED.value,
+        "demurrage",
+        entity_id=record.id,
+        entity_label=f"Shipment {shipment.shipment_code}",
+        shipment_id=shipment.id,
+        actor_user=current_user,
+        source="user",
+        previous_state=before,
+        new_state=after_state,
+        metadata={"shipment_id": shipment.id, "fields_changed": diff_state(before, after_state)},
         request=request,
     )
     return calculate_demurrage(record)

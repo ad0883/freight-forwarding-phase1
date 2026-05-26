@@ -6,6 +6,7 @@ from app.models.bl_management import BLManagement
 from app.models.shipment import Shipment
 from app.schemas.bl_management import BLManagementRead, BLManagementUpdate
 from app.services.audit_service import changed_fields, record_audit_log
+from app.services.event_service import OperationalEventType, diff_state, record_operational_event
 
 
 router = APIRouter(prefix="/shipments/{shipment_id}/bl", tags=["bl-management"])
@@ -63,6 +64,27 @@ def update_bl_management(
         entity_label=f"Shipment #{shipment_id} BL",
         description="BL management updated.",
         metadata={"shipment_id": shipment_id, "fields_changed": changed_fields(before, {field: getattr(record, field, None) for field in data})},
+        request=request,
+    )
+    after_state = {field: getattr(record, field, None) for field in data}
+    record_operational_event(
+        db,
+        OperationalEventType.BL_MANAGEMENT_UPDATED.value,
+        "bl_management",
+        entity_id=record.id,
+        entity_label=f"Shipment #{shipment_id} BL",
+        shipment_id=shipment_id,
+        actor_user=current_user,
+        source="user",
+        previous_state=before,
+        new_state={
+            "draft_received": getattr(record, "draft_received", None),
+            "approval_date": getattr(record, "approval_date", None),
+            "final_received": getattr(record, "final_received", None),
+            "bl_number": getattr(record, "bl_number", None),
+            **after_state,
+        },
+        metadata={"shipment_id": shipment_id, "fields_changed": diff_state(before, after_state)},
         request=request,
     )
     return record

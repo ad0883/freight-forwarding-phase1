@@ -10,6 +10,7 @@ from app.models.shipment import Shipment
 from app.schemas.charge import ChargeCreate, ChargeRead, ChargeUpdate, ShipmentPLSummary, is_valid_charge_status
 from app.services.audit_service import changed_fields, record_audit_log
 from app.services.dashboard_service import invalidate_dashboard_cache
+from app.services.event_service import OperationalEventType, diff_state, record_operational_event
 from app.services.finance_service import calculate_shipment_pnl
 
 
@@ -126,6 +127,24 @@ def create_charge(
         },
         request=request,
     )
+    record_operational_event(
+        db,
+        OperationalEventType.CHARGE_CREATED.value,
+        "charge",
+        entity_id=charge.id,
+        entity_label=charge.invoice_no or f"Charge #{charge.id}",
+        shipment_id=charge.shipment_id,
+        actor_user=current_user,
+        source="finance",
+        new_state={
+            "direction": charge.direction,
+            "status": charge.status,
+            "amount": str(charge.amount),
+            "currency": charge.currency,
+            "charge_type": charge.charge_type,
+        },
+        request=request,
+    )
     return _charge_read(charge)
 
 
@@ -172,6 +191,37 @@ def update_charge(
         },
         request=request,
     )
+    if action == "charge.marked_paid":
+        event_type = OperationalEventType.CHARGE_MARKED_PAID.value
+    elif action == "charge.marked_received":
+        event_type = OperationalEventType.CHARGE_MARKED_RECEIVED.value
+    else:
+        event_type = OperationalEventType.CHARGE_UPDATED.value
+    after_state = {field: getattr(charge, field, None) for field in data}
+    record_operational_event(
+        db,
+        event_type,
+        "charge",
+        entity_id=charge.id,
+        entity_label=charge.invoice_no or f"Charge #{charge.id}",
+        shipment_id=charge.shipment_id,
+        actor_user=current_user,
+        source="finance",
+        previous_state=before,
+        new_state={
+            "direction": charge.direction,
+            "status": charge.status,
+            "amount": str(charge.amount),
+            "currency": charge.currency,
+            "charge_type": charge.charge_type,
+            **after_state,
+        },
+        metadata={
+            "previous_status": previous_status,
+            "fields_changed": diff_state(before, after_state),
+        },
+        request=request,
+    )
     return _charge_read(charge)
 
 
@@ -197,6 +247,23 @@ def cancel_charge(
         entity_label=charge.invoice_no or f"Charge #{charge.id}",
         description="Charge cancelled.",
         metadata={"shipment_id": charge.shipment_id, "status": charge.status},
+        request=request,
+    )
+    record_operational_event(
+        db,
+        OperationalEventType.CHARGE_CANCELLED.value,
+        "charge",
+        entity_id=charge.id,
+        entity_label=charge.invoice_no or f"Charge #{charge.id}",
+        shipment_id=charge.shipment_id,
+        actor_user=current_user,
+        source="finance",
+        new_state={
+            "direction": charge.direction,
+            "status": charge.status,
+            "amount": str(charge.amount),
+            "currency": charge.currency,
+        },
         request=request,
     )
     return _charge_read(charge)

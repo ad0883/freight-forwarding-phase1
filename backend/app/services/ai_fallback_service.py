@@ -28,6 +28,10 @@ def _answer_for_context(context: AIContextBundle) -> str:
         return _dashboard_answer(context)
     if context.intent == "notifications_summary":
         return _notifications_summary_answer(context)
+    if context.intent == "validation_issues_summary":
+        return _validation_issues_answer(context)
+    if context.intent == "events_recent":
+        return _recent_events_answer(context)
     if context.intent in {"shipment_status", "shipment_detail"}:
         return _shipment_answer(context)
     if context.intent == "workflow_next_action":
@@ -181,3 +185,28 @@ def _inactive_parties_answer(context: AIContextBundle) -> str:
         return "No inactive parties found."
     lines = [f"{row.get('name')} ({row.get('type')})" for row in context.records[:10]]
     return "Inactive parties: " + "; ".join(lines)
+
+
+def _validation_issues_answer(context: AIContextBundle) -> str:
+    totals = context.totals
+    if not context.records:
+        return "There are no open validation issues."
+    summary = (
+        f"Open validation issues: {totals.get('open_count', 0)} "
+        f"(critical {totals.get('critical', 0)}, warning {totals.get('warning', 0)}, info {totals.get('info', 0)})."
+    )
+    items = "; ".join(
+        f"{row.get('rule_key')} on {row.get('entity_type')} #{row.get('entity_id')}"
+        for row in context.records[:5]
+    )
+    return f"{summary} {items}"
+
+
+def _recent_events_answer(context: AIContextBundle) -> str:
+    if not context.records:
+        return "No recent operational events were recorded."
+    lines = [
+        f"{row.get('event_type')} on {row.get('entity_label') or row.get('entity_type')} ({row.get('validation_status')})"
+        for row in context.records[:5]
+    ]
+    return "Recent operational events: " + "; ".join(lines)

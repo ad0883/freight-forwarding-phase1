@@ -6,13 +6,16 @@ import {
   Check,
   ClipboardList,
   FileClock,
+  GitBranch,
   LayoutDashboard,
   LogOut,
   Mail,
   Menu,
+  ScrollText,
   Settings,
-  Ship,
+  ShieldAlert,
   ShieldCheck,
+  Ship,
   Users,
   UserCog,
   X,
@@ -37,6 +40,12 @@ const adminLinks = [
   { to: '/audit-logs', label: 'Audit Logs', icon: FileClock, adminOnly: true },
   { to: '/status', label: 'Status', icon: Activity, adminOnly: true },
   { to: '/admin/tools', label: 'Admin Tools', icon: ShieldCheck, adminOnly: true },
+];
+
+const operationalBrainLinks = [
+  { to: '/events', label: 'Events', icon: ScrollText, writeRoleOnly: true },
+  { to: '/validation-issues', label: 'Validation Issues', icon: ShieldAlert, writeRoleOnly: true },
+  { to: '/rules', label: 'Rules', icon: GitBranch, writeRoleOnly: true },
 ];
 
 const bottomLinks = [
@@ -136,6 +145,9 @@ function Layout() {
   }
 
   const visibleAdminLinks = adminLinks.filter((link) => canShowLink(link, currentUser, userLoading));
+  const visibleOperationalBrainLinks = operationalBrainLinks.filter((link) =>
+    canShowLink(link, currentUser, userLoading)
+  );
 
   return (
     <div className="app-shell">
@@ -157,6 +169,17 @@ function Layout() {
                 <span>{label}</span>
               </NavLink>
             ))}
+          {visibleOperationalBrainLinks.length > 0 && (
+            <>
+              <span className="nav-section-label">Operational Brain</span>
+              {visibleOperationalBrainLinks.map(({ to, label, icon: Icon }) => (
+                <NavLink key={to} to={to}>
+                  <Icon size={18} />
+                  <span>{label}</span>
+                </NavLink>
+              ))}
+            </>
+          )}
           {visibleAdminLinks.length > 0 && (
             <>
               <span className="nav-section-label">Administration</span>

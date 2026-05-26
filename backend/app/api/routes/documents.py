@@ -6,6 +6,7 @@ from app.models.document import Document
 from app.models.shipment import Shipment
 from app.schemas.document import DocumentRead, DocumentUpdate
 from app.services.audit_service import changed_fields, record_audit_log
+from app.services.event_service import OperationalEventType, diff_state, record_operational_event
 
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -57,6 +58,26 @@ def update_document(
             "shipment_id": document.shipment_id,
             "fields_changed": changed_fields(before, {field: getattr(document, field, None) for field in data}),
         },
+        request=request,
+    )
+    after_state = {field: getattr(document, field, None) for field in data}
+    record_operational_event(
+        db,
+        OperationalEventType.DOCUMENT_UPDATED.value,
+        "document",
+        entity_id=document.id,
+        entity_label=document.doc_type,
+        shipment_id=document.shipment_id,
+        actor_user=current_user,
+        source="user",
+        previous_state=before,
+        new_state={
+            "doc_type": document.doc_type,
+            "status": document.status,
+            "file_url": getattr(document, "file_url", None),
+            **after_state,
+        },
+        metadata={"fields_changed": diff_state(before, after_state)},
         request=request,
     )
     return document

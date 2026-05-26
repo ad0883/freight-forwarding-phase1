@@ -10,6 +10,7 @@ from app.models.party import Party
 from app.models.shipment import Shipment
 from app.schemas.party import PartyCreate, PartyDeactivationRequest, PartyRead, PartyUpdate
 from app.services.audit_service import changed_fields, record_audit_log
+from app.services.event_service import OperationalEventType, diff_state, record_operational_event
 
 
 router = APIRouter(prefix="/parties", tags=["parties"])
@@ -51,6 +52,17 @@ def create_party(
         metadata={"type": party.type, "is_active": party.is_active},
         request=request,
     )
+    record_operational_event(
+        db,
+        OperationalEventType.PARTY_CREATED.value,
+        "party",
+        entity_id=party.id,
+        entity_label=party.name,
+        actor_user=current_user,
+        source="user",
+        new_state={"name": party.name, "type": party.type, "is_active": party.is_active},
+        request=request,
+    )
     return party
 
 
@@ -82,6 +94,18 @@ def deactivate_party(
         metadata={"reason_present": bool(deactivate_in.reason)},
         request=request,
     )
+    record_operational_event(
+        db,
+        OperationalEventType.PARTY_DEACTIVATED.value,
+        "party",
+        entity_id=party.id,
+        entity_label=party.name,
+        actor_user=current_user,
+        source="user",
+        new_state={"is_active": False},
+        metadata={"reason_present": bool(deactivate_in.reason)},
+        request=request,
+    )
     return party
 
 
@@ -110,6 +134,17 @@ def reactivate_party(
         entity_label=party.name,
         description="Party reactivated.",
         metadata={"is_active": party.is_active},
+        request=request,
+    )
+    record_operational_event(
+        db,
+        OperationalEventType.PARTY_REACTIVATED.value,
+        "party",
+        entity_id=party.id,
+        entity_label=party.name,
+        actor_user=current_user,
+        source="user",
+        new_state={"is_active": True},
         request=request,
     )
     return party
@@ -153,6 +188,17 @@ def delete_party(
         metadata={"deleted": True},
         request=request,
     )
+    record_operational_event(
+        db,
+        OperationalEventType.PARTY_DELETED.value,
+        "party",
+        entity_id=party_id,
+        entity_label=entity_label,
+        actor_user=current_user,
+        source="user",
+        metadata={"deleted": True},
+        request=request,
+    )
 
 
 @router.patch("/{party_id}", response_model=PartyRead)
@@ -181,6 +227,20 @@ def update_party(
         entity_label=party.name,
         description="Party updated.",
         metadata={"fields_changed": changed_fields(before, {field: getattr(party, field, None) for field in data})},
+        request=request,
+    )
+    after_state = {field: getattr(party, field, None) for field in data}
+    record_operational_event(
+        db,
+        OperationalEventType.PARTY_UPDATED.value,
+        "party",
+        entity_id=party.id,
+        entity_label=party.name,
+        actor_user=current_user,
+        source="user",
+        previous_state=before,
+        new_state=after_state,
+        metadata={"fields_changed": diff_state(before, after_state)},
         request=request,
     )
     return party

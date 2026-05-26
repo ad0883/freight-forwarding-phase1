@@ -17,6 +17,7 @@ from app.schemas.shipment import (
     WorkflowStatusUpdate,
 )
 from app.services.dashboard_service import get_dashboard_summary, invalidate_dashboard_cache
+from app.services.event_service import OperationalEventType, diff_state, record_operational_event
 from app.services.shipment_service import create_shipment_with_defaults
 from app.services.audit_service import changed_fields, record_audit_log
 from app.services.workflow_service import update_workflow_status
@@ -89,6 +90,24 @@ def create_shipment(
         metadata={"type": shipment.type, "status": shipment.status},
         request=request,
     )
+    record_operational_event(
+        db,
+        OperationalEventType.SHIPMENT_CREATED.value,
+        "shipment",
+        entity_id=shipment.id,
+        entity_label=shipment.shipment_code,
+        shipment_id=shipment.id,
+        actor_user=current_user,
+        source="user",
+        new_state={
+            "shipment_code": shipment.shipment_code,
+            "type": shipment.type,
+            "status": shipment.status,
+            "is_archived": shipment.is_archived,
+        },
+        metadata={"created": True},
+        request=request,
+    )
     return shipment
 
 
@@ -139,6 +158,26 @@ def update_shipment(
         metadata={"fields_changed": changed_fields(before, {field: getattr(shipment, field, None) for field in data})},
         request=request,
     )
+    record_operational_event(
+        db,
+        OperationalEventType.SHIPMENT_UPDATED.value,
+        "shipment",
+        entity_id=shipment.id,
+        entity_label=shipment.shipment_code,
+        shipment_id=shipment.id,
+        actor_user=current_user,
+        source="user",
+        previous_state=before,
+        new_state={
+            "shipment_code": shipment.shipment_code,
+            "type": shipment.type,
+            "status": shipment.status,
+            "is_archived": shipment.is_archived,
+            **{field: getattr(shipment, field, None) for field in data},
+        },
+        metadata={"fields_changed": diff_state(before, {field: getattr(shipment, field, None) for field in data})},
+        request=request,
+    )
     return shipment
 
 
@@ -168,6 +207,24 @@ def archive_shipment(
         entity_id=shipment.id,
         entity_label=shipment.shipment_code,
         description="Shipment archived.",
+        metadata={"reason_present": bool(archive_in.reason)},
+        request=request,
+    )
+    record_operational_event(
+        db,
+        OperationalEventType.SHIPMENT_ARCHIVED.value,
+        "shipment",
+        entity_id=shipment.id,
+        entity_label=shipment.shipment_code,
+        shipment_id=shipment.id,
+        actor_user=current_user,
+        source="user",
+        new_state={
+            "shipment_code": shipment.shipment_code,
+            "type": shipment.type,
+            "status": shipment.status,
+            "is_archived": True,
+        },
         metadata={"reason_present": bool(archive_in.reason)},
         request=request,
     )
@@ -202,6 +259,24 @@ def restore_shipment(
         metadata={"restored": True},
         request=request,
     )
+    record_operational_event(
+        db,
+        OperationalEventType.SHIPMENT_RESTORED.value,
+        "shipment",
+        entity_id=shipment.id,
+        entity_label=shipment.shipment_code,
+        shipment_id=shipment.id,
+        actor_user=current_user,
+        source="user",
+        new_state={
+            "shipment_code": shipment.shipment_code,
+            "type": shipment.type,
+            "status": shipment.status,
+            "is_archived": False,
+        },
+        metadata={"restored": True},
+        request=request,
+    )
     return shipment
 
 
@@ -227,6 +302,25 @@ def update_shipment_workflow_status(
         entity_id=updated.id,
         entity_label=updated.shipment_code,
         description="Shipment workflow status updated.",
+        metadata={"from_status": previous_status, "to_status": updated.status},
+        request=request,
+    )
+    record_operational_event(
+        db,
+        OperationalEventType.SHIPMENT_WORKFLOW_STATUS_UPDATED.value,
+        "shipment",
+        entity_id=updated.id,
+        entity_label=updated.shipment_code,
+        shipment_id=updated.id,
+        actor_user=current_user,
+        source="workflow",
+        previous_state={"status": previous_status},
+        new_state={
+            "shipment_code": updated.shipment_code,
+            "type": updated.type,
+            "status": updated.status,
+            "is_archived": updated.is_archived,
+        },
         metadata={"from_status": previous_status, "to_status": updated.status},
         request=request,
     )

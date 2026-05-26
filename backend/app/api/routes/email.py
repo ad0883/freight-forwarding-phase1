@@ -33,6 +33,7 @@ from app.services.email_suggestion_service import (
     reject_suggestion,
 )
 from app.services.audit_service import record_audit_log
+from app.services.event_service import OperationalEventType, record_operational_event
 from app.services.gmail_service import (
     GmailOAuthCallbackError,
     OAUTH_ERROR_CALLBACK_FAILED,
@@ -372,6 +373,24 @@ def apply_email_suggestion(
         metadata={"suggestion_type": applied.suggestion_type, "shipment_id": applied.shipment_id, "force": payload.force},
         request=request,
     )
+    record_operational_event(
+        db,
+        OperationalEventType.EMAIL_SUGGESTION_APPLIED.value,
+        "email_suggestion",
+        entity_id=applied.id,
+        entity_label=applied.suggestion_type,
+        shipment_id=applied.shipment_id,
+        actor_user=current_user,
+        source="gmail",
+        new_state={
+            "suggestion_type": applied.suggestion_type,
+            "shipment_id": applied.shipment_id,
+            "status": applied.status,
+            "confidence": applied.confidence,
+        },
+        metadata={"force": payload.force},
+        request=request,
+    )
     return EmailSuggestionApplyResponse(applied=True, suggestion=_suggestion_read(applied), conflicts=[])
 
 
@@ -393,6 +412,23 @@ def reject_email_suggestion(
         entity_label=rejected.suggestion_type,
         description="Email suggestion rejected.",
         metadata={"suggestion_type": rejected.suggestion_type, "shipment_id": rejected.shipment_id},
+        request=request,
+    )
+    record_operational_event(
+        db,
+        OperationalEventType.EMAIL_SUGGESTION_REJECTED.value,
+        "email_suggestion",
+        entity_id=rejected.id,
+        entity_label=rejected.suggestion_type,
+        shipment_id=rejected.shipment_id,
+        actor_user=current_user,
+        source="gmail",
+        new_state={
+            "suggestion_type": rejected.suggestion_type,
+            "shipment_id": rejected.shipment_id,
+            "status": rejected.status,
+            "confidence": rejected.confidence,
+        },
         request=request,
     )
     return _suggestion_read(rejected)

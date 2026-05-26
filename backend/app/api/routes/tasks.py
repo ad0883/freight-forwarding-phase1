@@ -11,6 +11,7 @@ from app.models.user import User
 from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
 from app.services.audit_service import changed_fields, record_audit_log
 from app.services.dashboard_service import invalidate_dashboard_cache
+from app.services.event_service import OperationalEventType, diff_state, record_operational_event
 
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -61,6 +62,23 @@ def create_task(
         metadata={"shipment_id": task.shipment_id, "priority": task.priority, "status": task.status},
         request=request,
     )
+    record_operational_event(
+        db,
+        OperationalEventType.TASK_CREATED.value,
+        "task",
+        entity_id=task.id,
+        entity_label=task.title,
+        shipment_id=task.shipment_id,
+        actor_user=current_user,
+        source="user",
+        new_state={
+            "title": task.title,
+            "status": task.status,
+            "due_date": task.due_date,
+            "priority": task.priority,
+        },
+        request=request,
+    )
     return task
 
 
@@ -89,6 +107,18 @@ def cancel_task(
         metadata={"shipment_id": task.shipment_id},
         request=request,
     )
+    record_operational_event(
+        db,
+        OperationalEventType.TASK_CANCELLED.value,
+        "task",
+        entity_id=task.id,
+        entity_label=task.title,
+        shipment_id=task.shipment_id,
+        actor_user=current_user,
+        source="user",
+        new_state={"status": task.status, "title": task.title, "due_date": task.due_date},
+        request=request,
+    )
     return task
 
 
@@ -115,6 +145,18 @@ def restore_task(
         entity_label=task.title,
         description="Task restored.",
         metadata={"shipment_id": task.shipment_id, "status": task.status},
+        request=request,
+    )
+    record_operational_event(
+        db,
+        OperationalEventType.TASK_RESTORED.value,
+        "task",
+        entity_id=task.id,
+        entity_label=task.title,
+        shipment_id=task.shipment_id,
+        actor_user=current_user,
+        source="user",
+        new_state={"status": task.status, "title": task.title, "due_date": task.due_date},
         request=request,
     )
     return task
@@ -156,6 +198,18 @@ def delete_task(
         metadata={"shipment_id": shipment_id},
         request=request,
     )
+    record_operational_event(
+        db,
+        OperationalEventType.TASK_DELETED.value,
+        "task",
+        entity_id=task_id,
+        entity_label=entity_label,
+        shipment_id=shipment_id,
+        actor_user=current_user,
+        source="user",
+        metadata={"deleted": True},
+        request=request,
+    )
 
 
 @router.patch("/{task_id}", response_model=TaskRead)
@@ -189,6 +243,27 @@ def update_task(
         entity_label=task.title,
         description="Task updated.",
         metadata={"fields_changed": changed_fields(before, {field: getattr(task, field, None) for field in data})},
+        request=request,
+    )
+    after_state = {field: getattr(task, field, None) for field in data}
+    record_operational_event(
+        db,
+        OperationalEventType.TASK_UPDATED.value,
+        "task",
+        entity_id=task.id,
+        entity_label=task.title,
+        shipment_id=task.shipment_id,
+        actor_user=current_user,
+        source="user",
+        previous_state=before,
+        new_state={
+            "title": task.title,
+            "status": task.status,
+            "due_date": task.due_date,
+            "priority": task.priority,
+            **after_state,
+        },
+        metadata={"fields_changed": diff_state(before, after_state)},
         request=request,
     )
     return task

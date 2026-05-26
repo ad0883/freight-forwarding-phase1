@@ -6,17 +6,20 @@ import AuditLogsPage from './pages/AuditLogsPage.jsx';
 import CreateShipmentPage from './pages/CreateShipmentPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import EmailAutomationPage from './pages/EmailAutomationPage.jsx';
+import EventsPage from './pages/EventsPage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import MockAiPage from './pages/MockAiPage.jsx';
 import NotificationsPage from './pages/NotificationsPage.jsx';
 import PartiesPage from './pages/PartiesPage.jsx';
 import ReportsPage from './pages/ReportsPage.jsx';
+import RulesPage from './pages/RulesPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import ShipmentDetailPage from './pages/ShipmentDetailPage.jsx';
 import ShipmentsPage from './pages/ShipmentsPage.jsx';
 import StatusPage from './pages/StatusPage.jsx';
 import TasksPage from './pages/TasksPage.jsx';
 import UsersAdminPage from './pages/UsersAdminPage.jsx';
+import ValidationIssuesPage from './pages/ValidationIssuesPage.jsx';
 
 function App() {
   return (
@@ -84,6 +87,30 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['ADMIN']}>
               <AdminToolsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="events"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'STAFF']}>
+              <EventsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="validation-issues"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'STAFF']}>
+              <ValidationIssuesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="rules"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'STAFF']}>
+              <RulesPage />
             </ProtectedRoute>
           }
         />
