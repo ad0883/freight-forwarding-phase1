@@ -1,4 +1,6 @@
+import hashlib
 import logging
+from datetime import datetime
 from typing import Optional
 from urllib.parse import urlparse, urlencode
 
@@ -12,8 +14,14 @@ from app.models.email import EmailConnection, EmailMessageCache, EmailSuggestion
 from app.models.shipment import Shipment
 from app.models.user import User
 from app.schemas.email import (
+    EmailBulkRejectRequest,
+    EmailCleanupRequest,
+    EmailCleanupResponse,
+    EmailClearPendingRequest,
+    EmailClearPendingResponse,
     EmailConnectionStatus,
     EmailDebugConfigResponse,
+    EmailDisconnectRequest,
     EmailDisconnectResponse,
     EmailMessageListItem,
     EmailMessageRead,
@@ -25,14 +33,19 @@ from app.schemas.email import (
     EmailSuggestionRead,
     EmailSuggestionUpdate,
 )
+from app.services.audit_service import record_audit_log
 from app.services.email_suggestion_service import (
     EmailSuggestionConflict,
     apply_suggestion,
+    bulk_reject_pending,
+    cleanup_for_account,
+    clear_pending_suggestions,
+    delete_suggestion,
+    dismiss_suggestion,
     patch_suggestion,
     process_cached_message,
     reject_suggestion,
 )
-from app.services.audit_service import record_audit_log
 from app.services.event_service import OperationalEventType, record_operational_event
 from app.services.gmail_service import (
     GmailOAuthCallbackError,
@@ -60,6 +73,11 @@ EmailUser = Depends(require_roles("ADMIN", "STAFF"))
 AdminUser = Depends(require_roles("ADMIN"))
 
 
+# ---------------------------------------------------------------------------
+# Connection / OAuth
+# ---------------------------------------------------------------------------
+
+
 @router.get("/debug/config", response_model=EmailDebugConfigResponse)
 def email_debug_config(
     current_user: AuthenticatedUser = AdminUser,
@@ -82,11 +100,31 @@ def email_status(
     current_user: AuthenticatedUser = EmailUser,
 ) -> EmailConnectionStatus:
     connection = get_active_connection(db, current_user.id)
+    pending = 0
+    cached = 0
+    if connection:
+        pending = (
+            _suggestion_query(db, current_user.id, current_account_only=True)
+            .filter(EmailSuggestion.status == "pending")
+            .count()
+        )
+        cached = (
+            _message_query(db, current_user.id, current_account_only=True)
+            .filter(EmailMessageCache.visibility == "visible")
+            .count()
+        )
     return EmailConnectionStatus(
         connected=bool(connection),
         provider="gmail",
         email_address=connection.email_address if connection else None,
+        gmail_account_email=(
+            (connection.gmail_account_email or connection.email_address)
+            if connection
+            else None
+        ),
         enabled=settings.GMAIL_ENABLED,
+        pending_suggestions=pending,
+        cached_messages=cached,
     )
 
 
@@ -149,7 +187,11 @@ def email_oauth_callback(
             entity_id=connection.id,
             entity_label=connection.email_address,
             description="Gmail account connected.",
-            metadata={"provider": connection.provider, "has_email_address": bool(connection.email_address)},
+            metadata={
+                "provider": connection.provider,
+                "has_email_address": bool(connection.email_address),
+                "gmail_account_email_present": bool(connection.gmail_account_email),
+            },
             request=request,
         )
     except GmailOAuthCallbackError as exc:
@@ -188,10 +230,24 @@ def email_oauth_callback(
 @router.post("/disconnect", response_model=EmailDisconnectResponse)
 def email_disconnect(
     request: Request,
+    payload: EmailDisconnectRequest = EmailDisconnectRequest(),
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = EmailUser,
 ) -> EmailDisconnectResponse:
     connection = get_active_connection(db, current_user.id)
+    cleanup_email = (
+        connection.gmail_account_email or connection.email_address if connection else None
+    )
+    cleanup_summary = {"suggestions_rejected": 0, "messages_hidden": 0}
+    if connection and payload.clear_cache:
+        cleanup_summary = cleanup_for_account(
+            db,
+            user_id=current_user.id,
+            gmail_account_email=cleanup_email,
+            reviewer_user_id=current_user.id,
+        )
+        connection.last_cleanup_at = datetime.utcnow()
+        db.commit()
     disconnected = disconnect_gmail(db, current_user.id)
     if disconnected:
         record_audit_log(
@@ -202,10 +258,61 @@ def email_disconnect(
             entity_id=connection.id if connection else None,
             entity_label=connection.email_address if connection else None,
             description="Gmail account disconnected.",
-            metadata={"provider": "gmail"},
+            metadata={
+                "provider": "gmail",
+                "clear_cache": payload.clear_cache,
+                **cleanup_summary,
+            },
             request=request,
         )
-    return EmailDisconnectResponse(disconnected=disconnected)
+    return EmailDisconnectResponse(
+        disconnected=disconnected,
+        suggestions_rejected=cleanup_summary["suggestions_rejected"],
+        messages_hidden=cleanup_summary["messages_hidden"],
+    )
+
+
+@router.post("/cleanup", response_model=EmailCleanupResponse)
+def email_cleanup(
+    request: Request,
+    payload: EmailCleanupRequest = EmailCleanupRequest(),
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = EmailUser,
+) -> EmailCleanupResponse:
+    connection = get_active_connection(db, current_user.id)
+    target_email = payload.gmail_account_email
+    if not target_email and connection:
+        target_email = connection.gmail_account_email or connection.email_address
+    summary = cleanup_for_account(
+        db,
+        user_id=current_user.id,
+        gmail_account_email=target_email,
+        reviewer_user_id=current_user.id,
+        hide_messages=payload.hide_messages,
+        reject_pending=payload.reject_pending,
+    )
+    record_audit_log(
+        db,
+        current_user,
+        "email.cleanup",
+        "email_connection",
+        entity_id=connection.id if connection else None,
+        entity_label=target_email,
+        description="Gmail cache cleanup executed.",
+        metadata={
+            "scope_email_present": bool(target_email),
+            "hide_messages": payload.hide_messages,
+            "reject_pending": payload.reject_pending,
+            **summary,
+        },
+        request=request,
+    )
+    return EmailCleanupResponse(**summary)
+
+
+# ---------------------------------------------------------------------------
+# Scan / messages / suggestions list
+# ---------------------------------------------------------------------------
 
 
 @router.post("/scan", response_model=EmailScanResponse)
@@ -222,11 +329,13 @@ def scan_email(
     max_results = min(payload.max_results or settings.EMAIL_MAX_RESULTS, settings.EMAIL_MAX_RESULTS)
     message_ids = search_messages(db, connection, query, max_results)
     cached_count = 0
+    duplicates_skipped = 0
     suggestions_created = 0
+    account_email = connection.gmail_account_email or connection.email_address
     for gmail_message_id in message_ids:
         raw_message = get_message(db, connection, gmail_message_id)
         normalized = normalize_message(raw_message)
-        message = (
+        existing = (
             db.query(EmailMessageCache)
             .filter(
                 EmailMessageCache.connection_id == connection.id,
@@ -234,20 +343,37 @@ def scan_email(
             )
             .first()
         )
-        if not message:
-            message = EmailMessageCache(connection_id=connection.id, **normalized)
-            db.add(message)
-        else:
+        was_new = existing is None
+        if existing:
+            duplicates_skipped += 1
             for field, value in normalized.items():
-                setattr(message, field, value)
+                setattr(existing, field, value)
+            existing.user_id = connection.user_id
+            existing.gmail_account_email = account_email
+            existing.subject_hash = _subject_hash(normalized.get("subject"))
+            if existing.visibility == "hidden":
+                existing.visibility = "visible"
+            message = existing
+        else:
+            message = EmailMessageCache(
+                connection_id=connection.id,
+                user_id=connection.user_id,
+                gmail_account_email=account_email,
+                visibility="visible",
+                subject_hash=_subject_hash(normalized.get("subject")),
+                **normalized,
+            )
+            db.add(message)
         db.commit()
         db.refresh(message)
-        cached_count += 1
+        if was_new:
+            cached_count += 1
         suggestions_created += process_cached_message(db, message)
     response = EmailScanResponse(
         scanned=len(message_ids),
         cached=cached_count,
         suggestions_created=suggestions_created,
+        duplicates_skipped=duplicates_skipped,
     )
     record_audit_log(
         db,
@@ -263,6 +389,7 @@ def scan_email(
             "max_results": max_results,
             "scanned": response.scanned,
             "cached": response.cached,
+            "duplicates_skipped": response.duplicates_skipped,
             "suggestions_created": response.suggestions_created,
         },
         request=request,
@@ -275,17 +402,23 @@ def list_email_messages(
     classification: Optional[str] = None,
     processed_status: Optional[str] = None,
     shipment_id: Optional[int] = None,
+    include_hidden: bool = False,
+    current_account_only: bool = True,
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = EmailUser,
 ) -> list[EmailMessageListItem]:
-    query = _message_query(db, current_user.id)
+    query = _message_query(db, current_user.id, current_account_only=current_account_only)
     if classification:
         query = query.filter(EmailMessageCache.classification == classification)
     if processed_status:
         query = query.filter(EmailMessageCache.processed_status == processed_status)
     if shipment_id is not None:
         query = query.filter(EmailMessageCache.matched_shipment_id == shipment_id)
-    messages = query.order_by(EmailMessageCache.received_at.desc().nullslast(), EmailMessageCache.id.desc()).all()
+    if not include_hidden:
+        query = query.filter(EmailMessageCache.visibility == "visible")
+    messages = query.order_by(
+        EmailMessageCache.received_at.desc().nullslast(), EmailMessageCache.id.desc()
+    ).all()
     return [_message_list_item(message) for message in messages]
 
 
@@ -304,18 +437,102 @@ def list_email_suggestions(
     suggestion_status: str = Query(default="pending", alias="status"),
     shipment_id: Optional[int] = None,
     suggestion_type: Optional[str] = None,
+    current_account_only: bool = True,
+    include_low_confidence: bool = True,
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = EmailUser,
 ) -> list[EmailSuggestionRead]:
-    query = _suggestion_query(db, current_user.id)
+    query = _suggestion_query(db, current_user.id, current_account_only=current_account_only)
     if suggestion_status:
         query = query.filter(EmailSuggestion.status == suggestion_status)
     if shipment_id is not None:
         query = query.filter(EmailSuggestion.shipment_id == shipment_id)
     if suggestion_type:
         query = query.filter(EmailSuggestion.suggestion_type == suggestion_type)
-    suggestions = query.order_by(EmailSuggestion.created_at.desc(), EmailSuggestion.id.desc()).all()
+    if not include_low_confidence:
+        query = query.filter(
+            (EmailSuggestion.confidence >= 0.7) | (EmailSuggestion.shipment_id.isnot(None))
+        )
+    suggestions = query.order_by(
+        EmailSuggestion.created_at.desc(), EmailSuggestion.id.desc()
+    ).all()
     return [_suggestion_read(suggestion) for suggestion in suggestions]
+
+
+# ---------------------------------------------------------------------------
+# Suggestion bulk / cleanup endpoints (literal paths come BEFORE the
+# parameterised /suggestions/{suggestion_id} routes so FastAPI matches them
+# regardless of registration order.)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/suggestions/bulk-reject", response_model=EmailClearPendingResponse)
+def bulk_reject_suggestions(
+    payload: EmailBulkRejectRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = EmailUser,
+) -> EmailClearPendingResponse:
+    if not payload.suggestion_ids:
+        raise HTTPException(status_code=400, detail="suggestion_ids must not be empty.")
+    rejected = bulk_reject_pending(
+        db,
+        current_user.id,
+        suggestion_ids=payload.suggestion_ids,
+        reviewer_user_id=current_user.id,
+    )
+    record_audit_log(
+        db,
+        current_user,
+        "email_suggestion.bulk_rejected",
+        "email_suggestion",
+        description="Bulk reject pending suggestions.",
+        metadata={"requested_count": len(payload.suggestion_ids), "rejected": rejected},
+        request=request,
+    )
+    return EmailClearPendingResponse(rejected=rejected)
+
+
+@router.post("/suggestions/clear-pending", response_model=EmailClearPendingResponse)
+def clear_pending(
+    payload: EmailClearPendingRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = EmailUser,
+) -> EmailClearPendingResponse:
+    rejected = clear_pending_suggestions(
+        db,
+        current_user.id,
+        reviewer_user_id=current_user.id,
+        gmail_account_email=payload.gmail_account_email,
+        current_account_only=payload.current_account_only,
+        low_confidence=payload.low_confidence,
+        no_shipment=payload.no_shipment,
+        older_than=payload.older_than,
+        suggestion_type=payload.suggestion_type,
+    )
+    record_audit_log(
+        db,
+        current_user,
+        "email_suggestion.clear_pending",
+        "email_suggestion",
+        description="Clear pending suggestions with filters.",
+        metadata={
+            "current_account_only": payload.current_account_only,
+            "low_confidence": payload.low_confidence,
+            "no_shipment": payload.no_shipment,
+            "older_than_present": payload.older_than is not None,
+            "suggestion_type": payload.suggestion_type,
+            "rejected": rejected,
+        },
+        request=request,
+    )
+    return EmailClearPendingResponse(rejected=rejected)
+
+
+# ---------------------------------------------------------------------------
+# Per-suggestion endpoints
+# ---------------------------------------------------------------------------
 
 
 @router.patch("/suggestions/{suggestion_id}", response_model=EmailSuggestionRead)
@@ -370,7 +587,11 @@ def apply_email_suggestion(
         entity_id=applied.id,
         entity_label=applied.suggestion_type,
         description="Email suggestion applied.",
-        metadata={"suggestion_type": applied.suggestion_type, "shipment_id": applied.shipment_id, "force": payload.force},
+        metadata={
+            "suggestion_type": applied.suggestion_type,
+            "shipment_id": applied.shipment_id,
+            "force": payload.force,
+        },
         request=request,
     )
     record_operational_event(
@@ -395,6 +616,7 @@ def apply_email_suggestion(
 
 
 @router.post("/suggestions/{suggestion_id}/reject", response_model=EmailSuggestionRead)
+@router.patch("/suggestions/{suggestion_id}/reject", response_model=EmailSuggestionRead)
 def reject_email_suggestion(
     suggestion_id: int,
     request: Request,
@@ -411,7 +633,10 @@ def reject_email_suggestion(
         entity_id=rejected.id,
         entity_label=rejected.suggestion_type,
         description="Email suggestion rejected.",
-        metadata={"suggestion_type": rejected.suggestion_type, "shipment_id": rejected.shipment_id},
+        metadata={
+            "suggestion_type": rejected.suggestion_type,
+            "shipment_id": rejected.shipment_id,
+        },
         request=request,
     )
     record_operational_event(
@@ -434,8 +659,71 @@ def reject_email_suggestion(
     return _suggestion_read(rejected)
 
 
-def _message_query(db: Session, user_id: int):
-    return (
+@router.patch("/suggestions/{suggestion_id}/dismiss", response_model=EmailSuggestionRead)
+def dismiss_email_suggestion(
+    suggestion_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = EmailUser,
+) -> EmailSuggestionRead:
+    suggestion = _get_suggestion_for_user(db, suggestion_id, current_user.id)
+    dismissed = dismiss_suggestion(db, suggestion, current_user.id)
+    record_audit_log(
+        db,
+        current_user,
+        "email_suggestion.dismissed",
+        "email_suggestion",
+        entity_id=dismissed.id,
+        entity_label=dismissed.suggestion_type,
+        description="Email suggestion dismissed.",
+        metadata={
+            "suggestion_type": dismissed.suggestion_type,
+            "shipment_id": dismissed.shipment_id,
+        },
+        request=request,
+    )
+    return _suggestion_read(dismissed)
+
+
+@router.delete("/suggestions/{suggestion_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_email_suggestion(
+    suggestion_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = AdminUser,
+) -> None:
+    suggestion = _get_suggestion_for_user(db, suggestion_id, current_user.id)
+    if suggestion.status == "applied":
+        raise HTTPException(
+            status_code=400,
+            detail="Applied suggestions cannot be deleted; the resulting business records remain.",
+        )
+    metadata = {
+        "suggestion_type": suggestion.suggestion_type,
+        "shipment_id": suggestion.shipment_id,
+        "previous_status": suggestion.status,
+    }
+    delete_suggestion(db, suggestion)
+    record_audit_log(
+        db,
+        current_user,
+        "email_suggestion.deleted",
+        "email_suggestion",
+        entity_id=suggestion_id,
+        entity_label=metadata["suggestion_type"],
+        description="Email suggestion hard-deleted.",
+        metadata=metadata,
+        request=request,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _message_query(db: Session, user_id: int, *, current_account_only: bool = True):
+    query = (
         db.query(EmailMessageCache)
         .join(EmailMessageCache.connection)
         .options(
@@ -444,10 +732,15 @@ def _message_query(db: Session, user_id: int):
         )
         .filter(EmailConnection.user_id == user_id, EmailConnection.provider == "gmail")
     )
+    if current_account_only:
+        active_email = _active_account_email(db, user_id)
+        if active_email:
+            query = query.filter(EmailMessageCache.gmail_account_email == active_email)
+    return query
 
 
-def _suggestion_query(db: Session, user_id: int):
-    return (
+def _suggestion_query(db: Session, user_id: int, *, current_account_only: bool = True):
+    query = (
         db.query(EmailSuggestion)
         .join(EmailSuggestion.email_message)
         .join(EmailMessageCache.connection)
@@ -457,17 +750,30 @@ def _suggestion_query(db: Session, user_id: int):
         )
         .filter(EmailConnection.user_id == user_id, EmailConnection.provider == "gmail")
     )
+    if current_account_only:
+        active_email = _active_account_email(db, user_id)
+        if active_email:
+            query = query.filter(EmailMessageCache.gmail_account_email == active_email)
+    return query
 
 
 def _get_message_for_user(db: Session, message_id: int, user_id: int) -> EmailMessageCache:
-    message = _message_query(db, user_id).filter(EmailMessageCache.id == message_id).first()
+    message = (
+        _message_query(db, user_id, current_account_only=False)
+        .filter(EmailMessageCache.id == message_id)
+        .first()
+    )
     if not message:
         raise HTTPException(status_code=404, detail="Email message not found")
     return message
 
 
 def _get_suggestion_for_user(db: Session, suggestion_id: int, user_id: int) -> EmailSuggestion:
-    suggestion = _suggestion_query(db, user_id).filter(EmailSuggestion.id == suggestion_id).first()
+    suggestion = (
+        _suggestion_query(db, user_id, current_account_only=False)
+        .filter(EmailSuggestion.id == suggestion_id)
+        .first()
+    )
     if not suggestion:
         raise HTTPException(status_code=404, detail="Email suggestion not found")
     return suggestion
@@ -485,6 +791,8 @@ def _message_list_item(message: EmailMessageCache) -> EmailMessageListItem:
         matched_shipment_id=message.matched_shipment_id,
         matched_shipment_code=message.matched_shipment.shipment_code if message.matched_shipment else None,
         processed_status=message.processed_status,
+        visibility=message.visibility or "visible",
+        gmail_account_email=message.gmail_account_email,
         suggestion_count=len(message.suggestions),
     )
 
@@ -506,6 +814,8 @@ def _message_read(message: EmailMessageCache) -> EmailMessageRead:
         matched_shipment_id=message.matched_shipment_id,
         matched_shipment_code=message.matched_shipment.shipment_code if message.matched_shipment else None,
         processed_status=message.processed_status,
+        visibility=message.visibility or "visible",
+        gmail_account_email=message.gmail_account_email,
         created_at=message.created_at,
         updated_at=message.updated_at,
         suggestions=[_suggestion_read(suggestion) for suggestion in message.suggestions],
@@ -528,6 +838,8 @@ def _suggestion_read(suggestion: EmailSuggestion) -> EmailSuggestionRead:
         confidence=suggestion.confidence,
         extracted_data_json=suggestion.extracted_data_json or {},
         status=suggestion.status,
+        gmail_account_email=suggestion.gmail_account_email
+        or suggestion.email_message.gmail_account_email,
         created_at=suggestion.created_at,
     )
 
@@ -581,5 +893,32 @@ def _is_allowed_frontend_base_url(value: str) -> bool:
 
 def _redirect(params: dict[str, str], frontend_base_url: Optional[str] = None) -> RedirectResponse:
     query = urlencode(params)
-    base_url = frontend_base_url if frontend_base_url and _is_allowed_frontend_base_url(frontend_base_url) else settings.FRONTEND_BASE_URL
+    base_url = (
+        frontend_base_url
+        if frontend_base_url and _is_allowed_frontend_base_url(frontend_base_url)
+        else settings.FRONTEND_BASE_URL
+    )
     return RedirectResponse(f"{base_url.rstrip('/')}/email?{query}")
+
+
+def _subject_hash(subject: Optional[str]) -> Optional[str]:
+    if not subject:
+        return None
+    canonical = " ".join(subject.split()).lower()[:512]
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _active_account_email(db: Session, user_id: int) -> Optional[str]:
+    connection = (
+        db.query(EmailConnection)
+        .filter(
+            EmailConnection.user_id == user_id,
+            EmailConnection.provider == "gmail",
+            EmailConnection.is_active.is_(True),
+        )
+        .order_by(EmailConnection.updated_at.desc(), EmailConnection.id.desc())
+        .first()
+    )
+    if not connection:
+        return None
+    return connection.gmail_account_email or connection.email_address

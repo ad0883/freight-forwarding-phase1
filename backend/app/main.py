@@ -40,6 +40,7 @@ from app.db.schema import (
     ensure_phase35_columns,
     ensure_phase8_organization_schema,
     ensure_phase9_event_validation_schema,
+    ensure_phase9_1_gmail_schema,
     ensure_phase10_workflow_schema,
 )
 from app.db.session import Base, SessionLocal, engine
@@ -152,6 +153,7 @@ async def lifespan(app: FastAPI):
         ensure_phase35_columns(engine)
         ensure_phase8_organization_schema(engine)
         ensure_phase9_event_validation_schema(engine)
+        ensure_phase9_1_gmail_schema(engine)
         ensure_phase10_workflow_schema(engine)
         ensure_performance_indexes(engine)
     db = SessionLocal()

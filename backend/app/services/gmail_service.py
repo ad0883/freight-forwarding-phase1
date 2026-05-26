@@ -304,12 +304,17 @@ def handle_oauth_callback(db: Session, code: str, state: str) -> EmailConnection
     )
 
     connection = existing or EmailConnection(user_id=user_id, provider=GMAIL_PROVIDER)
-    connection.email_address = profile.get("emailAddress")
+    profile_email = profile.get("emailAddress")
+    connection.email_address = profile_email
+    connection.gmail_account_email = profile_email
+    if profile_email:
+        connection.gmail_account_id = hashlib.sha256(profile_email.encode("utf-8")).hexdigest()[:32]
     connection.access_token_encrypted = access_token_encrypted
     connection.refresh_token_encrypted = refresh_token_encrypted
     connection.token_expiry = _naive_utc(credentials.expiry)
     connection.scopes = ",".join(settings.gmail_scopes)
     connection.is_active = True
+    connection.disconnected_at = None
 
     logger.info("EmailConnection DB save start", extra={"gmail_oauth_user_id": user_id})
     try:
@@ -418,6 +423,7 @@ def disconnect_gmail(db: Session, user_id: int) -> bool:
     if not connection:
         return False
     connection.is_active = False
+    connection.disconnected_at = datetime.utcnow()
     db.commit()
     return True
 
@@ -503,8 +509,11 @@ def normalize_message(raw_message: dict[str, Any]) -> dict[str, Any]:
 def build_default_query(lookback_days: int) -> str:
     return (
         f'newer_than:{lookback_days}d '
-        '(booking OR "BL draft" OR "arrival notice" OR "freight invoice" '
-        'OR "delivery order" OR pre-alert OR shipment)'
+        '(("ocean freight" OR "freight booking" OR "freight invoice" OR "BL draft" '
+        'OR "bill of lading" OR "arrival notice" OR "delivery order" OR "pre-alert" '
+        'OR "shipping line" OR "container booking" OR shipment OR consignment) '
+        '-category:promotions -category:social -category:forums '
+        '-from:irctc -from:noreply.youtube.com -from:elfsight.com)'
     )
 
 

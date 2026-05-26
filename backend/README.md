@@ -68,6 +68,7 @@ See:
 - `../MASTER_1_1_GAP_MAP.md`
 - `../docs/EVENT_VALIDATION_FOUNDATION.md`
 - `../docs/PHASE_9_EVENT_VALIDATION_RULE_ENGINE.md`
+- `../docs/PHASE_9_1_GMAIL_HARDENING.md`
 - `../docs/PHASE_10_EXPORT_IMPORT_STATE_MACHINES.md`
 
 ## Phase 10 Export Import State Machines
@@ -93,6 +94,19 @@ explicit confirmation and ADMIN role. VIEW_ONLY users can read state and
 timeline only.
 
 For migration: `alembic upgrade head` applies `phase10_export_import_states`.
+
+## Phase 9.1 Gmail Automation Hardening
+
+Phase 9.1 fixes Gmail automation data hygiene without changing scopes:
+
+- Cached emails and suggestions are scoped by `user_id` and `gmail_account_email`. Listings default to the currently connected account; an `Include hidden` toggle and `current_account_only=false` query expose other accounts when needed.
+- Suggestions deduplicate by `email_message_id + suggestion_type + shipment_id + extracted_data_hash`. Re-running a scan does not create duplicate cached emails or duplicate pending suggestions.
+- New endpoints: `PATCH /api/email/suggestions/{id}/reject`, `PATCH /api/email/suggestions/{id}/dismiss`, `DELETE /api/email/suggestions/{id}` (ADMIN only, blocks delete on `applied`), `POST /api/email/suggestions/bulk-reject`, `POST /api/email/suggestions/clear-pending`, `POST /api/email/cleanup`. The classic `POST /api/email/suggestions/{id}/reject` keeps working.
+- `POST /api/email/disconnect` accepts `{"clear_cache": true}` to reject pending suggestions and hide cached emails for the disconnected account. Applied charges/tasks/documents are not deleted.
+- Classifier rejects non-freight senders (IRCTC, Shopify, Amazon, newsletters, promos, social) unless freight terms are present. BL numbers must pass length, charset, and entropy checks - token-like or base64-looking strings are rejected. Ports must be alphabetic, amounts must be realistic.
+- Email Automation page adds bulk-select checkboxes, Reject/Dismiss/Delete row actions, low-confidence and no-shipment cleanup buttons, current-account toggle, hidden emails toggle, and a cleanup-old-data button. ADMIN can hard-delete pending/rejected/dismissed suggestions.
+
+See `../docs/PHASE_9_1_GMAIL_HARDENING.md` for the full spec.
 
 ## Phase 9 Event Validation Rule Engine
 

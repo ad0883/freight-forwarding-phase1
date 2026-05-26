@@ -28,6 +28,7 @@ Phase 1 implementation of a freight forwarding operations system with a FastAPI 
 - Phase 6 production hardening with audit logs, admin user lifecycle controls, status checks, CSV exports, dry-run cleanup, and password-change settings
 - Phase 7 internal notification center with per-user read/dismiss state, workflow reminder checks, daily operations summary, notification rules, and AI read-only attention summaries
 - Phase 9 operational event log, deterministic validation rule engine, and reviewable validation issues feeding deduped manual-review notifications
+- Phase 9.1 Gmail automation hardening: account scoping, deterministic dedupe, classifier filtering for non-freight senders, BL-number validation, dismiss/delete/bulk-reject/cleanup controls
 - Phase 10 controlled export/import workflow state machines with transition logs, sensitivity-aware permissions, manual-review notifications, and a Workflow Control dashboard widget
 
 ## Backend Local Setup

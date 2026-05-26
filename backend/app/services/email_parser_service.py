@@ -1,3 +1,10 @@
+"""Deterministic email parser used by Phase 5/9.1.
+
+Phase 9.1 hardens classification and field extraction so non-freight emails
+(IRCTC, Shopify, newsletters, promos) do not show up as freight suggestions
+and so token-like strings cannot be saved as BL numbers.
+"""
+import math
 import re
 from datetime import date, datetime
 from decimal import Decimal
@@ -6,30 +13,165 @@ from typing import Any, Optional
 
 CLASSIFICATION_KEYWORDS = {
     "booking_confirmation": [
-        "booking confirmation",
+        "freight booking confirmation",
+        "shipping booking",
+        "vessel booking",
+        "container booking",
+        "ocean booking",
+        "sea booking",
         "booking ref",
         "booking reference",
         "vessel",
         "voyage",
         "etd",
     ],
-    "bl_draft": ["bl draft", "bill of lading draft", "draft bl", "hbl", "mbl"],
-    "arrival_notice": ["arrival notice", "eta", "igm", "destination arrival"],
+    "bl_draft": [
+        "bl draft",
+        "bill of lading draft",
+        "draft bl",
+        "hbl draft",
+        "mbl draft",
+    ],
+    "arrival_notice": [
+        "arrival notice",
+        "notice of arrival",
+        "vessel arrival",
+        "igm filed",
+        "destination arrival",
+    ],
     "freight_invoice": [
         "freight invoice",
-        "invoice amount",
-        "payable",
-        "due amount",
-        "total amount",
+        "ocean freight invoice",
+        "shipping invoice",
+        "carrier invoice",
+        "do invoice",
     ],
-    "delivery_order": ["delivery order", "do release", "do ready", "delivery order ready"],
-    "pre_alert": ["pre-alert", "pre alert", "prealert", "documents attached"],
+    "delivery_order": [
+        "delivery order",
+        "do release",
+        "do ready",
+        "delivery order ready",
+    ],
+    "pre_alert": [
+        "pre-alert",
+        "pre alert",
+        "prealert",
+        "pre-shipment alert",
+    ],
 }
 
+# Senders/keywords that should never become freight actions on their own.
+NON_FREIGHT_SENDER_DOMAINS = {
+    "irctc.co.in",
+    "easemytrip.com",
+    "makemytrip.com",
+    "yatra.com",
+    "amazon.in",
+    "amazon.com",
+    "myntra.com",
+    "flipkart.com",
+    "shopify.com",
+    "ajio.com",
+    "swiggy.in",
+    "zomato.com",
+    "noreply.youtube.com",
+    "elfsight.com",
+    "mailchimp.com",
+    "substack.com",
+    "newsletter.medium.com",
+    "linkedin.com",
+    "facebook.com",
+    "instagram.com",
+    "twitter.com",
+    "x.com",
+    "google.com",
+    "github.com",
+}
 
-def parse_email(subject: Optional[str], snippet: Optional[str], body_preview: Optional[str]) -> dict[str, Any]:
+NON_FREIGHT_KEYWORDS = [
+    "irctc",
+    "train ticket",
+    "train booking",
+    "flight booking",
+    "hotel booking",
+    "your order",
+    "order shipped",
+    "delivery update",
+    "delivery confirmation",
+    "track your package",
+    "track your order",
+    "your package",
+    "newsletter",
+    "promotion",
+    "promo code",
+    "discount",
+    "% off",
+    "deal of the day",
+    "verify your account",
+    "password reset",
+    "otp ",
+    "one time password",
+    "subscribe",
+    "unsubscribe",
+    "social",
+    "stories",
+    "feed",
+]
+
+FREIGHT_HARD_TERMS = [
+    "shipment",
+    "shipper",
+    "consignee",
+    "consignor",
+    "consignment",
+    "container",
+    "containerised",
+    "containerized",
+    "vessel",
+    "voyage",
+    "manifest",
+    "freight",
+    "ocean freight",
+    "air freight",
+    "cargo",
+    "bill of lading",
+    "bl no",
+    "bl number",
+    "house bl",
+    "master bl",
+    "demurrage",
+    "detention",
+    "shipping line",
+    "incoterm",
+    "fob",
+    "cif",
+    "ddp",
+    "exw",
+    "customs",
+    "stuffing",
+    "loading port",
+    "discharge port",
+    "pol",
+    "pod",
+    "letter of credit",
+    "lc number",
+    "freight forwarder",
+    "ff-exp",
+    "ff-imp",
+]
+
+CONFIDENCE_NO_SHIPMENT_THRESHOLD = 0.7
+
+
+def parse_email(
+    subject: Optional[str],
+    snippet: Optional[str],
+    body_preview: Optional[str],
+    *,
+    sender: Optional[str] = None,
+) -> dict[str, Any]:
     text = "\n".join(part for part in [subject, snippet, body_preview] if part)
-    classification = classify_email(text)
+    classification = classify_email(text, sender=sender)
     extracted = extract_fields(text)
     extracted["classification"] = classification
     if classification == "freight_invoice" and "direction" not in extracted:
@@ -41,16 +183,42 @@ def parse_email(subject: Optional[str], snippet: Optional[str], body_preview: Op
     return {"classification": classification, "extracted_data": extracted}
 
 
-def classify_email(text: str) -> str:
+def is_non_freight_sender(sender: Optional[str], text: str) -> bool:
+    if sender:
+        sender_normalized = sender.lower()
+        for domain in NON_FREIGHT_SENDER_DOMAINS:
+            if domain in sender_normalized:
+                return True
+    text_normalized = text.lower()
+    return any(keyword in text_normalized for keyword in NON_FREIGHT_KEYWORDS)
+
+
+def has_freight_signal(text: str) -> bool:
     normalized = text.lower()
+    if any(term in normalized for term in FREIGHT_HARD_TERMS):
+        return True
+    if re.search(r"\bFF-(?:EXP|IMP)-\d{4}-\d{3,}\b", text, re.IGNORECASE):
+        return True
+    if re.search(r"\b[A-Z]{4}\d{7}\b", text):
+        return True
+    return False
+
+
+def classify_email(text: str, *, sender: Optional[str] = None) -> str:
+    normalized = text.lower()
+    non_freight = is_non_freight_sender(sender, text)
+    freight_signal = has_freight_signal(text)
+    if non_freight and not freight_signal:
+        return "unknown"
+
     scores = {
         classification: sum(1 for keyword in keywords if keyword in normalized)
         for classification, keywords in CLASSIFICATION_KEYWORDS.items()
     }
     best_classification, best_score = max(scores.items(), key=lambda item: item[1])
-    if best_score:
+    if best_score and (freight_signal or _classification_has_freight_anchor(best_classification, normalized)):
         return best_classification
-    if any(keyword in normalized for keyword in ["shipment", "container", "cargo", "consignment"]):
+    if freight_signal:
         return "general_followup"
     return "unknown"
 
@@ -68,15 +236,30 @@ def extract_fields(text: str) -> dict[str, Any]:
     labeled_patterns = {
         "booking_ref": r"(?:booking\s*(?:ref|reference|no|number)\s*[:#-]?\s*)([A-Z0-9][A-Z0-9/-]{3,})",
         "bl_number": r"(?:(?:hbl|mbl|bl|bill of lading)\s*(?:no|number)?\s*[:#-]?\s*)([A-Z0-9][A-Z0-9/-]{3,})",
-        "vessel_name": r"(?:vessel\s*[:#-]?\s*)([A-Z][A-Z0-9 .'-]{2,})",
-        "voyage_no": r"(?:voyage\s*(?:no|number)?\s*[:#-]?\s*)([A-Z0-9/-]{2,})",
-        "origin_port": r"(?:(?:origin|pol|load port)\s*[:#-]?\s*)([A-Z][A-Z .'-]{2,})",
-        "dest_port": r"(?:(?:destination|pod|discharge port)\s*[:#-]?\s*)([A-Z][A-Z .'-]{2,})",
+        "vessel_name": r"(?:vessel\s*[:#-]?\s*)([A-Z][A-Z0-9 .'-]{2,40})",
+        "voyage_no": r"(?:voyage\s*(?:no|number)?\s*[:#-]?\s*)([A-Z0-9/-]{2,12})",
+        "origin_port": r"(?:(?:origin|pol|load port)\s*[:#-]?\s*)([A-Z][A-Z .'-]{2,40})",
+        "dest_port": r"(?:(?:destination|pod|discharge port)\s*[:#-]?\s*)([A-Z][A-Z .'-]{2,40})",
     }
     for field, pattern in labeled_patterns.items():
         match = re.search(pattern, text, flags=re.IGNORECASE)
         if match:
-            extracted[field] = _clean_value(match.group(1))
+            value = _clean_value(match.group(1))
+            if field == "bl_number":
+                if not is_valid_bl_number(value):
+                    continue
+                value = value.upper()
+            elif field == "booking_ref":
+                if not is_valid_booking_ref(value):
+                    continue
+                value = value.upper()
+            elif field in {"origin_port", "dest_port"}:
+                if not is_valid_port(value):
+                    continue
+            elif field in {"vessel_name", "voyage_no"}:
+                if not is_valid_vessel_or_voyage(value):
+                    continue
+            extracted[field] = value
     invoice_no = _extract_invoice_no(text)
     if invoice_no:
         extracted["invoice_no"] = invoice_no
@@ -91,6 +274,102 @@ def extract_fields(text: str) -> dict[str, Any]:
     if bl_type:
         extracted["bl_type"] = bl_type
     return extracted
+
+
+# ---------------------------------------------------------------------------
+# Field-level validation helpers
+# ---------------------------------------------------------------------------
+
+
+_BL_BASE_RE = re.compile(r"^[A-Z0-9][A-Z0-9/_\-]{3,24}$")
+_TOKEN_RE = re.compile(r"^[A-Za-z0-9+/=_\-]{30,}$")
+
+
+def is_valid_bl_number(value: str) -> bool:
+    if not value:
+        return False
+    candidate = value.strip().upper()
+    if len(candidate) < 4 or len(candidate) > 25:
+        return False
+    if not _BL_BASE_RE.match(candidate):
+        return False
+    if _looks_token_like(candidate):
+        return False
+    if _shannon_entropy(candidate) > 4.5:
+        return False
+    return True
+
+
+def is_valid_booking_ref(value: str) -> bool:
+    if not value:
+        return False
+    candidate = value.strip().upper()
+    if len(candidate) < 4 or len(candidate) > 30:
+        return False
+    if not _BL_BASE_RE.match(candidate):
+        return False
+    if _looks_token_like(candidate):
+        return False
+    return True
+
+
+def is_valid_port(value: str) -> bool:
+    if not value:
+        return False
+    candidate = value.strip()
+    if len(candidate) < 3 or len(candidate) > 60:
+        return False
+    if not re.match(r"^[A-Za-z][A-Za-z .'-]{2,}$", candidate):
+        return False
+    return True
+
+
+def is_valid_vessel_or_voyage(value: str) -> bool:
+    if not value:
+        return False
+    candidate = value.strip()
+    if len(candidate) < 2 or len(candidate) > 60:
+        return False
+    return bool(re.match(r"^[A-Za-z0-9 .'/_-]{2,60}$", candidate))
+
+
+def is_valid_amount(value: Any) -> bool:
+    if value in (None, ""):
+        return False
+    try:
+        amount = Decimal(str(value).replace(",", ""))
+    except Exception:
+        return False
+    if amount <= 0 or amount > Decimal("100000000"):
+        return False
+    return True
+
+
+def is_valid_shipment_code(value: Optional[str]) -> bool:
+    if not isinstance(value, str):
+        return False
+    return bool(re.match(r"^FF-(?:EXP|IMP)-\d{4}-\d{3,}$", value, re.IGNORECASE))
+
+
+def _looks_token_like(value: str) -> bool:
+    if not _TOKEN_RE.match(value):
+        return False
+    return _shannon_entropy(value) > 4.0
+
+
+def _shannon_entropy(value: str) -> float:
+    if not value:
+        return 0.0
+    counts: dict[str, int] = {}
+    for char in value:
+        counts[char] = counts.get(char, 0) + 1
+    length = len(value)
+    return -sum((count / length) * math.log2(count / length) for count in counts.values())
+
+
+def _classification_has_freight_anchor(classification: str, normalized: str) -> bool:
+    """Treat purely keyword-based hits as freight only if they overlap freight terms."""
+    return any(term in normalized for term in FREIGHT_HARD_TERMS)
 
 
 def _extract_invoice_no(text: str) -> Optional[str]:
@@ -111,9 +390,15 @@ def build_suggestions_for_classification(
     classification: str,
     extracted_data: dict[str, Any],
     received_at: Optional[datetime],
+    *,
+    has_matched_shipment: bool = False,
+    confidence: float = 0.0,
 ) -> list[dict[str, Any]]:
     today = (received_at.date() if received_at else date.today()).isoformat()
     suggestions: list[dict[str, Any]] = []
+    has_strong_anchor = has_matched_shipment or is_valid_shipment_code(extracted_data.get("shipment_code"))
+    if not has_strong_anchor and confidence < CONFIDENCE_NO_SHIPMENT_THRESHOLD:
+        return []
     if classification == "booking_confirmation":
         fields = _subset(
             extracted_data,
@@ -164,7 +449,7 @@ def build_suggestions_for_classification(
         )
     elif classification == "freight_invoice":
         data = _subset(extracted_data, ["amount", "currency", "invoice_no", "direction", "charge_type"])
-        if "amount" in data:
+        if "amount" in data and is_valid_amount(data["amount"]):
             data.setdefault("currency", "INR")
             data.setdefault("direction", "payable")
             data.setdefault("charge_type", "ocean_freight")
@@ -244,6 +529,8 @@ def _extract_amount(text: str) -> Optional[dict[str, Any]]:
             raw_amount = match.group(1)
             currency = "INR"
         amount = Decimal(raw_amount.replace(",", ""))
+        if not is_valid_amount(amount):
+            continue
         return {"amount": str(amount), "currency": currency}
     return None
 

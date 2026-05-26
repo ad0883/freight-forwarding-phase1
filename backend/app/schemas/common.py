@@ -77,7 +77,15 @@ EmailClassification = Literal[
     "general_followup",
     "unknown",
 ]
-EmailProcessedStatus = Literal["new", "suggested", "approved", "rejected", "ignored"]
+EmailProcessedStatus = Literal[
+    "new",
+    "suggested",
+    "approved",
+    "rejected",
+    "ignored",
+    "manual_review",
+    "hidden",
+]
 EmailSuggestionType = Literal[
     "update_shipment",
     "update_document",
@@ -88,4 +96,12 @@ EmailSuggestionType = Literal[
     "create_task",
     "unknown",
 ]
-EmailSuggestionStatus = Literal["pending", "approved", "rejected", "applied", "ignored"]
+EmailSuggestionStatus = Literal[
+    "pending",
+    "approved",
+    "rejected",
+    "applied",
+    "ignored",
+    "dismissed",
+    "manual_review",
+]

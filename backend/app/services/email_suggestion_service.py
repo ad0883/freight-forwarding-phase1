@@ -1,6 +1,9 @@
+import hashlib
+import json
+import logging
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
 
 from fastapi import HTTPException
 from sqlalchemy import func
@@ -10,13 +13,21 @@ from app.models.bl_management import BLManagement
 from app.models.charge import Charge
 from app.models.demurrage import Demurrage
 from app.models.document import Document
-from app.models.email import EmailMessageCache, EmailSuggestion
+from app.models.email import EmailConnection, EmailMessageCache, EmailSuggestion
 from app.models.followup import FollowUpLog
 from app.models.shipment import Shipment
 from app.models.task import Task
 from app.schemas.charge import is_valid_charge_status
 from app.services.dashboard_service import invalidate_dashboard_cache
-from app.services.email_parser_service import build_suggestions_for_classification, parse_email
+from app.services.email_parser_service import (
+    CONFIDENCE_NO_SHIPMENT_THRESHOLD,
+    build_suggestions_for_classification,
+    is_valid_shipment_code,
+    parse_email,
+)
+
+
+logger = logging.getLogger(__name__)
 
 
 class EmailSuggestionConflict(Exception):
@@ -52,46 +63,70 @@ DEMURRAGE_UPDATE_FIELDS = {"start_date", "free_days"}
 
 
 def process_cached_message(db: Session, message: EmailMessageCache) -> int:
-    parsed = parse_email(message.subject, message.snippet, message.body_preview)
+    parsed = parse_email(
+        message.subject,
+        message.snippet,
+        message.body_preview,
+        sender=message.sender,
+    )
     message.classification = parsed["classification"]
     extracted_data = parsed["extracted_data"]
     shipment, confidence = match_shipment(db, extracted_data)
     if shipment:
         message.matched_shipment_id = shipment.id
-    created = 0
     suggestions = build_suggestions_for_classification(
-        message.classification, extracted_data, message.received_at
+        message.classification,
+        extracted_data,
+        message.received_at,
+        has_matched_shipment=bool(shipment),
+        confidence=confidence,
     )
+    if not suggestions:
+        if message.classification == "unknown":
+            message.processed_status = "ignored"
+        elif not shipment and confidence < CONFIDENCE_NO_SHIPMENT_THRESHOLD:
+            message.processed_status = "manual_review"
+        else:
+            message.processed_status = "new"
+        db.commit()
+        return 0
+
+    created = 0
     for suggestion in suggestions:
         suggestion_data = {**extracted_data, **suggestion["data"]}
         suggestion_shipment = shipment or _shipment_from_code(db, suggestion_data.get("shipment_code"))
         if suggestion_shipment and not message.matched_shipment_id:
             message.matched_shipment_id = suggestion_shipment.id
+        extracted_hash = compute_extracted_hash(suggestion_data)
         if _suggestion_exists(
             db,
-            message.id,
-            suggestion["suggestion_type"],
-            suggestion_shipment.id if suggestion_shipment else None,
+            email_message_id=message.id,
+            suggestion_type=suggestion["suggestion_type"],
+            shipment_id=suggestion_shipment.id if suggestion_shipment else None,
+            extracted_hash=extracted_hash,
         ):
             continue
         email_suggestion = EmailSuggestion(
             email_message_id=message.id,
+            user_id=message.user_id,
+            gmail_account_email=message.gmail_account_email,
             shipment_id=suggestion_shipment.id if suggestion_shipment else None,
             suggestion_type=suggestion["suggestion_type"],
             confidence=confidence,
             extracted_data_json=suggestion_data,
+            extracted_data_hash=extracted_hash,
             status="pending",
         )
         db.add(email_suggestion)
         created += 1
-    message.processed_status = "suggested" if suggestions else "new"
+    message.processed_status = "suggested"
     db.commit()
     return created
 
 
 def match_shipment(db: Session, extracted_data: dict[str, Any]) -> tuple[Optional[Shipment], float]:
     shipment_code = extracted_data.get("shipment_code")
-    if shipment_code:
+    if shipment_code and is_valid_shipment_code(shipment_code):
         shipment = _match_shipment_field(db, Shipment.shipment_code, shipment_code)
         if shipment:
             return shipment, 0.9
@@ -105,7 +140,9 @@ def match_shipment(db: Session, extracted_data: dict[str, Any]) -> tuple[Optiona
             shipment = _match_shipment_field(db, getattr(Shipment, field), value)
             if shipment:
                 return shipment, confidence
-    return None, 0.5 if extracted_data else 0.3
+    if extracted_data:
+        return None, 0.5
+    return None, 0.3
 
 
 def patch_suggestion(
@@ -121,6 +158,7 @@ def patch_suggestion(
         suggestion.shipment_id = shipment_id
     if extracted_data_json is not None:
         suggestion.extracted_data_json = extracted_data_json
+        suggestion.extracted_data_hash = compute_extracted_hash(extracted_data_json)
     db.commit()
     db.refresh(suggestion)
     return suggestion
@@ -134,7 +172,7 @@ def apply_suggestion(
 ) -> EmailSuggestion:
     if suggestion.status == "applied":
         raise HTTPException(status_code=400, detail="Suggestion is already applied")
-    if suggestion.status in {"rejected", "ignored"}:
+    if suggestion.status in {"rejected", "ignored", "dismissed"}:
         raise HTTPException(status_code=400, detail="Suggestion is not pending")
     handlers = {
         "update_shipment": _apply_update_shipment,
@@ -168,6 +206,185 @@ def reject_suggestion(db: Session, suggestion: EmailSuggestion, user_id: int) ->
     db.commit()
     db.refresh(suggestion)
     return suggestion
+
+
+def dismiss_suggestion(db: Session, suggestion: EmailSuggestion, user_id: int) -> EmailSuggestion:
+    suggestion.status = "dismissed"
+    suggestion.reviewed_by = user_id
+    suggestion.reviewed_at = datetime.utcnow()
+    if suggestion.email_message.processed_status == "suggested":
+        suggestion.email_message.processed_status = "ignored"
+    db.commit()
+    db.refresh(suggestion)
+    return suggestion
+
+
+def delete_suggestion(db: Session, suggestion: EmailSuggestion) -> None:
+    db.delete(suggestion)
+    db.commit()
+
+
+def bulk_reject_pending(
+    db: Session,
+    user_id: int,
+    *,
+    suggestion_ids: Optional[Iterable[int]] = None,
+    reviewer_user_id: Optional[int] = None,
+) -> int:
+    if reviewer_user_id is None:
+        reviewer_user_id = user_id
+    query = (
+        db.query(EmailSuggestion)
+        .join(EmailSuggestion.email_message)
+        .join(EmailMessageCache.connection)
+        .filter(
+            EmailConnection.user_id == user_id,
+            EmailSuggestion.status == "pending",
+        )
+    )
+    ids = list(suggestion_ids or [])
+    if ids:
+        query = query.filter(EmailSuggestion.id.in_(ids))
+    rejected = 0
+    now = datetime.utcnow()
+    for suggestion in query.all():
+        suggestion.status = "rejected"
+        suggestion.reviewed_by = reviewer_user_id
+        suggestion.reviewed_at = now
+        if suggestion.email_message.processed_status == "suggested":
+            suggestion.email_message.processed_status = "rejected"
+        rejected += 1
+    if rejected:
+        db.commit()
+    return rejected
+
+
+def clear_pending_suggestions(
+    db: Session,
+    user_id: int,
+    *,
+    reviewer_user_id: Optional[int] = None,
+    gmail_account_email: Optional[str] = None,
+    current_account_only: bool = False,
+    low_confidence: bool = False,
+    no_shipment: bool = False,
+    older_than: Optional[datetime] = None,
+    suggestion_type: Optional[str] = None,
+) -> int:
+    """Reject pending suggestions matching the requested filters."""
+    if reviewer_user_id is None:
+        reviewer_user_id = user_id
+    query = (
+        db.query(EmailSuggestion)
+        .join(EmailSuggestion.email_message)
+        .join(EmailMessageCache.connection)
+        .filter(
+            EmailConnection.user_id == user_id,
+            EmailSuggestion.status == "pending",
+        )
+    )
+    if current_account_only:
+        active_email = _active_account_email(db, user_id)
+        if not active_email:
+            return 0
+        query = query.filter(EmailMessageCache.gmail_account_email == active_email)
+    elif gmail_account_email:
+        query = query.filter(EmailMessageCache.gmail_account_email == gmail_account_email)
+    if low_confidence:
+        query = query.filter(EmailSuggestion.confidence < CONFIDENCE_NO_SHIPMENT_THRESHOLD)
+    if no_shipment:
+        query = query.filter(EmailSuggestion.shipment_id.is_(None))
+    if older_than:
+        query = query.filter(EmailSuggestion.created_at <= older_than)
+    if suggestion_type:
+        query = query.filter(EmailSuggestion.suggestion_type == suggestion_type)
+    rejected = 0
+    now = datetime.utcnow()
+    for suggestion in query.all():
+        suggestion.status = "rejected"
+        suggestion.reviewed_by = reviewer_user_id
+        suggestion.reviewed_at = now
+        if suggestion.email_message.processed_status == "suggested":
+            suggestion.email_message.processed_status = "rejected"
+        rejected += 1
+    if rejected:
+        db.commit()
+    return rejected
+
+
+def cleanup_for_account(
+    db: Session,
+    *,
+    user_id: int,
+    gmail_account_email: Optional[str],
+    reviewer_user_id: int,
+    hide_messages: bool = True,
+    reject_pending: bool = True,
+) -> dict[str, int]:
+    suggestion_query = (
+        db.query(EmailSuggestion)
+        .join(EmailSuggestion.email_message)
+        .join(EmailMessageCache.connection)
+        .filter(EmailConnection.user_id == user_id)
+    )
+    message_query = (
+        db.query(EmailMessageCache)
+        .join(EmailMessageCache.connection)
+        .filter(EmailConnection.user_id == user_id)
+    )
+    if gmail_account_email:
+        suggestion_query = suggestion_query.filter(
+            EmailMessageCache.gmail_account_email == gmail_account_email
+        )
+        message_query = message_query.filter(
+            EmailMessageCache.gmail_account_email == gmail_account_email
+        )
+
+    suggestions_rejected = 0
+    messages_hidden = 0
+    now = datetime.utcnow()
+    if reject_pending:
+        for suggestion in suggestion_query.filter(EmailSuggestion.status == "pending").all():
+            suggestion.status = "dismissed"
+            suggestion.reviewed_by = reviewer_user_id
+            suggestion.reviewed_at = now
+            if suggestion.email_message.processed_status == "suggested":
+                suggestion.email_message.processed_status = "ignored"
+            suggestions_rejected += 1
+    if hide_messages:
+        for message in message_query.filter(EmailMessageCache.visibility == "visible").all():
+            message.visibility = "hidden"
+            if message.processed_status == "suggested":
+                message.processed_status = "ignored"
+            messages_hidden += 1
+    if suggestions_rejected or messages_hidden:
+        db.commit()
+    return {
+        "suggestions_rejected": suggestions_rejected,
+        "messages_hidden": messages_hidden,
+    }
+
+
+def compute_extracted_hash(payload: Optional[dict[str, Any]]) -> str:
+    """Stable hash for deduplication. Empty/None coerced to {}."""
+    payload = payload or {}
+    canonical = _canonicalize(payload)
+    serialized = json.dumps(canonical, sort_keys=True, default=str, ensure_ascii=False)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _canonicalize(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _canonicalize(value[key]) for key in sorted(value.keys())}
+    if isinstance(value, list):
+        return [_canonicalize(item) for item in value]
+    if isinstance(value, (Decimal,)):
+        return str(value)
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, str):
+        return value.strip()
+    return value
 
 
 def _apply_update_shipment(db: Session, suggestion: EmailSuggestion, force: bool) -> None:
@@ -408,14 +625,18 @@ def _match_shipment_field(db: Session, column: Any, value: str) -> Optional[Ship
 def _shipment_from_code(db: Session, value: Optional[Any]) -> Optional[Shipment]:
     if not isinstance(value, str) or not value.strip():
         return None
+    if not is_valid_shipment_code(value.strip()):
+        return None
     return _match_shipment_field(db, Shipment.shipment_code, value.strip())
 
 
 def _suggestion_exists(
     db: Session,
+    *,
     email_message_id: int,
     suggestion_type: str,
     shipment_id: Optional[int],
+    extracted_hash: Optional[str],
 ) -> bool:
     query = db.query(EmailSuggestion.id).filter(
         EmailSuggestion.email_message_id == email_message_id,
@@ -425,4 +646,18 @@ def _suggestion_exists(
         query = query.filter(EmailSuggestion.shipment_id.is_(None))
     else:
         query = query.filter(EmailSuggestion.shipment_id == shipment_id)
+    if extracted_hash:
+        query = query.filter(EmailSuggestion.extracted_data_hash == extracted_hash)
     return query.first() is not None
+
+
+def _active_account_email(db: Session, user_id: int) -> Optional[str]:
+    connection = (
+        db.query(EmailConnection)
+        .filter(EmailConnection.user_id == user_id, EmailConnection.is_active.is_(True))
+        .order_by(EmailConnection.updated_at.desc(), EmailConnection.id.desc())
+        .first()
+    )
+    if not connection:
+        return None
+    return connection.gmail_account_email or connection.email_address
