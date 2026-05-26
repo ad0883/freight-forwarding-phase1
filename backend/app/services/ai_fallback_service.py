@@ -30,6 +30,8 @@ def _answer_for_context(context: AIContextBundle) -> str:
         return _notifications_summary_answer(context)
     if context.intent == "validation_issues_summary":
         return _validation_issues_answer(context)
+    if context.intent == "document_intelligence_summary":
+        return _document_intelligence_answer(context)
     if context.intent == "events_recent":
         return _recent_events_answer(context)
     if context.intent == "workflow_review_summary":
@@ -216,6 +218,19 @@ def _validation_issues_answer(context: AIContextBundle) -> str:
         for row in context.records[:5]
     )
     return f"{summary} {items}"
+
+
+def _document_intelligence_answer(context: AIContextBundle) -> str:
+    totals = context.totals
+    if not context.records:
+        return "No document intelligence runs or mismatches were found."
+    return (
+        f"Document intelligence: {totals.get('extractions', 0)} extraction(s), "
+        f"{totals.get('open_mismatches', 0)} open mismatch(es), "
+        f"{totals.get('critical_mismatches', 0)} critical, and "
+        f"{totals.get('low_confidence', 0)} low-confidence extraction(s). "
+        "OCR and suggestions remain read-only until a user reviews them."
+    )
 
 
 def _recent_events_answer(context: AIContextBundle) -> str:

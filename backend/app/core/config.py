@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     DOCUMENT_STORAGE_BACKEND: str = "database"
     DOCUMENT_MAX_UPLOAD_MB: int = 10
     DOCUMENT_LOCAL_STORAGE_DIR: str = "uploaded_documents"
+    DOCUMENT_OCR_ENABLED: bool = True
+    DOCUMENT_OCR_IMAGE_ENABLED: bool = False
+    DOCUMENT_OCR_MAX_PAGES: int = 5
+    DOCUMENT_OCR_MAX_CHARS: int = 20000
+    DOCUMENT_EXTRACTION_CONFIDENCE_THRESHOLD: float = 0.70
+    DOCUMENT_LOW_CONFIDENCE_THRESHOLD: float = 0.50
 
     ADMIN_NAME: str = "Admin"
     ADMIN_EMAIL: str = "admin@example.com"

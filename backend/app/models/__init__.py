@@ -19,6 +19,13 @@ from app.models.document_version import (
     DocumentVersion,
     DocumentVersionEvent,
 )
+from app.models.document_intelligence import (
+    DocumentExtractedField,
+    DocumentExtraction,
+    DocumentIntelligenceRun,
+    DocumentIntelligenceSuggestion,
+    DocumentMismatchResult,
+)
 from app.models.email import EmailConnection, EmailMessageCache, EmailSuggestion
 from app.models.followup import FollowUpLog
 from app.models.notification import Notification, NotificationRule, NotificationUserState
@@ -50,8 +57,13 @@ __all__ = [
     "DemurrageDetentionRule",
     "Document",
     "DocumentAccessLog",
+    "DocumentExtractedField",
+    "DocumentExtraction",
     "DocumentFile",
     "DocumentFileBlob",
+    "DocumentIntelligenceRun",
+    "DocumentIntelligenceSuggestion",
+    "DocumentMismatchResult",
     "DocumentVersion",
     "DocumentVersionEvent",
     "EmailConnection",

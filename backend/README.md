@@ -72,6 +72,35 @@ See:
 - `../docs/PHASE_10_EXPORT_IMPORT_STATE_MACHINES.md`
 - `../docs/PHASE_11_CONTAINER_LIFECYCLE_DEMURRAGE_DETENTION.md`
 - `../docs/PHASE_12_DOCUMENT_UPLOAD_VERSIONING.md`
+- `../docs/PHASE_13_DOCUMENT_INTELLIGENCE_OCR_MISMATCH_VALIDATION.md`
+
+## Phase 13 Document Intelligence + OCR
+
+Phase 13 adds controlled document intelligence on top of Phase 12 uploads.
+It can extract text from text-based PDFs and TXT/CSV files, classify the
+document, extract candidate fields, compare them to shipment/BL/container/
+charge records, and create reviewable mismatches, validation issues, and
+suggestions.
+
+Settings:
+
+```txt
+DOCUMENT_OCR_ENABLED=true
+DOCUMENT_OCR_IMAGE_ENABLED=false
+DOCUMENT_OCR_MAX_PAGES=5
+DOCUMENT_OCR_MAX_CHARS=20000
+DOCUMENT_EXTRACTION_CONFIDENCE_THRESHOLD=0.70
+DOCUMENT_LOW_CONFIDENCE_THRESHOLD=0.50
+```
+
+Important limits:
+
+- OCR output is untrusted until reviewed.
+- Full OCR text is not stored in audit, events, notifications, or list APIs.
+- Suggestions are review-only in Phase 13; they are not applied automatically.
+- Image OCR is disabled by default and requires optional local OCR tooling.
+- Running document intelligence never mutates shipments, BL records, charges,
+  containers, parties, Gmail, or uploaded files.
 
 ## Phase 12 Document Upload + Versioning
 

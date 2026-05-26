@@ -15,6 +15,7 @@ from app.api.routes import (
     bl_management,
     containers,
     demurrage,
+    document_intelligence,
     documents,
     document_versions,
     email,
@@ -46,6 +47,7 @@ from app.db.schema import (
     ensure_phase10_workflow_schema,
     ensure_phase11_container_schema,
     ensure_phase12_document_schema,
+    ensure_phase13_document_intelligence_schema,
 )
 from app.db.session import Base, SessionLocal, engine
 from app.models import User
@@ -161,6 +163,7 @@ async def lifespan(app: FastAPI):
         ensure_phase10_workflow_schema(engine)
         ensure_phase11_container_schema(engine)
         ensure_phase12_document_schema(engine)
+        ensure_phase13_document_intelligence_schema(engine)
         ensure_performance_indexes(engine)
     db = SessionLocal()
     try:
@@ -215,6 +218,7 @@ app.include_router(parties.router, prefix="/api")
 app.include_router(shipments.router, prefix="/api")
 app.include_router(bl_management.router, prefix="/api")
 app.include_router(demurrage.router, prefix="/api")
+app.include_router(document_intelligence.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
 app.include_router(document_versions.router, prefix="/api")
 app.include_router(email.router, prefix="/api")

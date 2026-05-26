@@ -13,6 +13,7 @@ function DashboardPage() {
   const [workflowControl, setWorkflowControl] = useState(null);
   const [containerRisk, setContainerRisk] = useState(null);
   const [documentSummary, setDocumentSummary] = useState(null);
+  const [documentIntelligence, setDocumentIntelligence] = useState(null);
   const [error, setError] = useState('');
 
   async function load() {
@@ -55,6 +56,10 @@ function DashboardPage() {
         .get('/document-versions/dashboard-summary')
         .then((response) => setDocumentSummary(response.data))
         .catch(() => setDocumentSummary(null));
+      api
+        .get('/document-intelligence/dashboard-summary')
+        .then((response) => setDocumentIntelligence(response.data))
+        .catch(() => setDocumentIntelligence(null));
     } catch (err) {
       setError(err.response?.data?.detail || 'Unable to load dashboard');
     }
@@ -233,6 +238,45 @@ function DashboardPage() {
               </article>
             ))}
             {!documentSummary.pending_review?.length && <p className="muted">No document versions pending review.</p>}
+          </div>
+        </section>
+      )}
+
+      {documentIntelligence !== null && (
+        <section className="panel">
+          <div className="panel-header">
+            <h2>Document Intelligence Review</h2>
+            <Link to="/validation-issues">Open validation</Link>
+          </div>
+          <div className="dashboard-summary-strip">
+            <div>
+              <FileText size={18} />
+              <span>Pending suggestions</span>
+              <strong>{documentIntelligence.pending_suggestions}</strong>
+            </div>
+            <div>
+              <AlertTriangle size={18} />
+              <span>Critical mismatches</span>
+              <strong>{documentIntelligence.critical_mismatches}</strong>
+            </div>
+            <div>
+              <UploadCloud size={18} />
+              <span>Low confidence</span>
+              <strong>{documentIntelligence.low_confidence_extractions}</strong>
+            </div>
+          </div>
+          <div className="notification-list compact">
+            {(documentIntelligence.critical_items || []).slice(0, 3).map((item) => (
+              <article className="notification-row" key={item.id}>
+                <span className={`badge priority-${item.severity}`}>{item.severity}</span>
+                <div>
+                  <strong>{item.rule_key}</strong>
+                  <p>{item.message}</p>
+                </div>
+                {item.shipment_id && <Link to={`/shipments/${item.shipment_id}`}>Open</Link>}
+              </article>
+            ))}
+            {!documentIntelligence.critical_items?.length && <p className="muted">No critical document mismatches.</p>}
           </div>
         </section>
       )}

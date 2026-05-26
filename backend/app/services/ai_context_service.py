@@ -9,6 +9,11 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.bl_management import BLManagement
 from app.models.demurrage import Demurrage
 from app.models.document import Document
+from app.models.document_intelligence import (
+    DocumentExtraction,
+    DocumentExtractedField,
+    DocumentMismatchResult,
+)
 from app.models.document_version import DocumentVersion
 from app.models.followup import FollowUpLog
 from app.models.party import Party
@@ -95,6 +100,8 @@ def build_ai_context(
         return _container_shipment_exposure_context(db, question, shipment_code, request.shipment_id)
     if intent == "document_versions_summary":
         return _document_versions_context(db, question, shipment_code, request.shipment_id, limit)
+    if intent == "document_intelligence_summary":
+        return _document_intelligence_context(db, question, shipment_code, request.shipment_id, limit)
     if intent == "notifications_summary" and current_user:
         return _notifications_summary_context(db, question, current_user)
     if intent == "general_dashboard_summary":
@@ -169,6 +176,8 @@ def _detect_intent(question: str, shipment_code: Optional[str]) -> str:
         return "container_summary"
     if "container" in text and ("status of" in text or "show container" in text):
         return "container_status_lookup"
+    if _has_document_intelligence_keyword(text):
+        return "document_intelligence_summary"
     if _has_document_version_keyword(text, shipment_code):
         return "document_versions_summary"
     if (
@@ -277,6 +286,18 @@ def _has_document_version_keyword(text: str, shipment_code: Optional[str]) -> bo
         or "history" in text
     )
     return document_terms and (version_terms or bool(shipment_code))
+
+
+def _has_document_intelligence_keyword(text: str) -> bool:
+    return (
+        "document intelligence" in text
+        or "ocr" in text
+        or "extracted field" in text
+        or "extracted fields" in text
+        or ("mismatch" in text and "document" in text)
+        or "low-confidence" in text
+        or "low confidence" in text and ("document" in text or "ocr" in text)
+    )
 
 
 def _dashboard_context(db: Session, question: str) -> AIContextBundle:
@@ -584,6 +605,102 @@ def _document_versions_context(
             "Upload missing required documents",
         ] if pending or missing_records else [],
         priority="warning" if pending or missing_records else "none",
+    )
+
+
+def _document_intelligence_context(
+    db: Session,
+    question: str,
+    shipment_code: Optional[str],
+    shipment_id: Optional[int],
+    limit: int,
+) -> AIContextBundle:
+    shipment = _get_shipment(db, shipment_code, shipment_id)
+    extraction_query = db.query(DocumentExtraction)
+    mismatch_query = db.query(DocumentMismatchResult).filter(DocumentMismatchResult.status == "open")
+    if shipment:
+        extraction_query = extraction_query.filter(DocumentExtraction.shipment_id == shipment.id)
+        mismatch_query = mismatch_query.filter(DocumentMismatchResult.shipment_id == shipment.id)
+    extractions = (
+        extraction_query
+        .filter(DocumentExtraction.status != "superseded")
+        .order_by(DocumentExtraction.created_at.desc(), DocumentExtraction.id.desc())
+        .limit(limit)
+        .all()
+    )
+    mismatches = (
+        mismatch_query
+        .order_by(DocumentMismatchResult.severity.desc(), DocumentMismatchResult.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    low_confidence = [
+        row for row in extractions if row.status in {"low_confidence", "manual_review_required"}
+    ]
+    field_rows = (
+        db.query(DocumentExtractedField)
+        .join(DocumentExtraction, DocumentExtraction.id == DocumentExtractedField.extraction_id)
+        .filter(DocumentExtraction.id.in_([row.id for row in extractions] or [0]))
+        .order_by(DocumentExtractedField.confidence.asc(), DocumentExtractedField.id.asc())
+        .limit(limit)
+        .all()
+    )
+    records = [
+        {
+            "type": "extraction",
+            "document_version_id": row.document_version_id,
+            "shipment_id": row.shipment_id,
+            "document_type": row.document_type,
+            "detected_document_type": row.detected_document_type,
+            "status": row.status,
+            "overall_confidence": row.overall_confidence,
+            "created_at": row.created_at,
+        }
+        for row in extractions
+    ] + [
+        {
+            "type": "mismatch",
+            "rule_key": row.rule_key,
+            "severity": row.severity,
+            "field_key": row.field_key,
+            "system_value": row.system_value,
+            "extracted_value": row.extracted_value,
+            "message": row.message,
+            "shipment_id": row.shipment_id,
+        }
+        for row in mismatches
+    ] + [
+        {
+            "type": "field",
+            "field_key": row.field_key,
+            "normalized_value": row.normalized_value,
+            "confidence": row.confidence,
+            "status": row.status,
+        }
+        for row in field_rows
+    ]
+    critical = [row for row in mismatches if row.severity == "critical"]
+    priority: AIPriority = "critical" if critical else ("warning" if mismatches or low_confidence else ("info" if extractions else "none"))
+    return AIContextBundle(
+        intent="document_intelligence_summary",
+        question=question,
+        shipment_code=shipment.shipment_code if shipment else shipment_code,
+        summary="Read-only document intelligence summary. AI cannot run OCR or approve/apply suggestions.",
+        records=records,
+        totals={
+            "extractions": len(extractions),
+            "open_mismatches": len(mismatches),
+            "critical_mismatches": len(critical),
+            "low_confidence": len(low_confidence),
+            "fields": len(field_rows),
+        },
+        data_points=[
+            AIDataPoint(label="Extractions", value=str(len(extractions))),
+            AIDataPoint(label="Open mismatches", value=str(len(mismatches))),
+            AIDataPoint(label="Low confidence", value=str(len(low_confidence))),
+        ],
+        suggested_actions=[row.message for row in critical[:3]],
+        priority=priority,
     )
 
 

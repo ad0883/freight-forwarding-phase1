@@ -313,6 +313,55 @@ def ensure_phase12_document_schema(engine: Engine) -> None:
             )
 
 
+def ensure_phase13_document_intelligence_schema(engine: Engine) -> None:
+    """Ensure Phase 13 document-intelligence indexes exist for create_all databases."""
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+    index_specs = {
+        "document_intelligence_runs": (
+            ("ix_document_intelligence_runs_version", "document_version_id"),
+            ("ix_document_intelligence_runs_shipment", "shipment_id"),
+            ("ix_document_intelligence_runs_status", "status"),
+            ("ix_document_intelligence_runs_started", "started_at"),
+        ),
+        "document_extractions": (
+            ("ix_document_extractions_version", "document_version_id"),
+            ("ix_document_extractions_shipment", "shipment_id"),
+            ("ix_document_extractions_status", "status"),
+            ("ix_document_extractions_confidence", "overall_confidence"),
+        ),
+        "document_extracted_fields": (
+            ("ix_document_extracted_fields_extraction", "extraction_id"),
+            ("ix_document_extracted_fields_field_key", "field_key"),
+            ("ix_document_extracted_fields_status", "status"),
+        ),
+        "document_mismatch_results": (
+            ("ix_document_mismatch_results_extraction", "extraction_id"),
+            ("ix_document_mismatch_results_shipment", "shipment_id"),
+            ("ix_document_mismatch_results_rule", "rule_key"),
+            ("ix_document_mismatch_results_status", "status"),
+            ("ix_document_mismatch_results_severity", "severity"),
+        ),
+        "document_intelligence_suggestions": (
+            ("ix_document_intelligence_suggestions_extraction", "extraction_id"),
+            ("ix_document_intelligence_suggestions_shipment", "shipment_id"),
+            ("ix_document_intelligence_suggestions_status", "status"),
+            ("ix_document_intelligence_suggestions_type", "suggestion_type"),
+        ),
+    }
+    with engine.begin() as connection:
+        for table_name, indexes in index_specs.items():
+            if table_name not in table_names:
+                continue
+            for index_name, column_name in indexes:
+                connection.execute(
+                    text(
+                        f"CREATE INDEX IF NOT EXISTS {index_name} "
+                        f"ON {table_name} ({column_name})"
+                    )
+                )
+
+
 def ensure_phase9_event_validation_schema(engine: Engine) -> None:
     """Ensure Phase 9 indexes exist on databases booted via create_all."""
     inspector = inspect(engine)

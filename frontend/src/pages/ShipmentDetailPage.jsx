@@ -6,6 +6,7 @@ import {
   Download,
   Edit3,
   ExternalLink,
+  FileText,
   History,
   Plus,
   RotateCcw,
@@ -113,6 +114,11 @@ function formatMoney(amount, currency = 'INR') {
   })}`;
 }
 
+function formatConfidence(value) {
+  if (value === null || value === undefined) return '-';
+  return `${Math.round(Number(value || 0) * 100)}%`;
+}
+
 function reviewBadgeClass(status) {
   if (status === 'approved') return 'priority-info';
   if (status === 'rejected') return 'priority-critical';
@@ -176,9 +182,12 @@ function ShipmentDetailPage() {
   const [uploadDraft, setUploadDraft] = useState(emptyUploadDraft());
   const [historyTarget, setHistoryTarget] = useState(null);
   const [detailTarget, setDetailTarget] = useState(null);
+  const [intelligenceTarget, setIntelligenceTarget] = useState(null);
+  const [intelligenceSummary, setIntelligenceSummary] = useState(null);
   const [versionHistory, setVersionHistory] = useState([]);
   const [historyEvents, setHistoryEvents] = useState({});
   const [documentBusy, setDocumentBusy] = useState(false);
+  const [intelligenceBusy, setIntelligenceBusy] = useState(false);
   const [tasks, setTasks] = useState([]);
   const [bl, setBl] = useState(null);
   const [demurrage, setDemurrage] = useState(null);
@@ -314,6 +323,8 @@ function ShipmentDetailPage() {
     setUploadDraft(emptyUploadDraft());
     setHistoryTarget(null);
     setDetailTarget(null);
+    setIntelligenceTarget(null);
+    setIntelligenceSummary(null);
   }
 
   async function uploadDocumentVersion(event) {
@@ -407,6 +418,8 @@ function ShipmentDetailPage() {
     setHistoryTarget(document);
     setUploadTarget(null);
     setDetailTarget(null);
+    setIntelligenceTarget(null);
+    setIntelligenceSummary(null);
     setHistoryEvents({});
     try {
       const response = await api.get(`/shipments/${id}/document-versions`, {
@@ -434,6 +447,80 @@ function ShipmentDetailPage() {
       setHistoryEvents((current) => ({ ...current, [version.id]: response.data }));
     } catch (err) {
       setError(err.response?.data?.detail || 'Unable to load document version events');
+    }
+  }
+
+  async function openIntelligence(document) {
+    if (!document.current_version_id) return;
+    setError('');
+    setNotice('');
+    setUploadTarget(null);
+    setHistoryTarget(null);
+    setDetailTarget(null);
+    setIntelligenceTarget({
+      id: document.current_version_id,
+      document_type: document.doc_type,
+      version_no: document.current_version_no,
+    });
+    setIntelligenceBusy(true);
+    try {
+      const response = await api.get(`/document-intelligence/versions/${document.current_version_id}/summary`);
+      setIntelligenceSummary(response.data);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to load document intelligence');
+    } finally {
+      setIntelligenceBusy(false);
+    }
+  }
+
+  async function runIntelligence(document) {
+    if (!document.current_version_id) return;
+    setError('');
+    setNotice('');
+    setIntelligenceBusy(true);
+    setIntelligenceTarget({
+      id: document.current_version_id,
+      document_type: document.doc_type,
+      version_no: document.current_version_no,
+    });
+    try {
+      const response = await api.post(`/document-intelligence/versions/${document.current_version_id}/run`, {
+        run_type: 'full',
+      });
+      setIntelligenceSummary(response.data);
+      setNotice('Document intelligence completed');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to run document intelligence');
+    } finally {
+      setIntelligenceBusy(false);
+    }
+  }
+
+  async function reviewIntelligenceSuggestion(suggestion, action) {
+    setError('');
+    setNotice('');
+    const payload = {};
+    if (action !== 'approve') {
+      const reason = window.prompt(`${action} suggestion`, '');
+      if (reason === null) return;
+      payload.reason = reason;
+      payload.notes = reason;
+    }
+    setIntelligenceBusy(true);
+    try {
+      const response = await api.patch(`/document-intelligence/suggestions/${suggestion.id}/${action}`, payload);
+      setIntelligenceSummary((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          suggestions: current.suggestions.map((item) => (item.id === suggestion.id ? response.data : item)),
+        };
+      });
+      setNotice(`Suggestion ${action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'dismissed'}`);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to update suggestion');
+    } finally {
+      setIntelligenceBusy(false);
     }
   }
 
@@ -930,6 +1017,18 @@ function ShipmentDetailPage() {
                           <button className="icon-button" type="button" onClick={() => openVersionHistory(document)} title="Version history">
                             <History size={16} />
                           </button>
+                          {document.current_version_id && (
+                            <button className="secondary-button" type="button" onClick={() => openIntelligence(document)}>
+                              <FileText size={16} />
+                              <span>Intelligence</span>
+                            </button>
+                          )}
+                          {canWrite && document.current_version_id && (
+                            <button className="secondary-button" type="button" onClick={() => runIntelligence(document)} disabled={intelligenceBusy}>
+                              <ToggleRight size={16} />
+                              <span>Run Intelligence</span>
+                            </button>
+                          )}
                           {canAdmin && document.current_version_id && (
                             <button
                               className="secondary-button danger-text"
@@ -1158,6 +1257,172 @@ function ShipmentDetailPage() {
                     </tbody>
                   </table>
                 </div>
+              )}
+            </div>
+          )}
+          {intelligenceTarget && (
+            <div className="inline-panel document-intelligence-panel">
+              <div className="panel-header">
+                <div>
+                  <h3>{intelligenceTarget.document_type} Intelligence</h3>
+                  <p className="muted">Version v{intelligenceTarget.version_no}</p>
+                </div>
+                <button className="secondary-button" type="button" onClick={() => setIntelligenceTarget(null)}>
+                  Close
+                </button>
+              </div>
+              {intelligenceBusy && !intelligenceSummary ? (
+                <LoadingState label="Loading document intelligence..." />
+              ) : !intelligenceSummary?.latest_run ? (
+                <div className="empty-state">
+                  <p>No intelligence run yet.</p>
+                  {canWrite && (
+                    <button
+                      className="primary-button"
+                      type="button"
+                      disabled={intelligenceBusy}
+                      onClick={() => runIntelligence({
+                        current_version_id: intelligenceTarget.id,
+                        doc_type: intelligenceTarget.document_type,
+                        current_version_no: intelligenceTarget.version_no,
+                      })}
+                    >
+                      <ToggleRight size={18} />
+                      <span>Run Intelligence</span>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div className="summary-grid">
+                    <div className="summary-tile">
+                      <span>OCR</span>
+                      <strong>{intelligenceSummary.latest_run.status}</strong>
+                    </div>
+                    <div className="summary-tile">
+                      <span>Detected Type</span>
+                      <strong>{intelligenceSummary.latest_extraction?.detected_document_type || '-'}</strong>
+                    </div>
+                    <div className="summary-tile">
+                      <span>Confidence</span>
+                      <strong>{formatConfidence(intelligenceSummary.latest_extraction?.overall_confidence)}</strong>
+                    </div>
+                    <div className="summary-tile">
+                      <span>Mismatches</span>
+                      <strong>{intelligenceSummary.mismatches?.length || 0}</strong>
+                    </div>
+                  </div>
+
+                  {intelligenceSummary.latest_extraction?.ocr_text_preview && (
+                    <div className="inline-panel">
+                      <h4>OCR Preview</h4>
+                      <p className="muted">{intelligenceSummary.latest_extraction.ocr_text_preview}</p>
+                    </div>
+                  )}
+
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Field</th>
+                          <th>Extracted Value</th>
+                          <th>Normalized</th>
+                          <th>Confidence</th>
+                          <th>Status</th>
+                          <th>Source</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(intelligenceSummary.fields || []).map((field) => (
+                          <tr key={field.id}>
+                            <td>{field.field_key}</td>
+                            <td>{field.field_value}</td>
+                            <td>{field.normalized_value || '-'}</td>
+                            <td>{formatConfidence(field.confidence)}</td>
+                            <td><span className={`badge ${field.status === 'mismatch' ? 'priority-warning' : ''}`}>{field.status}</span></td>
+                            <td><span className="muted">{field.source_text || '-'}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {!intelligenceSummary.fields?.length && <p className="muted">No fields extracted.</p>}
+                  </div>
+
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Severity</th>
+                          <th>Rule</th>
+                          <th>Field</th>
+                          <th>System</th>
+                          <th>Extracted</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(intelligenceSummary.mismatches || []).map((mismatch) => (
+                          <tr key={mismatch.id}>
+                            <td><span className={`badge priority-${mismatch.severity}`}>{mismatch.severity}</span></td>
+                            <td>
+                              <strong>{mismatch.rule_key}</strong>
+                              <p className="muted">{mismatch.message}</p>
+                            </td>
+                            <td>{mismatch.field_key || '-'}</td>
+                            <td>{mismatch.system_value || '-'}</td>
+                            <td>{mismatch.extracted_value || '-'}</td>
+                            <td>{mismatch.status}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {!intelligenceSummary.mismatches?.length && <p className="muted">No mismatches found.</p>}
+                  </div>
+
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Suggestion</th>
+                          <th>Target</th>
+                          <th>Confidence</th>
+                          <th>Status</th>
+                          <th>Payload</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(intelligenceSummary.suggestions || []).map((suggestion) => (
+                          <tr key={suggestion.id}>
+                            <td>{suggestion.suggestion_type}</td>
+                            <td>{suggestion.target_entity_type}</td>
+                            <td>{formatConfidence(suggestion.confidence)}</td>
+                            <td><span className="badge">{suggestion.status}</span></td>
+                            <td><code>{JSON.stringify(suggestion.payload_json || {})}</code></td>
+                            <td>
+                              {canWrite && suggestion.status === 'pending' ? (
+                                <div className="row-actions">
+                                  <button className="secondary-button" type="button" onClick={() => reviewIntelligenceSuggestion(suggestion, 'approve')}>
+                                    Approve
+                                  </button>
+                                  <button className="secondary-button danger-text" type="button" onClick={() => reviewIntelligenceSuggestion(suggestion, 'reject')}>
+                                    Reject
+                                  </button>
+                                  <button className="secondary-button" type="button" onClick={() => reviewIntelligenceSuggestion(suggestion, 'dismiss')}>
+                                    Dismiss
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="muted">Review tracked</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {!intelligenceSummary.suggestions?.length && <p className="muted">No suggestions created.</p>}
+                  </div>
+                </>
               )}
             </div>
           )}
