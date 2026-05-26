@@ -1,7 +1,7 @@
 """Phase 11 container lifecycle + demurrage/detention tables.
 
 Revision ID: phase11_container_lifecycle
-Revises: phase9_event_validation
+Revises: phase10_export_import_states
 Create Date: 2026-05-26
 """
 
@@ -13,7 +13,7 @@ from sqlalchemy import inspect
 
 
 revision: str = "phase11_container_lifecycle"
-down_revision: Union[str, None] = "phase9_event_validation"
+down_revision: Union[str, None] = "phase10_export_import_states"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
