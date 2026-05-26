@@ -278,8 +278,10 @@ function ShipmentDetailPage() {
     setDocumentLibrary(response.data);
   }
 
-  function openUpload(document) {
-    setUploadTarget(document);
+  function openUpload(documentRow) {
+    setError('');
+    setNotice('');
+    setUploadTarget(documentRow);
     setUploadDraft(emptyUploadDraft());
     setHistoryTarget(null);
   }
@@ -850,8 +852,9 @@ function ShipmentDetailPage() {
                               <button className="icon-button" type="button" onClick={() => saveDocument(document)} title="Save checklist row">
                                 <Save size={16} />
                               </button>
-                              <button className="icon-button" type="button" onClick={() => openUpload(document)} title="Upload version">
+                              <button className="secondary-button" type="button" onClick={() => openUpload(document)}>
                                 <UploadCloud size={16} />
+                                <span>Upload</span>
                               </button>
                             </>
                           )}
@@ -867,54 +870,67 @@ function ShipmentDetailPage() {
             </div>
           )}
           {uploadTarget && (
-            <form className="inline-panel form-grid" onSubmit={uploadDocumentVersion}>
-              <div className="panel-header span-2 no-margin">
-                <h3>Upload {uploadTarget.doc_type}</h3>
-                <button className="secondary-button" type="button" onClick={() => setUploadTarget(null)}>
-                  Cancel
-                </button>
-              </div>
-              <label>
-                File
-                <input
-                  type="file"
-                  onChange={(event) => setUploadDraft((current) => ({ ...current, file: event.target.files?.[0] || null }))}
-                />
-              </label>
-              <label>
-                Version Label
-                <input
-                  value={uploadDraft.version_label}
-                  onChange={(event) => setUploadDraft((current) => ({ ...current, version_label: event.target.value }))}
-                  placeholder="Draft, revised, final"
-                />
-              </label>
-              <label>
-                Review Status
-                <select
-                  value={uploadDraft.review_status}
-                  onChange={(event) => setUploadDraft((current) => ({ ...current, review_status: event.target.value }))}
-                >
-                  <option value="pending_review">pending_review</option>
-                  <option value="approved">approved</option>
-                  <option value="not_required">not_required</option>
-                </select>
-              </label>
-              <label>
-                Notes
-                <input
-                  value={uploadDraft.notes}
-                  onChange={(event) => setUploadDraft((current) => ({ ...current, notes: event.target.value }))}
-                  placeholder="Optional upload notes"
-                />
-              </label>
-              <div className="form-actions span-2">
-                <button className="primary-button" type="submit" disabled={documentBusy}>
-                  <UploadCloud size={18} />
-                  <span>Upload Version</span>
-                </button>
-              </div>
-            </form>
+            <div className="dialog-backdrop" role="presentation" onClick={() => setUploadTarget(null)}>
+              <form
+                className="dialog-panel wide form-grid"
+                role="dialog"
+                aria-modal="true"
+                aria-label={`Upload ${uploadTarget.doc_type}`}
+                onSubmit={uploadDocumentVersion}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="panel-header span-2 no-margin">
+                  <div>
+                    <p className="eyebrow">Document Upload</p>
+                    <h3>Upload {uploadTarget.doc_type}</h3>
+                  </div>
+                  <button className="secondary-button" type="button" onClick={() => setUploadTarget(null)}>
+                    Cancel
+                  </button>
+                </div>
+                <label>
+                  File
+                  <input
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx,.csv,.txt,application/pdf,image/png,image/jpeg,text/csv,text/plain"
+                    onChange={(event) => setUploadDraft((current) => ({ ...current, file: event.target.files?.[0] || null }))}
+                  />
+                </label>
+                <label>
+                  Version Label
+                  <input
+                    value={uploadDraft.version_label}
+                    onChange={(event) => setUploadDraft((current) => ({ ...current, version_label: event.target.value }))}
+                    placeholder="Draft, revised, final"
+                  />
+                </label>
+                <label>
+                  Review Status
+                  <select
+                    value={uploadDraft.review_status}
+                    onChange={(event) => setUploadDraft((current) => ({ ...current, review_status: event.target.value }))}
+                  >
+                    <option value="pending_review">pending_review</option>
+                    <option value="approved">approved</option>
+                    <option value="not_required">not_required</option>
+                  </select>
+                </label>
+                <label>
+                  Notes
+                  <input
+                    value={uploadDraft.notes}
+                    onChange={(event) => setUploadDraft((current) => ({ ...current, notes: event.target.value }))}
+                    placeholder="Optional upload notes"
+                  />
+                </label>
+                <div className="form-actions span-2">
+                  <button className="primary-button" type="submit" disabled={documentBusy}>
+                    <UploadCloud size={18} />
+                    <span>Upload Version</span>
+                  </button>
+                </div>
+              </form>
+            </div>
           )}
           {historyTarget && (
             <div className="inline-panel">
