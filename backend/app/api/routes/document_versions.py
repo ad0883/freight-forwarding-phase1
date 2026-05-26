@@ -100,7 +100,12 @@ def document_dashboard_summary_route(
     pending = (
         db.query(DocumentVersion)
         .join(Shipment, Shipment.id == DocumentVersion.shipment_id)
-        .filter(DocumentVersion.review_status == "pending_review", Shipment.is_archived.is_(False))
+        .filter(
+            DocumentVersion.review_status == "pending_review",
+            DocumentVersion.status == "active",
+            DocumentVersion.is_current.is_(True),
+            Shipment.is_archived.is_(False),
+        )
         .order_by(DocumentVersion.created_at.desc(), DocumentVersion.id.desc())
         .limit(5)
         .all()
@@ -137,8 +142,12 @@ def document_dashboard_summary_route(
     pending_count = (
         db.query(DocumentVersion)
         .join(Shipment, Shipment.id == DocumentVersion.shipment_id)
-        .filter(DocumentVersion.review_status == "pending_review")
-        .filter(Shipment.is_archived.is_(False))
+        .filter(
+            DocumentVersion.review_status == "pending_review",
+            DocumentVersion.status == "active",
+            DocumentVersion.is_current.is_(True),
+            Shipment.is_archived.is_(False),
+        )
         .count()
     )
     missing_count = (
@@ -316,7 +325,14 @@ def shipment_document_library_route(
     items: list[DocumentLibraryItem] = []
     for document in documents:
         doc_versions = versions_by_document.pop(document.id, [])
-        current = next((version for version in doc_versions if version.is_current), None)
+        current = next(
+            (
+                version
+                for version in doc_versions
+                if version.is_current and version.status == "active"
+            ),
+            None,
+        )
         items.append(
             DocumentLibraryItem(
                 document_id=document.id,
@@ -330,11 +346,18 @@ def shipment_document_library_route(
     for doc_versions in versions_by_document.values():
         if not doc_versions:
             continue
-        current = next((version for version in doc_versions if version.is_current), doc_versions[0])
+        current = next(
+            (
+                version
+                for version in doc_versions
+                if version.is_current and version.status == "active"
+            ),
+            None,
+        )
         items.append(
             DocumentLibraryItem(
                 document_id=None,
-                document_type=current.document_type,
+                document_type=(current or doc_versions[0]).document_type,
                 required=False,
                 current_version=current,
                 versions=doc_versions,

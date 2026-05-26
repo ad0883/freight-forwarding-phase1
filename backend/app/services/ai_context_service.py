@@ -536,7 +536,12 @@ def _document_versions_context(
         db.query(DocumentVersion)
         .options(joinedload(DocumentVersion.file), joinedload(DocumentVersion.shipment))
         .join(Shipment, Shipment.id == DocumentVersion.shipment_id)
-        .filter(DocumentVersion.review_status == "pending_review", Shipment.is_archived.is_(False))
+        .filter(
+            DocumentVersion.review_status == "pending_review",
+            DocumentVersion.status == "active",
+            DocumentVersion.is_current.is_(True),
+            Shipment.is_archived.is_(False),
+        )
         .order_by(DocumentVersion.created_at.desc(), DocumentVersion.id.desc())
         .limit(limit)
         .all()

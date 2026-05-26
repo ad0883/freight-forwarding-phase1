@@ -13,6 +13,7 @@ from app.models.document_version import (
     DocumentVersion,
     DocumentVersionEvent,
 )
+from app.models.notification import Notification
 from app.models.shipment import Shipment
 from app.models.validation_issue import ValidationIssue
 from app.services.audit_service import record_audit_log
@@ -97,6 +98,7 @@ def create_document_version(
             notes="Superseded by a newer upload.",
             metadata={"superseded_by_version_no": next_version_no},
         )
+        _expire_document_version_notifications(db, previous_current)
 
     version = DocumentVersion(
         organization_id=user.organization_id,
@@ -172,6 +174,7 @@ def approve_document_version(
     version.reviewed_at = datetime.utcnow()
     version.review_notes = notes or version.review_notes
     _record_version_event(db, version, OperationalEventType.DOCUMENT_VERSION_APPROVED.value, user, notes=notes)
+    _expire_document_version_notifications(db, version, pending_only=True)
     db.commit()
     db.refresh(version)
     _audit_and_operational_event(
@@ -206,6 +209,7 @@ def reject_document_version(
         version.is_current = False
         _clear_current_document_version(db, version)
     _record_version_event(db, version, OperationalEventType.DOCUMENT_VERSION_REJECTED.value, user, notes=notes)
+    _expire_document_version_notifications(db, version, pending_only=True)
     _create_rejection_notification(db, version)
     db.commit()
     db.refresh(version)
@@ -238,6 +242,7 @@ def archive_document_version(
     version.archived_at = datetime.utcnow()
     version.archive_reason = reason or version.archive_reason
     _clear_current_document_version(db, version)
+    _expire_document_version_notifications(db, version)
     _record_version_event(
         db,
         version,
@@ -481,21 +486,22 @@ def _create_duplicate_hash_warning(db: Session, version: DocumentVersion, file: 
 
 
 def _create_upload_notifications(db: Session, shipment: Shipment, version: DocumentVersion) -> None:
-    create_notification(
-        db,
-        title="Document pending review",
-        message=f"{version.document_type} v{version.version_no} is pending review for {shipment.shipment_code}.",
-        category="document",
-        priority="info",
-        target_role="STAFF",
-        entity_type="document_version",
-        entity_id=version.id,
-        entity_label=_version_label(version),
-        action_url=f"/shipments/{shipment.id}",
-        dedupe_key=f"document_pending_review:{version.id}",
-        source="workflow",
-        metadata={"shipment_id": shipment.id, "document_type": version.document_type},
-    )
+    if version.review_status == "pending_review":
+        create_notification(
+            db,
+            title="Document pending review",
+            message=f"{version.document_type} v{version.version_no} is pending review for {shipment.shipment_code}.",
+            category="document",
+            priority="info",
+            target_role="STAFF",
+            entity_type="document_version",
+            entity_id=version.id,
+            entity_label=_version_label(version),
+            action_url=f"/shipments/{shipment.id}",
+            dedupe_key=f"document_pending_review:{version.id}",
+            source="workflow",
+            metadata={"shipment_id": shipment.id, "document_type": version.document_type},
+        )
     create_notification(
         db,
         title="New document version uploaded",
@@ -510,6 +516,22 @@ def _create_upload_notifications(db: Session, shipment: Shipment, version: Docum
         dedupe_key=f"document_new_version:{shipment.id}:{version.document_type}:{version.version_no}",
         source="workflow",
         metadata={"shipment_id": shipment.id, "document_type": version.document_type},
+    )
+
+
+def _expire_document_version_notifications(
+    db: Session, version: DocumentVersion, *, pending_only: bool = False
+) -> None:
+    dedupe_keys = [f"document_pending_review:{version.id}"]
+    if not pending_only:
+        dedupe_keys.append(
+            f"document_new_version:{version.shipment_id}:{version.document_type}:{version.version_no}"
+        )
+    now = datetime.utcnow()
+    (
+        db.query(Notification)
+        .filter(Notification.dedupe_key.in_(dedupe_keys))
+        .update({"expires_at": now}, synchronize_session=False)
     )
 
 
