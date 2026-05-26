@@ -20,3 +20,4 @@ frontend/.env
 # OS and editor
 .vscode/
 .idea/
+md
