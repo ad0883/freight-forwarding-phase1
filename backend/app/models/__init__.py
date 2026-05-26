@@ -3,6 +3,13 @@ from app.models.ai_log import AIInteractionLog
 from app.models.audit import AuditLog
 from app.models.bl_management import BLManagement
 from app.models.charge import Charge
+from app.models.container import (
+    Container,
+    ContainerDemurrageRecord,
+    ContainerDetentionRecord,
+    ContainerEvent,
+    DemurrageDetentionRule,
+)
 from app.models.demurrage import Demurrage
 from app.models.document import Document
 from app.models.email import EmailConnection, EmailMessageCache, EmailSuggestion
@@ -28,7 +35,12 @@ __all__ = [
     "AuditLog",
     "BLManagement",
     "Charge",
+    "Container",
+    "ContainerDemurrageRecord",
+    "ContainerDetentionRecord",
+    "ContainerEvent",
     "Demurrage",
+    "DemurrageDetentionRule",
     "Document",
     "EmailConnection",
     "EmailMessageCache",

@@ -13,6 +13,7 @@ from app.api.routes import (
     audit,
     auth,
     bl_management,
+    containers,
     demurrage,
     documents,
     email,
@@ -42,6 +43,7 @@ from app.db.schema import (
     ensure_phase9_event_validation_schema,
     ensure_phase9_1_gmail_schema,
     ensure_phase10_workflow_schema,
+    ensure_phase11_container_schema,
 )
 from app.db.session import Base, SessionLocal, engine
 from app.models import User
@@ -155,6 +157,7 @@ async def lifespan(app: FastAPI):
         ensure_phase9_event_validation_schema(engine)
         ensure_phase9_1_gmail_schema(engine)
         ensure_phase10_workflow_schema(engine)
+        ensure_phase11_container_schema(engine)
         ensure_performance_indexes(engine)
     db = SessionLocal()
     try:
@@ -221,6 +224,8 @@ app.include_router(events.router, prefix="/api")
 app.include_router(validation_issues.router, prefix="/api")
 app.include_router(rules.router, prefix="/api")
 app.include_router(workflow_state_machine.router, prefix="/api")
+app.include_router(containers.container_router, prefix="/api")
+app.include_router(containers.shipment_container_router, prefix="/api")
 
 
 @app.get("/")

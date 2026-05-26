@@ -11,6 +11,7 @@ function DashboardPage() {
   const [alerts, setAlerts] = useState([]);
   const [validationIssues, setValidationIssues] = useState(null);
   const [workflowControl, setWorkflowControl] = useState(null);
+  const [containerRisk, setContainerRisk] = useState(null);
   const [error, setError] = useState('');
 
   async function load() {
@@ -45,6 +46,10 @@ function DashboardPage() {
           setWorkflowControl({ flagged, blocked, missing });
         })
         .catch(() => setWorkflowControl(null));
+      api
+        .get('/containers/risk', { params: { limit: 5 } })
+        .then((response) => setContainerRisk(response.data))
+        .catch(() => setContainerRisk(null));
     } catch (err) {
       setError(err.response?.data?.detail || 'Unable to load dashboard');
     }
@@ -247,6 +252,35 @@ function DashboardPage() {
             </div>
           ) : (
             <p className="muted">No shipments need manual workflow review.</p>
+          )}
+        </section>
+      )}
+
+      {containerRisk !== null && (
+        <section className="panel">
+          <div className="panel-header">
+            <h2>Container Risk</h2>
+            <Link to="/shipments">View shipments</Link>
+          </div>
+          {containerRisk.length === 0 ? (
+            <p className="muted">No container demurrage or detention risk right now.</p>
+          ) : (
+            <div className="notification-list compact">
+              {containerRisk.map((row) => (
+                <article className="notification-row" key={`${row.container_id}`}>
+                  <span className={`badge priority-${row.risk_level === 'running' ? 'critical' : row.risk_level}`}>
+                    {row.risk_level}
+                  </span>
+                  <div>
+                    <strong>{row.container_number}</strong>
+                    <p>
+                      {row.shipment_code} · {row.current_status} · demurrage {row.demurrage_status} · detention {row.detention_status}
+                    </p>
+                  </div>
+                  <Link to={`/shipments/${row.shipment_id}`}>Open</Link>
+                </article>
+              ))}
+            </div>
           )}
         </section>
       )}

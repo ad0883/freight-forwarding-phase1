@@ -183,6 +183,66 @@ def ensure_phase9_1_gmail_schema(engine: Engine) -> None:
             )
 
 
+def ensure_phase11_container_schema(engine: Engine) -> None:
+    """Ensure Phase 11 container indexes exist for create_all-managed databases."""
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+
+    with engine.begin() as connection:
+        if "containers" in table_names:
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_containers_shipment_id "
+                    "ON containers (shipment_id)"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_containers_container_number "
+                    "ON containers (container_number)"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_containers_current_status "
+                    "ON containers (current_status)"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_containers_empty_return_deadline "
+                    "ON containers (empty_return_deadline)"
+                )
+            )
+        if "container_events" in table_names:
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_container_events_container_id "
+                    "ON container_events (container_id)"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_container_events_event_type "
+                    "ON container_events (event_type)"
+                )
+            )
+        for table in ("container_demurrage_records", "container_detention_records"):
+            if table in table_names:
+                connection.execute(
+                    text(
+                        f"CREATE INDEX IF NOT EXISTS ix_{table}_container_id "
+                        f"ON {table} (container_id)"
+                    )
+                )
+                connection.execute(
+                    text(
+                        f"CREATE INDEX IF NOT EXISTS ix_{table}_status "
+                        f"ON {table} (status)"
+                    )
+                )
+
+
 def ensure_phase9_event_validation_schema(engine: Engine) -> None:
     """Ensure Phase 9 indexes exist on databases booted via create_all."""
     inspector = inspect(engine)

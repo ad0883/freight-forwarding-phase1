@@ -15,6 +15,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../api/client.js';
 import { ConfirmDialog, EmptyState, ErrorState, LoadingState } from '../components/States.jsx';
+import ContainersPanel from '../components/ContainersPanel.jsx';
 import WorkflowPanel from '../components/WorkflowPanel.jsx';
 
 const exportStatuses = [
@@ -543,7 +544,7 @@ function ShipmentDetailPage() {
       {notice && <p className="success-text">{notice}</p>}
 
       <div className="tabs" role="tablist">
-        {['overview', 'workflow', 'documents', 'tasks', 'bl', 'followups', 'demurrage', 'charges'].map((tab) => (
+        {['overview', 'workflow', 'containers', 'documents', 'tasks', 'bl', 'followups', 'demurrage', 'charges'].map((tab) => (
           <button key={tab} className={activeTab === tab ? 'active' : ''} onClick={() => setActiveTab(tab)}>
             {tab === 'bl' ? 'BL Management' : tab === 'followups' ? 'Follow-up Log' : tab === 'workflow' ? 'Workflow' : tab[0].toUpperCase() + tab.slice(1)}
           </button>
@@ -551,6 +552,10 @@ function ShipmentDetailPage() {
       </div>
 
       {activeTab === 'workflow' && <WorkflowPanel shipmentId={shipment.id} />}
+
+      {activeTab === 'containers' && (
+        <ContainersPanel shipmentId={shipment.id} shipmentType={shipment.type} />
+      )}
 
       {activeTab === 'overview' && (
         <section className="panel form-grid">

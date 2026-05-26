@@ -253,6 +253,63 @@ DEFAULT_RULE_DEFINITIONS: list[dict[str, Any]] = [
         "event_type": "workflow.transition_applied",
         "severity": "info",
     },
+    # Container lifecycle (Phase 11)
+    {
+        "rule_key": "container_number_format_warning",
+        "name": "Container number format",
+        "description": "Container number does not match ISO 6346 ABCD1234567 format.",
+        "entity_type": "container",
+        "event_type": None,
+        "severity": "warning",
+    },
+    {
+        "rule_key": "container_duplicate_active_warning",
+        "name": "Duplicate active container",
+        "description": "Container number is active in another shipment.",
+        "entity_type": "container",
+        "event_type": None,
+        "severity": "warning",
+    },
+    {
+        "rule_key": "container_loaded_before_gate_in_warning",
+        "name": "Loaded before gate-in",
+        "description": "Loaded-on-vessel date is earlier than gate-in date.",
+        "entity_type": "container",
+        "event_type": None,
+        "severity": "warning",
+    },
+    {
+        "rule_key": "import_container_delivered_before_do_warning",
+        "name": "Delivered before DO",
+        "description": "Import container delivery is recorded before DO received.",
+        "entity_type": "container",
+        "event_type": None,
+        "severity": "warning",
+    },
+    {
+        "rule_key": "empty_return_before_delivery_warning",
+        "name": "Empty return before delivery",
+        "description": "Empty return is dated before container delivery.",
+        "entity_type": "container",
+        "event_type": None,
+        "severity": "warning",
+    },
+    {
+        "rule_key": "gate_in_after_cutoff_warning",
+        "name": "Gate-in after cutoff",
+        "description": "Container gate-in is after the shipment VGM cutoff.",
+        "entity_type": "container",
+        "event_type": None,
+        "severity": "warning",
+    },
+    {
+        "rule_key": "partial_delivery_supported_info",
+        "name": "Partial delivery info",
+        "description": "Container delivered but empty return is still pending.",
+        "entity_type": "container",
+        "event_type": None,
+        "severity": "info",
+    },
 ]
 
 
