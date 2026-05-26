@@ -782,22 +782,20 @@ function ShipmentDetailPage() {
             <EmptyState title="No documents for this shipment" />
           ) : (
             <div className="table-wrap">
-              <table>
+              <table className="documents-table">
                 <thead>
                   <tr>
-                    <th>Document Type</th>
-                    <th>Status</th>
-                    <th>Latest Version</th>
-                    <th>Uploaded File</th>
-                    <th>File Link</th>
-                    <th>Notes</th>
-                    <th>Action</th>
+                    <th>Document</th>
+                    <th>Checklist</th>
+                    <th>Uploaded Version</th>
+                    <th>Link & Notes</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {documents.map((document) => (
                     <tr key={document.id}>
-                      <td><strong>{document.doc_type}</strong></td>
+                      <td className="document-type-cell"><strong>{document.doc_type}</strong></td>
                       <td>
                         <select
                           value={document.status}
@@ -814,39 +812,45 @@ function ShipmentDetailPage() {
                       <td>
                         {document.current_version_no ? (
                           <div className="document-version-cell">
-                            <span className="badge priority-info">v{document.current_version_no}</span>
-                            <span className={`badge ${reviewBadgeClass(document.current_review_status)}`}>
-                              {document.current_review_status || 'not reviewed'}
-                            </span>
+                            <div className="document-version-badges">
+                              <span className="badge priority-info">v{document.current_version_no}</span>
+                              <span className={`badge ${reviewBadgeClass(document.current_review_status)}`}>
+                                {document.current_review_status || 'not reviewed'}
+                              </span>
+                            </div>
+                            <p className="document-file-name" title={document.latest_file_name || ''}>
+                              {document.latest_file_name || 'Uploaded file'}
+                            </p>
                           </div>
                         ) : (
                           <span className="muted">No upload</span>
                         )}
                       </td>
-                      <td>{document.latest_file_name || '-'}</td>
-                      <td className="link-cell">
-                        <input
-                          value={document.file_url || ''}
-                          disabled={!canWrite}
-                          onChange={(event) => updateDocument(document.id, 'file_url', event.target.value)}
-                          placeholder="Paste Google Drive URL"
-                        />
-                        {document.file_url && (
-                          <a href={document.file_url} target="_blank" rel="noreferrer" title="Open link">
-                            <ExternalLink size={16} />
-                          </a>
-                        )}
+                      <td>
+                        <div className="document-link-notes">
+                          <div className="link-cell">
+                            <input
+                              value={document.file_url || ''}
+                              disabled={!canWrite}
+                              onChange={(event) => updateDocument(document.id, 'file_url', event.target.value)}
+                              placeholder="External file URL"
+                            />
+                            {document.file_url && (
+                              <a href={document.file_url} target="_blank" rel="noreferrer" title="Open link">
+                                <ExternalLink size={16} />
+                              </a>
+                            )}
+                          </div>
+                          <input
+                            value={document.notes || ''}
+                            disabled={!canWrite}
+                            onChange={(event) => updateDocument(document.id, 'notes', event.target.value)}
+                            placeholder="Notes"
+                          />
+                        </div>
                       </td>
                       <td>
-                        <input
-                          value={document.notes || ''}
-                          disabled={!canWrite}
-                          onChange={(event) => updateDocument(document.id, 'notes', event.target.value)}
-                          placeholder="Notes"
-                        />
-                      </td>
-                      <td>
-                        <div className="row-actions">
+                        <div className="row-actions document-row-actions">
                           {canWrite && (
                             <>
                               <button className="icon-button" type="button" onClick={() => saveDocument(document)} title="Save checklist row">
@@ -861,6 +865,21 @@ function ShipmentDetailPage() {
                           <button className="icon-button" type="button" onClick={() => openVersionHistory(document)} title="Version history">
                             <History size={16} />
                           </button>
+                          {canAdmin && document.current_version_id && (
+                            <button
+                              className="secondary-button danger-text"
+                              type="button"
+                              onClick={() => runVersionAction({
+                                id: document.current_version_id,
+                                document_type: document.doc_type,
+                                version_no: document.current_version_no,
+                                status: 'active',
+                              }, 'archive')}
+                            >
+                              <Archive size={16} />
+                              <span>Archive upload</span>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
