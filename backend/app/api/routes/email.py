@@ -1,3 +1,4 @@
+import hashlib
 import logging
 from datetime import datetime
 from typing import Optional
@@ -32,6 +33,7 @@ from app.schemas.email import (
     EmailSuggestionRead,
     EmailSuggestionUpdate,
 )
+from app.services.audit_service import record_audit_log
 from app.services.email_suggestion_service import (
     EmailSuggestionConflict,
     apply_suggestion,
@@ -44,7 +46,6 @@ from app.services.email_suggestion_service import (
     process_cached_message,
     reject_suggestion,
 )
-from app.services.audit_service import record_audit_log
 from app.services.event_service import OperationalEventType, record_operational_event
 from app.services.gmail_service import (
     GmailOAuthCallbackError,
@@ -70,6 +71,11 @@ logger = logging.getLogger(__name__)
 
 EmailUser = Depends(require_roles("ADMIN", "STAFF"))
 AdminUser = Depends(require_roles("ADMIN"))
+
+
+# ---------------------------------------------------------------------------
+# Connection / OAuth
+# ---------------------------------------------------------------------------
 
 
 @router.get("/debug/config", response_model=EmailDebugConfigResponse)
@@ -112,7 +118,7 @@ def email_status(
         provider="gmail",
         email_address=connection.email_address if connection else None,
         gmail_account_email=(
-            connection.gmail_account_email or connection.email_address
+            (connection.gmail_account_email or connection.email_address)
             if connection
             else None
         ),
@@ -229,7 +235,9 @@ def email_disconnect(
     current_user: AuthenticatedUser = EmailUser,
 ) -> EmailDisconnectResponse:
     connection = get_active_connection(db, current_user.id)
-    cleanup_email = connection.gmail_account_email or connection.email_address if connection else None
+    cleanup_email = (
+        connection.gmail_account_email or connection.email_address if connection else None
+    )
     cleanup_summary = {"suggestions_rejected": 0, "messages_hidden": 0}
     if connection and payload.clear_cache:
         cleanup_summary = cleanup_for_account(
@@ -300,6 +308,11 @@ def email_cleanup(
         request=request,
     )
     return EmailCleanupResponse(**summary)
+
+
+# ---------------------------------------------------------------------------
+# Scan / messages / suggestions list
+# ---------------------------------------------------------------------------
 
 
 @router.post("/scan", response_model=EmailScanResponse)
@@ -446,176 +459,11 @@ def list_email_suggestions(
     return [_suggestion_read(suggestion) for suggestion in suggestions]
 
 
-@router.patch("/suggestions/{suggestion_id}", response_model=EmailSuggestionRead)
-def update_email_suggestion(
-    suggestion_id: int,
-    payload: EmailSuggestionUpdate,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: AuthenticatedUser = EmailUser,
-) -> EmailSuggestionRead:
-    suggestion = _get_suggestion_for_user(db, suggestion_id, current_user.id)
-    suggestion = patch_suggestion(db, suggestion, payload.shipment_id, payload.extracted_data_json)
-    record_audit_log(
-        db,
-        current_user,
-        "email_suggestion.updated",
-        "email_suggestion",
-        entity_id=suggestion.id,
-        entity_label=suggestion.suggestion_type,
-        description="Email suggestion review edits saved.",
-        metadata={
-            "suggestion_type": suggestion.suggestion_type,
-            "shipment_id": suggestion.shipment_id,
-            "extracted_data_updated": payload.extracted_data_json is not None,
-        },
-        request=request,
-    )
-    return _suggestion_read(suggestion)
-
-
-@router.post("/suggestions/{suggestion_id}/apply", response_model=EmailSuggestionApplyResponse)
-def apply_email_suggestion(
-    suggestion_id: int,
-    payload: EmailSuggestionApplyRequest,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: AuthenticatedUser = EmailUser,
-) -> EmailSuggestionApplyResponse:
-    suggestion = _get_suggestion_for_user(db, suggestion_id, current_user.id)
-    try:
-        applied = apply_suggestion(db, suggestion, current_user.id, force=payload.force)
-    except EmailSuggestionConflict as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"message": "Suggestion has conflicts.", "conflicts": exc.conflicts},
-        ) from exc
-    record_audit_log(
-        db,
-        current_user,
-        "email_suggestion.applied",
-        "email_suggestion",
-        entity_id=applied.id,
-        entity_label=applied.suggestion_type,
-        description="Email suggestion applied.",
-        metadata={"suggestion_type": applied.suggestion_type, "shipment_id": applied.shipment_id, "force": payload.force},
-        request=request,
-    )
-    record_operational_event(
-        db,
-        OperationalEventType.EMAIL_SUGGESTION_APPLIED.value,
-        "email_suggestion",
-        entity_id=applied.id,
-        entity_label=applied.suggestion_type,
-        shipment_id=applied.shipment_id,
-        actor_user=current_user,
-        source="gmail",
-        new_state={
-            "suggestion_type": applied.suggestion_type,
-            "shipment_id": applied.shipment_id,
-            "status": applied.status,
-            "confidence": applied.confidence,
-        },
-        metadata={"force": payload.force},
-        request=request,
-    )
-    return EmailSuggestionApplyResponse(applied=True, suggestion=_suggestion_read(applied), conflicts=[])
-
-
-@router.post("/suggestions/{suggestion_id}/reject", response_model=EmailSuggestionRead)
-@router.patch("/suggestions/{suggestion_id}/reject", response_model=EmailSuggestionRead)
-def reject_email_suggestion(
-    suggestion_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: AuthenticatedUser = EmailUser,
-) -> EmailSuggestionRead:
-    suggestion = _get_suggestion_for_user(db, suggestion_id, current_user.id)
-    rejected = reject_suggestion(db, suggestion, current_user.id)
-    record_audit_log(
-        db,
-        current_user,
-        "email_suggestion.rejected",
-        "email_suggestion",
-        entity_id=rejected.id,
-        entity_label=rejected.suggestion_type,
-        description="Email suggestion rejected.",
-        metadata={"suggestion_type": rejected.suggestion_type, "shipment_id": rejected.shipment_id},
-        request=request,
-    )
-    record_operational_event(
-        db,
-        OperationalEventType.EMAIL_SUGGESTION_REJECTED.value,
-        "email_suggestion",
-        entity_id=rejected.id,
-        entity_label=rejected.suggestion_type,
-        shipment_id=rejected.shipment_id,
-        actor_user=current_user,
-        source="gmail",
-        new_state={
-            "suggestion_type": rejected.suggestion_type,
-            "shipment_id": rejected.shipment_id,
-            "status": rejected.status,
-            "confidence": rejected.confidence,
-        },
-        request=request,
-    )
-    return _suggestion_read(rejected)
-
-
-@router.patch("/suggestions/{suggestion_id}/dismiss", response_model=EmailSuggestionRead)
-def dismiss_email_suggestion(
-    suggestion_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: AuthenticatedUser = EmailUser,
-) -> EmailSuggestionRead:
-    suggestion = _get_suggestion_for_user(db, suggestion_id, current_user.id)
-    dismissed = dismiss_suggestion(db, suggestion, current_user.id)
-    record_audit_log(
-        db,
-        current_user,
-        "email_suggestion.dismissed",
-        "email_suggestion",
-        entity_id=dismissed.id,
-        entity_label=dismissed.suggestion_type,
-        description="Email suggestion dismissed.",
-        metadata={"suggestion_type": dismissed.suggestion_type, "shipment_id": dismissed.shipment_id},
-        request=request,
-    )
-    return _suggestion_read(dismissed)
-
-
-@router.delete("/suggestions/{suggestion_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_email_suggestion(
-    suggestion_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: AuthenticatedUser = AdminUser,
-) -> None:
-    suggestion = _get_suggestion_for_user(db, suggestion_id, current_user.id)
-    if suggestion.status == "applied":
-        raise HTTPException(
-            status_code=400,
-            detail="Applied suggestions cannot be deleted; the resulting business records remain.",
-        )
-    metadata = {
-        "suggestion_type": suggestion.suggestion_type,
-        "shipment_id": suggestion.shipment_id,
-        "previous_status": suggestion.status,
-    }
-    delete_suggestion(db, suggestion)
-    record_audit_log(
-        db,
-        current_user,
-        "email_suggestion.deleted",
-        "email_suggestion",
-        entity_id=suggestion_id,
-        entity_label=metadata["suggestion_type"],
-        description="Email suggestion hard-deleted.",
-        metadata=metadata,
-        request=request,
-    )
+# ---------------------------------------------------------------------------
+# Suggestion bulk / cleanup endpoints (literal paths come BEFORE the
+# parameterised /suggestions/{suggestion_id} routes so FastAPI matches them
+# regardless of registration order.)
+# ---------------------------------------------------------------------------
 
 
 @router.post("/suggestions/bulk-reject", response_model=EmailClearPendingResponse)
@@ -680,6 +528,193 @@ def clear_pending(
         request=request,
     )
     return EmailClearPendingResponse(rejected=rejected)
+
+
+# ---------------------------------------------------------------------------
+# Per-suggestion endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.patch("/suggestions/{suggestion_id}", response_model=EmailSuggestionRead)
+def update_email_suggestion(
+    suggestion_id: int,
+    payload: EmailSuggestionUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = EmailUser,
+) -> EmailSuggestionRead:
+    suggestion = _get_suggestion_for_user(db, suggestion_id, current_user.id)
+    suggestion = patch_suggestion(db, suggestion, payload.shipment_id, payload.extracted_data_json)
+    record_audit_log(
+        db,
+        current_user,
+        "email_suggestion.updated",
+        "email_suggestion",
+        entity_id=suggestion.id,
+        entity_label=suggestion.suggestion_type,
+        description="Email suggestion review edits saved.",
+        metadata={
+            "suggestion_type": suggestion.suggestion_type,
+            "shipment_id": suggestion.shipment_id,
+            "extracted_data_updated": payload.extracted_data_json is not None,
+        },
+        request=request,
+    )
+    return _suggestion_read(suggestion)
+
+
+@router.post("/suggestions/{suggestion_id}/apply", response_model=EmailSuggestionApplyResponse)
+def apply_email_suggestion(
+    suggestion_id: int,
+    payload: EmailSuggestionApplyRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = EmailUser,
+) -> EmailSuggestionApplyResponse:
+    suggestion = _get_suggestion_for_user(db, suggestion_id, current_user.id)
+    try:
+        applied = apply_suggestion(db, suggestion, current_user.id, force=payload.force)
+    except EmailSuggestionConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": "Suggestion has conflicts.", "conflicts": exc.conflicts},
+        ) from exc
+    record_audit_log(
+        db,
+        current_user,
+        "email_suggestion.applied",
+        "email_suggestion",
+        entity_id=applied.id,
+        entity_label=applied.suggestion_type,
+        description="Email suggestion applied.",
+        metadata={
+            "suggestion_type": applied.suggestion_type,
+            "shipment_id": applied.shipment_id,
+            "force": payload.force,
+        },
+        request=request,
+    )
+    record_operational_event(
+        db,
+        OperationalEventType.EMAIL_SUGGESTION_APPLIED.value,
+        "email_suggestion",
+        entity_id=applied.id,
+        entity_label=applied.suggestion_type,
+        shipment_id=applied.shipment_id,
+        actor_user=current_user,
+        source="gmail",
+        new_state={
+            "suggestion_type": applied.suggestion_type,
+            "shipment_id": applied.shipment_id,
+            "status": applied.status,
+            "confidence": applied.confidence,
+        },
+        metadata={"force": payload.force},
+        request=request,
+    )
+    return EmailSuggestionApplyResponse(applied=True, suggestion=_suggestion_read(applied), conflicts=[])
+
+
+@router.post("/suggestions/{suggestion_id}/reject", response_model=EmailSuggestionRead)
+@router.patch("/suggestions/{suggestion_id}/reject", response_model=EmailSuggestionRead)
+def reject_email_suggestion(
+    suggestion_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = EmailUser,
+) -> EmailSuggestionRead:
+    suggestion = _get_suggestion_for_user(db, suggestion_id, current_user.id)
+    rejected = reject_suggestion(db, suggestion, current_user.id)
+    record_audit_log(
+        db,
+        current_user,
+        "email_suggestion.rejected",
+        "email_suggestion",
+        entity_id=rejected.id,
+        entity_label=rejected.suggestion_type,
+        description="Email suggestion rejected.",
+        metadata={
+            "suggestion_type": rejected.suggestion_type,
+            "shipment_id": rejected.shipment_id,
+        },
+        request=request,
+    )
+    record_operational_event(
+        db,
+        OperationalEventType.EMAIL_SUGGESTION_REJECTED.value,
+        "email_suggestion",
+        entity_id=rejected.id,
+        entity_label=rejected.suggestion_type,
+        shipment_id=rejected.shipment_id,
+        actor_user=current_user,
+        source="gmail",
+        new_state={
+            "suggestion_type": rejected.suggestion_type,
+            "shipment_id": rejected.shipment_id,
+            "status": rejected.status,
+            "confidence": rejected.confidence,
+        },
+        request=request,
+    )
+    return _suggestion_read(rejected)
+
+
+@router.patch("/suggestions/{suggestion_id}/dismiss", response_model=EmailSuggestionRead)
+def dismiss_email_suggestion(
+    suggestion_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = EmailUser,
+) -> EmailSuggestionRead:
+    suggestion = _get_suggestion_for_user(db, suggestion_id, current_user.id)
+    dismissed = dismiss_suggestion(db, suggestion, current_user.id)
+    record_audit_log(
+        db,
+        current_user,
+        "email_suggestion.dismissed",
+        "email_suggestion",
+        entity_id=dismissed.id,
+        entity_label=dismissed.suggestion_type,
+        description="Email suggestion dismissed.",
+        metadata={
+            "suggestion_type": dismissed.suggestion_type,
+            "shipment_id": dismissed.shipment_id,
+        },
+        request=request,
+    )
+    return _suggestion_read(dismissed)
+
+
+@router.delete("/suggestions/{suggestion_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_email_suggestion(
+    suggestion_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = AdminUser,
+) -> None:
+    suggestion = _get_suggestion_for_user(db, suggestion_id, current_user.id)
+    if suggestion.status == "applied":
+        raise HTTPException(
+            status_code=400,
+            detail="Applied suggestions cannot be deleted; the resulting business records remain.",
+        )
+    metadata = {
+        "suggestion_type": suggestion.suggestion_type,
+        "shipment_id": suggestion.shipment_id,
+        "previous_status": suggestion.status,
+    }
+    delete_suggestion(db, suggestion)
+    record_audit_log(
+        db,
+        current_user,
+        "email_suggestion.deleted",
+        "email_suggestion",
+        entity_id=suggestion_id,
+        entity_label=metadata["suggestion_type"],
+        description="Email suggestion hard-deleted.",
+        metadata=metadata,
+        request=request,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -858,15 +893,17 @@ def _is_allowed_frontend_base_url(value: str) -> bool:
 
 def _redirect(params: dict[str, str], frontend_base_url: Optional[str] = None) -> RedirectResponse:
     query = urlencode(params)
-    base_url = frontend_base_url if frontend_base_url and _is_allowed_frontend_base_url(frontend_base_url) else settings.FRONTEND_BASE_URL
+    base_url = (
+        frontend_base_url
+        if frontend_base_url and _is_allowed_frontend_base_url(frontend_base_url)
+        else settings.FRONTEND_BASE_URL
+    )
     return RedirectResponse(f"{base_url.rstrip('/')}/email?{query}")
 
 
 def _subject_hash(subject: Optional[str]) -> Optional[str]:
     if not subject:
         return None
-    import hashlib
-
     canonical = " ".join(subject.split()).lower()[:512]
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
