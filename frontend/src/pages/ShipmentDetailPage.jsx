@@ -120,6 +120,34 @@ function reviewBadgeClass(status) {
   return 'priority-none';
 }
 
+function documentLibrarySummary(item) {
+  const versions = item.versions || [];
+  if (!versions.length) {
+    return item.required ? 'No upload history · required' : 'No upload history';
+  }
+
+  const currentCount = versions.filter((version) => version.is_current && version.status === 'active').length;
+  const previousCount = versions.filter((version) => version.status === 'superseded').length;
+  const removedCount = versions.filter((version) => ['archived', 'rejected'].includes(version.status)).length;
+  const otherCount = Math.max(versions.length - currentCount - previousCount - removedCount, 0);
+
+  const parts = [];
+  parts.push(currentCount ? `${currentCount} current upload` : 'No current upload');
+  if (previousCount) {
+    parts.push(`${previousCount} previous`);
+  }
+  if (removedCount) {
+    parts.push(`${removedCount} removed history`);
+  }
+  if (otherCount) {
+    parts.push(`${otherCount} historical`);
+  }
+  if (item.required) {
+    parts.push('required');
+  }
+  return parts.join(' · ');
+}
+
 function emptyUploadDraft() {
   return {
     file: null,
@@ -1141,10 +1169,7 @@ function ShipmentDetailPage() {
                   <article className="document-library-row" key={`${item.document_id || 'custom'}-${item.document_type}`}>
                     <div>
                       <strong>{item.document_type}</strong>
-                      <p className="muted">
-                        {item.versions.length} version{item.versions.length === 1 ? '' : 's'}
-                        {item.required ? ' · required' : ''}
-                      </p>
+                      <p className="muted">{documentLibrarySummary(item)}</p>
                     </div>
                     {item.current_version ? (
                       <div className="document-library-current">
