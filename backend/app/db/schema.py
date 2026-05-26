@@ -33,6 +33,86 @@ PARTY_PHASE35_COLUMNS = {
 }
 
 
+EMAIL_CONNECTION_PHASE91_COLUMNS = {
+    "gmail_account_email": "VARCHAR(255) NULL",
+    "gmail_account_id": "VARCHAR(120) NULL",
+    "disconnected_at": "TIMESTAMP NULL",
+    "last_cleanup_at": "TIMESTAMP NULL",
+}
+
+EMAIL_MESSAGE_PHASE91_COLUMNS = {
+    "user_id": "INTEGER NULL",
+    "gmail_account_email": "VARCHAR(255) NULL",
+    "visibility": "VARCHAR(30) NOT NULL DEFAULT 'visible'",
+    "subject_hash": "VARCHAR(64) NULL",
+}
+
+EMAIL_SUGGESTION_PHASE91_COLUMNS = {
+    "user_id": "INTEGER NULL",
+    "gmail_account_email": "VARCHAR(255) NULL",
+    "extracted_data_hash": "VARCHAR(64) NULL",
+}
+
+
+def ensure_phase9_1_gmail_schema(engine: Engine) -> None:
+    """Ensure Phase 9.1 columns/indexes exist for Gmail cleanup."""
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+
+    with engine.begin() as connection:
+        if "email_connections" in table_names:
+            existing = {column["name"] for column in inspector.get_columns("email_connections")}
+            for name, column_type in EMAIL_CONNECTION_PHASE91_COLUMNS.items():
+                if name not in existing:
+                    connection.execute(
+                        text(f"ALTER TABLE email_connections ADD COLUMN {name} {column_type}")
+                    )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_email_connections_gmail_account_email "
+                    "ON email_connections (gmail_account_email)"
+                )
+            )
+        if "email_message_cache" in table_names:
+            existing = {column["name"] for column in inspector.get_columns("email_message_cache")}
+            for name, column_type in EMAIL_MESSAGE_PHASE91_COLUMNS.items():
+                if name not in existing:
+                    connection.execute(
+                        text(f"ALTER TABLE email_message_cache ADD COLUMN {name} {column_type}")
+                    )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_email_message_cache_visibility "
+                    "ON email_message_cache (visibility)"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_email_message_cache_subject_hash "
+                    "ON email_message_cache (subject_hash)"
+                )
+            )
+        if "email_suggestions" in table_names:
+            existing = {column["name"] for column in inspector.get_columns("email_suggestions")}
+            for name, column_type in EMAIL_SUGGESTION_PHASE91_COLUMNS.items():
+                if name not in existing:
+                    connection.execute(
+                        text(f"ALTER TABLE email_suggestions ADD COLUMN {name} {column_type}")
+                    )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_email_suggestions_extracted_data_hash "
+                    "ON email_suggestions (extracted_data_hash)"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_email_suggestion_dedupe "
+                    "ON email_suggestions (email_message_id, suggestion_type, shipment_id, extracted_data_hash)"
+                )
+            )
+
+
 def ensure_phase9_event_validation_schema(engine: Engine) -> None:
     """Ensure Phase 9 indexes exist on databases booted via create_all."""
     inspector = inspect(engine)

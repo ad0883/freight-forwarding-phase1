@@ -24,11 +24,15 @@ class EmailConnection(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     provider = Column(String(30), nullable=False, default="gmail", index=True)
     email_address = Column(String(255), nullable=True)
+    gmail_account_email = Column(String(255), nullable=True, index=True)
+    gmail_account_id = Column(String(120), nullable=True, index=True)
     access_token_encrypted = Column(Text, nullable=False)
     refresh_token_encrypted = Column(Text, nullable=True)
     token_expiry = Column(DateTime, nullable=True)
     scopes = Column(Text, nullable=False)
     is_active = Column(Boolean, nullable=False, default=True, index=True)
+    disconnected_at = Column(DateTime, nullable=True)
+    last_cleanup_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -38,11 +42,23 @@ class EmailConnection(Base):
 class EmailMessageCache(Base):
     __tablename__ = "email_message_cache"
     __table_args__ = (
-        UniqueConstraint("connection_id", "gmail_message_id", name="uq_email_message_connection_gmail_id"),
+        UniqueConstraint(
+            "connection_id",
+            "gmail_message_id",
+            name="uq_email_message_connection_gmail_id",
+        ),
+        UniqueConstraint(
+            "user_id",
+            "gmail_account_email",
+            "gmail_message_id",
+            name="uq_email_message_account_gmail_id",
+        ),
     )
 
     id = Column(Integer, primary_key=True, index=True)
     connection_id = Column(Integer, ForeignKey("email_connections.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    gmail_account_email = Column(String(255), nullable=True, index=True)
     gmail_message_id = Column(String(255), nullable=False, index=True)
     thread_id = Column(String(255), nullable=True, index=True)
     subject = Column(Text, nullable=True)
@@ -55,6 +71,8 @@ class EmailMessageCache(Base):
     classification = Column(String(60), nullable=False, default="unknown", index=True)
     matched_shipment_id = Column(Integer, ForeignKey("shipments.id"), nullable=True, index=True)
     processed_status = Column(String(30), nullable=False, default="new", index=True)
+    visibility = Column(String(30), nullable=False, default="visible", index=True)
+    subject_hash = Column(String(64), nullable=True, index=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -67,13 +85,25 @@ class EmailMessageCache(Base):
 
 class EmailSuggestion(Base):
     __tablename__ = "email_suggestions"
+    __table_args__ = (
+        UniqueConstraint(
+            "email_message_id",
+            "suggestion_type",
+            "shipment_id",
+            "extracted_data_hash",
+            name="uq_email_suggestion_dedupe",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     email_message_id = Column(Integer, ForeignKey("email_message_cache.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    gmail_account_email = Column(String(255), nullable=True, index=True)
     shipment_id = Column(Integer, ForeignKey("shipments.id"), nullable=True, index=True)
     suggestion_type = Column(String(60), nullable=False, index=True)
     confidence = Column(Float, nullable=False, default=0.3)
     extracted_data_json = Column(JSON, nullable=False, default=dict)
+    extracted_data_hash = Column(String(64), nullable=True, index=True)
     status = Column(String(30), nullable=False, default="pending", index=True)
     reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
@@ -83,4 +113,4 @@ class EmailSuggestion(Base):
 
     email_message = relationship("EmailMessageCache", back_populates="suggestions")
     shipment = relationship("Shipment")
-    reviewer = relationship("User")
+    reviewer = relationship("User", foreign_keys=[reviewed_by])

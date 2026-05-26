@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -15,7 +15,10 @@ class EmailConnectionStatus(BaseModel):
     connected: bool
     provider: str = "gmail"
     email_address: Optional[str] = None
+    gmail_account_email: Optional[str] = None
     enabled: bool = False
+    pending_suggestions: int = 0
+    cached_messages: int = 0
 
 
 class EmailOAuthStartResponse(BaseModel):
@@ -43,6 +46,7 @@ class EmailScanResponse(BaseModel):
     scanned: int
     cached: int
     suggestions_created: int
+    duplicates_skipped: int = 0
 
 
 class EmailSuggestionRead(BaseModel):
@@ -57,6 +61,7 @@ class EmailSuggestionRead(BaseModel):
     confidence: float
     extracted_data_json: dict[str, Any]
     status: EmailSuggestionStatus
+    gmail_account_email: Optional[str] = None
     created_at: datetime
 
 
@@ -76,6 +81,8 @@ class EmailMessageRead(BaseModel):
     matched_shipment_id: Optional[int] = None
     matched_shipment_code: Optional[str] = None
     processed_status: EmailProcessedStatus
+    visibility: str = "visible"
+    gmail_account_email: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     suggestions: list[EmailSuggestionRead] = Field(default_factory=list)
@@ -107,8 +114,14 @@ class EmailSuggestionApplyResponse(BaseModel):
     conflicts: list[EmailApplyConflict] = Field(default_factory=list)
 
 
+class EmailDisconnectRequest(BaseModel):
+    clear_cache: bool = False
+
+
 class EmailDisconnectResponse(BaseModel):
     disconnected: bool
+    suggestions_rejected: int = 0
+    messages_hidden: int = 0
 
 
 class EmailMessageListItem(BaseModel):
@@ -122,6 +135,36 @@ class EmailMessageListItem(BaseModel):
     matched_shipment_id: Optional[int] = None
     matched_shipment_code: Optional[str] = None
     processed_status: EmailProcessedStatus
+    visibility: str = "visible"
+    gmail_account_email: Optional[str] = None
     suggestion_count: int
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class EmailBulkRejectRequest(BaseModel):
+    suggestion_ids: list[int] = Field(default_factory=list)
+
+
+class EmailClearPendingRequest(BaseModel):
+    current_account_only: bool = True
+    low_confidence: bool = False
+    no_shipment: bool = False
+    older_than: Optional[datetime] = None
+    suggestion_type: Optional[str] = None
+    gmail_account_email: Optional[str] = None
+
+
+class EmailClearPendingResponse(BaseModel):
+    rejected: int
+
+
+class EmailCleanupRequest(BaseModel):
+    gmail_account_email: Optional[str] = None
+    hide_messages: bool = True
+    reject_pending: bool = True
+
+
+class EmailCleanupResponse(BaseModel):
+    suggestions_rejected: int
+    messages_hidden: int

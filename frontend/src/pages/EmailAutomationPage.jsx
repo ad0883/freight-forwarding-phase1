@@ -1,11 +1,15 @@
 import {
   CheckCircle2,
+  Eraser,
   ExternalLink,
+  Eye,
+  EyeOff,
   Mail,
   Plug,
   RefreshCw,
   RotateCcw,
   Search,
+  Trash2,
   XCircle,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -51,16 +55,22 @@ function EmailAutomationPage() {
   const [shipments, setShipments] = useState([]);
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [selectedSuggestion, setSelectedSuggestion] = useState(null);
+  const [selectedSuggestionIds, setSelectedSuggestionIds] = useState(new Set());
   const [reviewShipmentId, setReviewShipmentId] = useState('');
   const [reviewJson, setReviewJson] = useState('{}');
   const [scanForm, setScanForm] = useState(initialScan);
   const [conflicts, setConflicts] = useState([]);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const [confirmCleanup, setConfirmCleanup] = useState(false);
+  const [showLowConfidence, setShowLowConfidence] = useState(false);
+  const [includeHidden, setIncludeHidden] = useState(false);
+  const [currentAccountOnly, setCurrentAccountOnly] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
 
+  const isAdmin = currentUser?.role === 'ADMIN';
   const canUseEmail = currentUser && ['ADMIN', 'STAFF'].includes(currentUser.role);
   const selectedShipment = useMemo(
     () => shipments.find((shipment) => String(shipment.id) === String(reviewShipmentId)) || null,
@@ -73,6 +83,13 @@ function EmailAutomationPage() {
     return '';
   }, [searchParams]);
 
+  const visibleSuggestions = useMemo(() => {
+    if (showLowConfidence) return suggestions;
+    return suggestions.filter(
+      (suggestion) => suggestion.confidence >= 0.7 || suggestion.shipment_id
+    );
+  }, [suggestions, showLowConfidence]);
+
   async function loadBase() {
     setError('');
     const meResponse = await api.get('/auth/me');
@@ -80,21 +97,32 @@ function EmailAutomationPage() {
     if (!['ADMIN', 'STAFF'].includes(meResponse.data.role)) return;
     const [statusResponse, messagesResponse, suggestionsResponse, shipmentsResponse] = await Promise.all([
       api.get('/email/status'),
-      api.get('/email/messages'),
-      api.get('/email/suggestions', { params: { status: 'pending' } }),
+      api.get('/email/messages', {
+        params: {
+          current_account_only: currentAccountOnly,
+          include_hidden: includeHidden,
+        },
+      }),
+      api.get('/email/suggestions', {
+        params: {
+          status: 'pending',
+          current_account_only: currentAccountOnly,
+        },
+      }),
       api.get('/shipments', { params: { include_archived: true } }),
     ]);
     setConnection(statusResponse.data);
     setMessages(messagesResponse.data);
     setSuggestions(suggestionsResponse.data);
     setShipments(shipmentsResponse.data);
+    setSelectedSuggestionIds(new Set());
   }
 
   useEffect(() => {
     loadBase()
       .catch((err) => setError(err.response?.data?.detail || 'Unable to load email automation'))
       .finally(() => setInitialLoading(false));
-  }, []);
+  }, [currentAccountOnly, includeHidden]);
 
   useEffect(() => {
     if (oauthNotice) setNotice(oauthNotice);
@@ -121,12 +149,16 @@ function EmailAutomationPage() {
     }
   }
 
-  async function disconnectGmail() {
+  async function disconnectGmail(clearCache) {
     setError('');
     setNotice('');
     try {
-      await api.post('/email/disconnect');
-      setNotice('Gmail disconnected');
+      const response = await api.post('/email/disconnect', { clear_cache: clearCache });
+      setNotice(
+        clearCache
+          ? `Gmail disconnected. Cleared ${response.data.suggestions_rejected} suggestion(s) and hid ${response.data.messages_hidden} cached email(s).`
+          : 'Gmail disconnected'
+      );
       setConfirmDisconnect(false);
       await refresh();
     } catch (err) {
@@ -148,7 +180,7 @@ function EmailAutomationPage() {
       };
       const response = await api.post('/email/scan', payload);
       setNotice(
-        `Scan complete: ${response.data.scanned} scanned, ${response.data.suggestions_created} suggestions created`
+        `Scan complete: ${response.data.scanned} scanned, ${response.data.cached} new, ${response.data.duplicates_skipped} duplicates skipped, ${response.data.suggestions_created} suggestions created`
       );
       await refresh();
     } catch (err) {
@@ -237,12 +269,112 @@ function EmailAutomationPage() {
     setNotice('');
     setConflicts([]);
     try {
-      await api.post(`/email/suggestions/${selectedSuggestion.id}/reject`);
+      await api.patch(`/email/suggestions/${selectedSuggestion.id}/reject`);
       setNotice('Suggestion rejected');
       setSelectedSuggestion(null);
       await refresh();
     } catch (err) {
       setError(err.response?.data?.detail || 'Unable to reject suggestion');
+    }
+  }
+
+  async function dismissSelected() {
+    if (!selectedSuggestion) return;
+    setError('');
+    setNotice('');
+    setConflicts([]);
+    try {
+      await api.patch(`/email/suggestions/${selectedSuggestion.id}/dismiss`);
+      setNotice('Suggestion dismissed');
+      setSelectedSuggestion(null);
+      await refresh();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to dismiss suggestion');
+    }
+  }
+
+  async function deleteSelected() {
+    if (!selectedSuggestion || !isAdmin) return;
+    if (!window.confirm('Permanently delete this suggestion? Applied records remain.')) return;
+    setError('');
+    setNotice('');
+    try {
+      await api.delete(`/email/suggestions/${selectedSuggestion.id}`);
+      setNotice('Suggestion deleted');
+      setSelectedSuggestion(null);
+      await refresh();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to delete suggestion');
+    }
+  }
+
+  function toggleSuggestionSelection(id) {
+    setSelectedSuggestionIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function selectAllVisible() {
+    setSelectedSuggestionIds(new Set(visibleSuggestions.map((suggestion) => suggestion.id)));
+  }
+
+  function clearSelection() {
+    setSelectedSuggestionIds(new Set());
+  }
+
+  async function bulkRejectSelected() {
+    if (!selectedSuggestionIds.size) return;
+    setError('');
+    setNotice('');
+    try {
+      const response = await api.post('/email/suggestions/bulk-reject', {
+        suggestion_ids: Array.from(selectedSuggestionIds),
+      });
+      setNotice(`${response.data.rejected} suggestion(s) rejected.`);
+      await refresh();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Bulk reject failed');
+    }
+  }
+
+  async function clearPending(filters, label) {
+    setError('');
+    setNotice('');
+    try {
+      const response = await api.post('/email/suggestions/clear-pending', {
+        current_account_only: true,
+        ...filters,
+      });
+      setNotice(`${label}: ${response.data.rejected} suggestion(s) rejected.`);
+      await refresh();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to clear pending suggestions');
+    }
+  }
+
+  async function cleanupOldAccounts() {
+    setError('');
+    setNotice('');
+    try {
+      const response = await api.post('/email/cleanup', {
+        gmail_account_email: null,
+        hide_messages: true,
+        reject_pending: true,
+      });
+      setNotice(
+        `Cleanup: rejected ${response.data.suggestions_rejected} suggestion(s) and hid ${response.data.messages_hidden} cached email(s).`
+      );
+      setConfirmCleanup(false);
+      await refresh();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Cleanup failed');
+      setConfirmCleanup(false);
     }
   }
 
@@ -303,8 +435,10 @@ function EmailAutomationPage() {
         </div>
         <div className="email-status-row">
           <div>
-            <strong>{connection?.email_address || 'No Gmail account connected'}</strong>
-            <p className="muted">Provider: gmail</p>
+            <strong>{connection?.gmail_account_email || connection?.email_address || 'No Gmail account connected'}</strong>
+            <p className="muted">
+              Provider: gmail · Pending suggestions: {connection?.pending_suggestions ?? 0} · Cached emails: {connection?.cached_messages ?? 0}
+            </p>
           </div>
           <div className="row-actions">
             {connection?.connected ? (
@@ -320,6 +454,73 @@ function EmailAutomationPage() {
             )}
           </div>
         </div>
+        <div className="row-actions wrap">
+          <label className="compact-toggle">
+            <input
+              type="checkbox"
+              checked={currentAccountOnly}
+              onChange={(event) => setCurrentAccountOnly(event.target.checked)}
+            />
+            Show current account only
+          </label>
+          <label className="compact-toggle">
+            <input
+              type="checkbox"
+              checked={includeHidden}
+              onChange={(event) => setIncludeHidden(event.target.checked)}
+            />
+            Include hidden cached emails
+          </label>
+          <label className="compact-toggle">
+            <input
+              type="checkbox"
+              checked={showLowConfidence}
+              onChange={(event) => setShowLowConfidence(event.target.checked)}
+            />
+            Show low-confidence / no-shipment suggestions
+          </label>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() =>
+              clearPending(
+                { low_confidence: true },
+                'Cleared low-confidence suggestions'
+              )
+            }
+          >
+            <Eraser size={16} />
+            <span>Clear low-confidence</span>
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() =>
+              clearPending({ no_shipment: true }, 'Cleared no-shipment suggestions')
+            }
+          >
+            <Eraser size={16} />
+            <span>Clear no-shipment</span>
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() =>
+              clearPending({}, 'Cleared current account pending')
+            }
+          >
+            <Eraser size={16} />
+            <span>Clear current account pending</span>
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => setConfirmCleanup(true)}
+          >
+            <Trash2 size={16} />
+            <span>Cleanup old/disconnected data</span>
+          </button>
+        </div>
       </section>
 
       {connection?.connected && (
@@ -332,7 +533,7 @@ function EmailAutomationPage() {
             <input
               value={scanForm.query}
               onChange={(event) => setScanForm((current) => ({ ...current, query: event.target.value }))}
-              placeholder='booking OR "BL draft" OR "arrival notice" OR "freight invoice"'
+              placeholder='"freight invoice" OR "BL draft" OR "arrival notice" OR shipment'
             />
           </label>
           <label>
@@ -365,17 +566,41 @@ function EmailAutomationPage() {
       <section className="split-grid email-review-grid">
         <div className="panel">
           <div className="panel-header">
-            <h2>Pending Suggestions</h2>
+            <h2>Pending Suggestions ({visibleSuggestions.length})</h2>
+            <div className="row-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={selectAllVisible}
+                disabled={!visibleSuggestions.length}
+              >
+                Select all
+              </button>
+              <button className="secondary-button" type="button" onClick={clearSelection} disabled={!selectedSuggestionIds.size}>
+                Clear
+              </button>
+              <button
+                className="secondary-button danger-text"
+                type="button"
+                onClick={bulkRejectSelected}
+                disabled={!selectedSuggestionIds.size}
+              >
+                <XCircle size={15} />
+                Reject selected ({selectedSuggestionIds.size})
+              </button>
+            </div>
           </div>
-          {!suggestions.length ? (
+          {!visibleSuggestions.length ? (
             <EmptyState title="No pending suggestions" detail="Run a Gmail scan to generate suggestions." />
           ) : (
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
+                    <th></th>
                     <th>Type</th>
                     <th>Shipment</th>
+                    <th>Account</th>
                     <th>Confidence</th>
                     <th>Extracted Summary</th>
                     <th>Status</th>
@@ -383,13 +608,22 @@ function EmailAutomationPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {suggestions.map((suggestion) => (
+                  {visibleSuggestions.map((suggestion) => (
                     <tr key={suggestion.id}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedSuggestionIds.has(suggestion.id)}
+                          onChange={() => toggleSuggestionSelection(suggestion.id)}
+                          aria-label="Select suggestion"
+                        />
+                      </td>
                       <td>{suggestion.suggestion_type}</td>
                       <td>
                         {suggestion.shipment_code || '-'}
                         {suggestion.shipment_is_archived && <span className="badge status-archived">Archived</span>}
                       </td>
+                      <td>{suggestion.gmail_account_email || '-'}</td>
                       <td>{Math.round(Number(suggestion.confidence || 0) * 100)}%</td>
                       <td>{summarizeData(suggestion.extracted_data_json)}</td>
                       <td>
@@ -464,6 +698,16 @@ function EmailAutomationPage() {
                   <XCircle size={18} />
                   <span>Reject</span>
                 </button>
+                <button className="secondary-button" type="button" onClick={dismissSelected}>
+                  <EyeOff size={18} />
+                  <span>Dismiss</span>
+                </button>
+                {isAdmin && (
+                  <button className="secondary-button danger-text" type="button" onClick={deleteSelected}>
+                    <Trash2 size={18} />
+                    <span>Delete</span>
+                  </button>
+                )}
               </div>
             </div>
           ) : (
@@ -481,7 +725,7 @@ function EmailAutomationPage() {
 
       <section className="panel">
         <div className="panel-header">
-          <h2>Cached Emails</h2>
+          <h2>Cached Emails ({messages.length})</h2>
         </div>
         {!messages.length ? (
           <EmptyState title="No cached emails" detail="Run a Gmail scan to cache emails." />
@@ -493,6 +737,7 @@ function EmailAutomationPage() {
                   <th>Received</th>
                   <th>From</th>
                   <th>Subject</th>
+                  <th>Account</th>
                   <th>Classification</th>
                   <th>Shipment</th>
                   <th>Status</th>
@@ -502,19 +747,26 @@ function EmailAutomationPage() {
               </thead>
               <tbody>
                 {messages.map((message) => (
-                  <tr key={message.id}>
+                  <tr key={message.id} className={message.visibility === 'hidden' ? 'muted-row' : ''}>
                     <td style={{ whiteSpace: 'nowrap' }}>{formatDate(message.received_at)}</td>
                     <td>{message.sender || '-'}</td>
                     <td>{message.subject || '-'}</td>
+                    <td>{message.gmail_account_email || '-'}</td>
                     <td>
                       <span className={`badge email-${message.classification}`}>{message.classification}</span>
                     </td>
                     <td>{message.matched_shipment_code || '-'}</td>
-                    <td>{message.processed_status}</td>
+                    <td>
+                      {message.visibility === 'hidden' ? (
+                        <span className="badge status-archived">hidden</span>
+                      ) : (
+                        message.processed_status
+                      )}
+                    </td>
                     <td>{message.suggestion_count}</td>
                     <td>
                       <button className="secondary-button" type="button" onClick={() => openMessage(message)}>
-                        <Mail size={16} />
+                        <Eye size={16} />
                         <span>Open</span>
                       </button>
                     </td>
@@ -528,11 +780,20 @@ function EmailAutomationPage() {
       <ConfirmDialog
         open={confirmDisconnect}
         title="Disconnect Gmail"
-        message="Disconnect this Gmail account from email automation?"
-        confirmLabel="Disconnect"
+        message="Disconnect this Gmail account from email automation? You can also clear the cached emails and pending suggestions for this account."
+        confirmLabel="Disconnect & clear cache"
         danger
         onCancel={() => setConfirmDisconnect(false)}
-        onConfirm={disconnectGmail}
+        onConfirm={() => disconnectGmail(true)}
+      />
+      <ConfirmDialog
+        open={confirmCleanup}
+        title="Cleanup old / disconnected data"
+        message="Hide cached emails and reject pending suggestions for the connected account. Applied charges, tasks, and documents are not affected."
+        confirmLabel="Cleanup"
+        danger
+        onCancel={() => setConfirmCleanup(false)}
+        onConfirm={cleanupOldAccounts}
       />
     </div>
   );
