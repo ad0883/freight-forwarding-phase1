@@ -27,6 +27,18 @@ from app.models.document_intelligence import (
     DocumentMismatchResult,
 )
 from app.models.email import EmailConnection, EmailMessageCache, EmailSuggestion
+from app.models.finance_control import (
+    CreditHoldRecord,
+    FinanceAdjustment,
+    FinanceAgingSnapshot,
+    FinanceInvoice,
+    FinanceInvoiceLine,
+    FinancePayment,
+    FinancePaymentAllocation,
+    FinanceRiskRecord,
+    FxRateSnapshot,
+    PartyCreditProfile,
+)
 from app.models.followup import FollowUpLog
 from app.models.notification import Notification, NotificationRule, NotificationUserState
 from app.models.operational_event import OperationalEvent
@@ -69,6 +81,16 @@ __all__ = [
     "EmailConnection",
     "EmailMessageCache",
     "EmailSuggestion",
+    "CreditHoldRecord",
+    "FinanceAdjustment",
+    "FinanceAgingSnapshot",
+    "FinanceInvoice",
+    "FinanceInvoiceLine",
+    "FinancePayment",
+    "FinancePaymentAllocation",
+    "FinanceRiskRecord",
+    "FxRateSnapshot",
+    "PartyCreditProfile",
     "FollowUpLog",
     "Notification",
     "NotificationRule",

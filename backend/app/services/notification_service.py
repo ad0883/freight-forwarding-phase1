@@ -118,6 +118,15 @@ DEFAULT_RULES = [
         "threshold_days": 1,
         "target_role": "STAFF",
     },
+    {
+        "rule_key": "finance_overview",
+        "name": "Finance overview",
+        "description": "Phase 14 finance summary widget visibility.",
+        "category": "finance",
+        "priority": "info",
+        "threshold_days": None,
+        "target_role": "STAFF",
+    },
 ]
 
 

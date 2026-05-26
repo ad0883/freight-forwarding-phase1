@@ -362,6 +362,93 @@ def ensure_phase13_document_intelligence_schema(engine: Engine) -> None:
                 )
 
 
+def ensure_phase14_finance_credit_schema(engine: Engine) -> None:
+    """Ensure Phase 14 finance/credit-control indexes exist for create_all databases."""
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+    index_specs: dict[str, tuple[tuple[str, str], ...]] = {
+        "finance_invoices": (
+            ("ix_finance_invoices_organization_id", "organization_id"),
+            ("ix_finance_invoices_shipment_id", "shipment_id"),
+            ("ix_finance_invoices_party_id", "party_id"),
+            ("ix_finance_invoices_invoice_number", "invoice_number"),
+            ("ix_finance_invoices_status", "status"),
+            ("ix_finance_invoices_direction", "direction"),
+            ("ix_finance_invoices_due_date", "due_date"),
+        ),
+        "finance_invoice_lines": (
+            ("ix_finance_invoice_lines_invoice_id", "invoice_id"),
+            ("ix_finance_invoice_lines_charge_id", "charge_id"),
+        ),
+        "finance_payments": (
+            ("ix_finance_payments_organization_id", "organization_id"),
+            ("ix_finance_payments_party_id", "party_id"),
+            ("ix_finance_payments_status", "status"),
+            ("ix_finance_payments_direction", "direction"),
+        ),
+        "finance_payment_allocations": (
+            ("ix_finance_payment_allocations_payment_id", "payment_id"),
+            ("ix_finance_payment_allocations_invoice_id", "invoice_id"),
+            ("ix_finance_payment_allocations_charge_id", "charge_id"),
+            ("ix_finance_payment_allocations_shipment_id", "shipment_id"),
+        ),
+        "party_credit_profiles": (
+            ("ix_party_credit_profiles_party_id", "party_id"),
+            ("ix_party_credit_profiles_status", "status"),
+        ),
+        "credit_hold_records": (
+            ("ix_credit_hold_records_party_id", "party_id"),
+            ("ix_credit_hold_records_shipment_id", "shipment_id"),
+            ("ix_credit_hold_records_hold_type", "hold_type"),
+            ("ix_credit_hold_records_status", "status"),
+            ("ix_credit_hold_records_blocked_action", "blocked_action"),
+        ),
+        "finance_aging_snapshots": (
+            ("ix_finance_aging_snapshots_party_id", "party_id"),
+            ("ix_finance_aging_snapshots_shipment_id", "shipment_id"),
+            ("ix_finance_aging_snapshots_direction", "direction"),
+            ("ix_finance_aging_snapshots_snapshot_date", "snapshot_date"),
+        ),
+        "fx_rate_snapshots": (
+            ("ix_fx_rate_snapshots_base_currency", "base_currency"),
+            ("ix_fx_rate_snapshots_quote_currency", "quote_currency"),
+            ("ix_fx_rate_snapshots_rate_date", "rate_date"),
+        ),
+        "finance_risk_records": (
+            ("ix_finance_risk_records_party_id", "party_id"),
+            ("ix_finance_risk_records_shipment_id", "shipment_id"),
+            ("ix_finance_risk_records_risk_type", "risk_type"),
+            ("ix_finance_risk_records_status", "status"),
+            ("ix_finance_risk_records_severity", "severity"),
+            ("ix_finance_risk_records_dedupe_key", "dedupe_key"),
+        ),
+        "finance_adjustments": (
+            ("ix_finance_adjustments_invoice_id", "invoice_id"),
+            ("ix_finance_adjustments_charge_id", "charge_id"),
+            ("ix_finance_adjustments_shipment_id", "shipment_id"),
+            ("ix_finance_adjustments_status", "status"),
+        ),
+    }
+    with engine.begin() as connection:
+        for table_name, indexes in index_specs.items():
+            if table_name not in table_names:
+                continue
+            for index_name, column_name in indexes:
+                connection.execute(
+                    text(
+                        f"CREATE INDEX IF NOT EXISTS {index_name} "
+                        f"ON {table_name} ({column_name})"
+                    )
+                )
+        if "party_credit_profiles" in table_names:
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_party_credit_profiles_party "
+                    "ON party_credit_profiles (party_id)"
+                )
+            )
+
+
 def ensure_phase9_event_validation_schema(engine: Engine) -> None:
     """Ensure Phase 9 indexes exist on databases booted via create_all."""
     inspector = inspect(engine)

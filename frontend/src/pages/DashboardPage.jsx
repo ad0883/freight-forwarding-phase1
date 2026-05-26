@@ -14,6 +14,7 @@ function DashboardPage() {
   const [containerRisk, setContainerRisk] = useState(null);
   const [documentSummary, setDocumentSummary] = useState(null);
   const [documentIntelligence, setDocumentIntelligence] = useState(null);
+  const [financeOverview, setFinanceOverview] = useState(null);
   const [error, setError] = useState('');
 
   async function load() {
@@ -60,6 +61,10 @@ function DashboardPage() {
         .get('/document-intelligence/dashboard-summary')
         .then((response) => setDocumentIntelligence(response.data))
         .catch(() => setDocumentIntelligence(null));
+      api
+        .get('/finance/overview')
+        .then((response) => setFinanceOverview(response.data))
+        .catch(() => setFinanceOverview(null));
     } catch (err) {
       setError(err.response?.data?.detail || 'Unable to load dashboard');
     }
@@ -277,6 +282,53 @@ function DashboardPage() {
               </article>
             ))}
             {!documentIntelligence.critical_items?.length && <p className="muted">No critical document mismatches.</p>}
+          </div>
+        </section>
+      )}
+
+      {financeOverview !== null && (
+        <section className="panel">
+          <div className="panel-header">
+            <h2>Finance &amp; Credit Control</h2>
+            <Link to="/finance">Open finance</Link>
+          </div>
+          <div className="metric-grid">
+            <div>
+              <WalletCards size={18} />
+              <span>Receivable overdue</span>
+              <strong>
+                {financeOverview.currency} {Number(financeOverview.receivable_overdue || 0).toLocaleString('en-IN')}
+              </strong>
+            </div>
+            <div>
+              <DollarSign size={18} />
+              <span>Payable overdue</span>
+              <strong>
+                {financeOverview.currency} {Number(financeOverview.payable_overdue || 0).toLocaleString('en-IN')}
+              </strong>
+            </div>
+            <div>
+              <AlertTriangle size={18} />
+              <span>Active credit holds</span>
+              <strong>{financeOverview.active_holds}</strong>
+            </div>
+            <div>
+              <Bell size={18} />
+              <span>Open finance risks</span>
+              <strong>{financeOverview.open_risks}</strong>
+            </div>
+            <div>
+              <DollarSign size={18} />
+              <span>Unallocated payments</span>
+              <strong>
+                {financeOverview.currency} {Number(financeOverview.unallocated_payments || 0).toLocaleString('en-IN')}
+              </strong>
+            </div>
+            <div>
+              <AlertTriangle size={18} />
+              <span>Negative-margin shipments</span>
+              <strong>{financeOverview.negative_margin_shipments}</strong>
+            </div>
           </div>
         </section>
       )}

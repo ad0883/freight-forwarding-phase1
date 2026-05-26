@@ -5,6 +5,7 @@ import {
   Bell,
   Check,
   ClipboardList,
+  CreditCard,
   FileClock,
   GitBranch,
   LayoutDashboard,
@@ -31,6 +32,7 @@ const mainLinks = [
   { to: '/parties', label: 'Parties', icon: Users },
   { to: '/tasks', label: 'Tasks', icon: ClipboardList },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
+  { to: '/finance', label: 'Finance', icon: CreditCard },
   { to: '/ai', label: 'AI Assistant', icon: Bot },
   { to: '/email', label: 'Email Automation', icon: Mail, writeRoleOnly: true },
 ];

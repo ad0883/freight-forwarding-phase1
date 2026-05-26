@@ -32,6 +32,8 @@ def _answer_for_context(context: AIContextBundle) -> str:
         return _validation_issues_answer(context)
     if context.intent == "document_intelligence_summary":
         return _document_intelligence_answer(context)
+    if context.intent == "finance_control_summary":
+        return _finance_control_answer(context)
     if context.intent == "events_recent":
         return _recent_events_answer(context)
     if context.intent == "workflow_review_summary":
@@ -231,6 +233,36 @@ def _document_intelligence_answer(context: AIContextBundle) -> str:
         f"{totals.get('low_confidence', 0)} low-confidence extraction(s). "
         "OCR and suggestions remain read-only until a user reviews them."
     )
+
+
+def _finance_control_answer(context: AIContextBundle) -> str:
+    totals = context.totals or {}
+    currency = totals.get("currency", "INR")
+    parts = [
+        f"Finance summary (read-only): receivable outstanding {currency} {totals.get('receivable_total', 0)}, "
+        f"overdue {currency} {totals.get('receivable_overdue', 0)}; "
+        f"payable outstanding {currency} {totals.get('payable_total', 0)}, "
+        f"overdue {currency} {totals.get('payable_overdue', 0)}; "
+        f"{totals.get('active_holds', 0)} active credit hold(s), "
+        f"{totals.get('open_risks', 0)} open risk(s)."
+    ]
+    shipment_records = [row for row in context.records if row.get("type") == "shipment_finance"]
+    if shipment_records:
+        row = shipment_records[0]
+        parts.append(
+            f" {row.get('shipment_code')}: receivable outstanding "
+            f"{currency} {row.get('receivable_outstanding', 0)}, "
+            f"{row.get('active_holds', 0)} active hold(s)"
+            + (", margin is negative." if row.get("margin_negative") else ".")
+        )
+    risks = [row for row in context.records if row.get("type") == "risk"][:3]
+    if risks:
+        risk_lines = "; ".join(
+            f"{r.get('severity')} {r.get('risk_type')} ({r.get('shipment_code') or r.get('party_name') or 'system'})"
+            for r in risks
+        )
+        parts.append(f" Open risks: {risk_lines}.")
+    return "".join(parts)
 
 
 def _recent_events_answer(context: AIContextBundle) -> str:

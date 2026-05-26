@@ -20,6 +20,7 @@ import { useParams } from 'react-router-dom';
 import api from '../api/client.js';
 import { ConfirmDialog, EmptyState, ErrorState, LoadingState } from '../components/States.jsx';
 import ContainersPanel from '../components/ContainersPanel.jsx';
+import ShipmentFinancePanel from '../components/ShipmentFinancePanel.jsx';
 import WorkflowPanel from '../components/WorkflowPanel.jsx';
 
 const exportStatuses = [
@@ -889,9 +890,17 @@ function ShipmentDetailPage() {
       {notice && <p className="success-text">{notice}</p>}
 
       <div className="tabs" role="tablist">
-        {['overview', 'workflow', 'containers', 'documents', 'tasks', 'bl', 'followups', 'demurrage', 'charges'].map((tab) => (
+        {['overview', 'workflow', 'containers', 'documents', 'tasks', 'bl', 'followups', 'demurrage', 'charges', 'finance'].map((tab) => (
           <button key={tab} className={activeTab === tab ? 'active' : ''} onClick={() => setActiveTab(tab)}>
-            {tab === 'bl' ? 'BL Management' : tab === 'followups' ? 'Follow-up Log' : tab === 'workflow' ? 'Workflow' : tab[0].toUpperCase() + tab.slice(1)}
+            {tab === 'bl'
+              ? 'BL Management'
+              : tab === 'followups'
+              ? 'Follow-up Log'
+              : tab === 'workflow'
+              ? 'Workflow'
+              : tab === 'finance'
+              ? 'Finance'
+              : tab[0].toUpperCase() + tab.slice(1)}
           </button>
         ))}
       </div>
@@ -1941,6 +1950,10 @@ function ShipmentDetailPage() {
             )}
           </div>
         </section>
+      )}
+
+      {activeTab === 'finance' && (
+        <ShipmentFinancePanel shipmentId={shipment.id} canWrite={canWrite} />
       )}
 
       <ConfirmDialog

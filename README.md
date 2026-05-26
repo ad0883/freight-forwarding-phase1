@@ -31,6 +31,7 @@ Phase 1 implementation of a freight forwarding operations system with a FastAPI 
 - Phase 9.1 Gmail automation hardening: account scoping, deterministic dedupe, classifier filtering for non-freight senders, BL-number validation, dismiss/delete/bulk-reject/cleanup controls
 - Phase 10 controlled export/import workflow state machines with transition logs, sensitivity-aware permissions, manual-review notifications, and a Workflow Control dashboard widget
 - Phase 11 multi-container support with append-only container events, separated demurrage/detention engines, container risk dashboard widget, and a safe legacy-field backfill
+- Phase 14 finance + credit control: invoices, payments + allocations, party credit profiles, credit holds, aging buckets, FX rate snapshots, finance risk records, and advisory release controls (OBL/DO/dispatch). Existing charges/P&L flow unchanged.
 
 ## Backend Local Setup
 

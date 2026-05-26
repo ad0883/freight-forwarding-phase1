@@ -21,6 +21,7 @@ from app.api.routes import (
     email,
     events,
     exports,
+    finance_control,
     followups,
     health,
     notifications,
@@ -48,6 +49,7 @@ from app.db.schema import (
     ensure_phase11_container_schema,
     ensure_phase12_document_schema,
     ensure_phase13_document_intelligence_schema,
+    ensure_phase14_finance_credit_schema,
 )
 from app.db.session import Base, SessionLocal, engine
 from app.models import User
@@ -164,6 +166,7 @@ async def lifespan(app: FastAPI):
         ensure_phase11_container_schema(engine)
         ensure_phase12_document_schema(engine)
         ensure_phase13_document_intelligence_schema(engine)
+        ensure_phase14_finance_credit_schema(engine)
         ensure_performance_indexes(engine)
     db = SessionLocal()
     try:
@@ -224,6 +227,8 @@ app.include_router(document_versions.router, prefix="/api")
 app.include_router(email.router, prefix="/api")
 app.include_router(charges.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
+app.include_router(finance_control.router, prefix="/api")
+app.include_router(finance_control.shipment_finance_router, prefix="/api")
 app.include_router(tasks.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")
 app.include_router(ai.router, prefix="/api")

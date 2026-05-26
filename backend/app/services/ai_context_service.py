@@ -102,6 +102,8 @@ def build_ai_context(
         return _document_versions_context(db, question, shipment_code, request.shipment_id, limit)
     if intent == "document_intelligence_summary":
         return _document_intelligence_context(db, question, shipment_code, request.shipment_id, limit)
+    if intent == "finance_control_summary":
+        return _finance_control_context(db, question, shipment_code, request.shipment_id, limit)
     if intent == "notifications_summary" and current_user:
         return _notifications_summary_context(db, question, current_user)
     if intent == "general_dashboard_summary":
@@ -187,6 +189,26 @@ def _detect_intent(question: str, shipment_code: Optional[str]) -> str:
         or "broken workflow" in text
     ):
         return "validation_issues_summary"
+    if any(
+        keyword in text
+        for keyword in (
+            "credit hold",
+            "credit limit",
+            "release blocked",
+            "finance hold",
+            "on finance hold",
+            "finance risk",
+            "release do",
+            "release obl",
+            "release final bl",
+            "release b/l",
+        )
+    ) or ("outstanding" in text and ("party" in text or "customer" in text or "client" in text)):
+        return "finance_control_summary"
+    if "aging" in text and ("receivable" in text or "payable" in text or "report" in text):
+        return "finance_control_summary"
+    if "overdue" in text and ("invoice" in text or "receivable" in text or "payable" in text):
+        return "finance_control_summary"
     if "recent event" in text or "recent events" in text or "what events" in text or "what recent events" in text:
         return "events_recent"
     if "notification" in text or "urgent issue" in text or "needs attention" in text or "need attention" in text:
@@ -700,6 +722,103 @@ def _document_intelligence_context(
             AIDataPoint(label="Low confidence", value=str(len(low_confidence))),
         ],
         suggested_actions=[row.message for row in critical[:3]],
+        priority=priority,
+    )
+
+
+def _finance_control_context(
+    db: Session,
+    question: str,
+    shipment_code: Optional[str],
+    shipment_id: Optional[int],
+    limit: int,
+) -> AIContextBundle:
+    """Read-only finance control / credit summary for AI."""
+    from app.services.finance_overview_service import (
+        build_finance_overview,
+        build_shipment_finance_summary,
+    )
+    from app.services.finance_risk_service import list_finance_risks
+
+    overview = build_finance_overview(db)
+    open_risks = list_finance_risks(db, status_filter="open", limit=limit)
+    records: list[dict[str, Any]] = []
+    suggested_actions: list[str] = []
+    target_shipment = None
+    if shipment_id is not None or shipment_code:
+        from app.models.shipment import Shipment
+
+        query = db.query(Shipment)
+        if shipment_id is not None:
+            query = query.filter(Shipment.id == shipment_id)
+        elif shipment_code:
+            query = query.filter(Shipment.shipment_code == shipment_code)
+        target_shipment = query.first()
+    if target_shipment is not None:
+        try:
+            ship_summary = build_shipment_finance_summary(db, target_shipment.id)
+            records.append(
+                {
+                    "type": "shipment_finance",
+                    "shipment_code": ship_summary.shipment_code,
+                    "receivable_total": ship_summary.receivable_total,
+                    "receivable_outstanding": ship_summary.receivable_outstanding,
+                    "payable_total": ship_summary.payable_total,
+                    "payable_outstanding": ship_summary.payable_outstanding,
+                    "active_holds": len(ship_summary.active_holds),
+                    "margin_negative": ship_summary.margin_negative,
+                }
+            )
+            if ship_summary.active_holds:
+                suggested_actions.append(
+                    f"Resolve {len(ship_summary.active_holds)} active credit hold(s) on {ship_summary.shipment_code}."
+                )
+        except Exception:
+            pass
+    for risk in open_risks[:limit]:
+        records.append(
+            {
+                "type": "risk",
+                "risk_type": risk.risk_type,
+                "severity": risk.severity,
+                "shipment_code": risk.shipment_code,
+                "party_name": risk.party_name,
+                "message": risk.message,
+            }
+        )
+        if risk.severity == "critical" and risk.recommended_action:
+            suggested_actions.append(risk.recommended_action)
+    priority: AIPriority = "info"
+    if overview.active_holds or any(r.severity == "critical" for r in open_risks):
+        priority = "critical"
+    elif overview.receivable_overdue or overview.payable_overdue or open_risks:
+        priority = "warning"
+    return AIContextBundle(
+        intent="finance_control_summary",
+        question=question,
+        shipment_code=target_shipment.shipment_code if target_shipment else shipment_code,
+        summary=(
+            "Read-only finance control summary. AI cannot create invoices, "
+            "mark payments, waive holds, or release documents."
+        ),
+        records=records,
+        totals={
+            "receivable_total": overview.receivable_total,
+            "receivable_overdue": overview.receivable_overdue,
+            "payable_total": overview.payable_total,
+            "payable_overdue": overview.payable_overdue,
+            "active_holds": overview.active_holds,
+            "open_risks": overview.open_risks,
+            "unallocated_payments": overview.unallocated_payments,
+            "currency": overview.currency,
+        },
+        data_points=[
+            AIDataPoint(label="Receivable outstanding", value=str(overview.receivable_total)),
+            AIDataPoint(label="Receivable overdue", value=str(overview.receivable_overdue)),
+            AIDataPoint(label="Payable outstanding", value=str(overview.payable_total)),
+            AIDataPoint(label="Active holds", value=str(overview.active_holds)),
+        ],
+        suggested_actions=suggested_actions[:3],
         priority=priority,
     )
 
