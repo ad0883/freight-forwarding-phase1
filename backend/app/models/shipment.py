@@ -36,6 +36,11 @@ class Shipment(Base):
     archived_at = Column(DateTime, nullable=True)
     archived_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     archive_reason = Column(Text, nullable=True)
+    workflow_state = Column(String(80), nullable=True, index=True)
+    workflow_state_updated_at = Column(DateTime, nullable=True)
+    workflow_state_reason = Column(Text, nullable=True)
+    manual_review_required = Column(Boolean, nullable=False, default=False)
+    manual_review_reason = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
 

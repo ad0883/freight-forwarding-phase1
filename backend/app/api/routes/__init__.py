@@ -21,6 +21,7 @@ from app.api.routes import (
     tasks,
     users,
     validation_issues,
+    workflow_state_machine,
 )
 
 __all__ = [
@@ -46,4 +47,5 @@ __all__ = [
     "tasks",
     "users",
     "validation_issues",
+    "workflow_state_machine",
 ]

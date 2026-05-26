@@ -16,6 +16,11 @@ from app.models.shipment import Shipment
 from app.models.task import Task
 from app.models.user import User
 from app.models.validation_issue import ValidationIssue
+from app.models.workflow_state_machine import (
+    WorkflowStateDefinition,
+    WorkflowTransitionDefinition,
+    WorkflowTransitionLog,
+)
 
 __all__ = [
     "Alert",
@@ -40,4 +45,7 @@ __all__ = [
     "Task",
     "User",
     "ValidationIssue",
+    "WorkflowStateDefinition",
+    "WorkflowTransitionDefinition",
+    "WorkflowTransitionLog",
 ]

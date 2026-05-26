@@ -66,6 +66,11 @@ class ShipmentRead(ShipmentBase):
     archived_at: Optional[datetime] = None
     archived_by: Optional[int] = None
     archive_reason: Optional[str] = None
+    workflow_state: Optional[str] = None
+    workflow_state_updated_at: Optional[datetime] = None
+    workflow_state_reason: Optional[str] = None
+    manual_review_required: bool = False
+    manual_review_reason: Optional[str] = None
     created_at: datetime
     created_by: int
     exporter: Optional[PartyRead] = None

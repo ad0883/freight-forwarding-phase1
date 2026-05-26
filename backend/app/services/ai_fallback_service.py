@@ -32,6 +32,12 @@ def _answer_for_context(context: AIContextBundle) -> str:
         return _validation_issues_answer(context)
     if context.intent == "events_recent":
         return _recent_events_answer(context)
+    if context.intent == "workflow_review_summary":
+        return _workflow_review_answer(context)
+    if context.intent == "shipment_workflow_state":
+        return _shipment_workflow_state_answer(context)
+    if context.intent == "shipment_workflow_next_steps":
+        return _shipment_workflow_next_steps_answer(context)
     if context.intent in {"shipment_status", "shipment_detail"}:
         return _shipment_answer(context)
     if context.intent == "workflow_next_action":
@@ -210,3 +216,36 @@ def _recent_events_answer(context: AIContextBundle) -> str:
         for row in context.records[:5]
     ]
     return "Recent operational events: " + "; ".join(lines)
+
+
+def _workflow_review_answer(context: AIContextBundle) -> str:
+    totals = context.totals
+    if not context.records and not totals.get("blocked_transitions"):
+        return "No shipments need manual workflow review and no recent blocked transitions."
+    flagged = [row.get("shipment_code") for row in context.records[:5]]
+    parts = []
+    if flagged:
+        parts.append(f"Manual review needed: {', '.join(filter(None, flagged))}.")
+    if totals.get("blocked_transitions"):
+        parts.append(f"Recent blocked transitions: {totals['blocked_transitions']}.")
+    return " ".join(parts)
+
+
+def _shipment_workflow_state_answer(context: AIContextBundle) -> str:
+    if not context.records:
+        return context.result_note or "Shipment not found."
+    row = context.records[0]
+    review = " (manual review required)" if row.get("manual_review_required") else ""
+    return (
+        f"{row.get('shipment_code')} is in workflow state "
+        f"{row.get('workflow_state') or 'unset'}{review}."
+    )
+
+
+def _shipment_workflow_next_steps_answer(context: AIContextBundle) -> str:
+    if not context.suggested_actions:
+        return f"No allowed next workflow steps were found for {context.shipment_code or 'this shipment'}."
+    return (
+        f"Allowed next workflow steps for {context.shipment_code}: "
+        + "; ".join(context.suggested_actions)
+    )

@@ -10,6 +10,7 @@ function DashboardPage() {
   const [dailySummary, setDailySummary] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [validationIssues, setValidationIssues] = useState(null);
+  const [workflowControl, setWorkflowControl] = useState(null);
   const [error, setError] = useState('');
 
   async function load() {
@@ -30,6 +31,20 @@ function DashboardPage() {
         .get('/validation-issues', { params: { status: 'open', limit: 5 } })
         .then((response) => setValidationIssues(response.data))
         .catch(() => setValidationIssues(null));
+      Promise.all([
+        api.get('/shipments', { params: { include_archived: false } }).catch(() => ({ data: [] })),
+        api.get('/events', { params: { event_type: 'workflow.transition_requested', limit: 10 } }).catch(() => ({ data: [] })),
+      ])
+        .then(([shipmentsResponse, eventsResponse]) => {
+          const flagged = (shipmentsResponse.data || []).filter((s) => s.manual_review_required);
+          const blocked = (eventsResponse.data || []).filter((e) => {
+            const meta = e.metadata_json || {};
+            return meta.outcome === 'blocked' || meta.outcome === 'manual_review_required';
+          });
+          const missing = (shipmentsResponse.data || []).filter((s) => !s.workflow_state);
+          setWorkflowControl({ flagged, blocked, missing });
+        })
+        .catch(() => setWorkflowControl(null));
     } catch (err) {
       setError(err.response?.data?.detail || 'Unable to load dashboard');
     }
@@ -193,6 +208,45 @@ function DashboardPage() {
                 </article>
               ))}
             </div>
+          )}
+        </section>
+      )}
+
+      {workflowControl !== null && (
+        <section className="panel">
+          <div className="panel-header">
+            <h2>Workflow Control</h2>
+            <Link to="/events">Recent events</Link>
+          </div>
+          <div className="dashboard-summary-strip">
+            <div>
+              <span>Manual review</span>
+              <strong>{workflowControl.flagged.length}</strong>
+            </div>
+            <div>
+              <span>Recent blocked</span>
+              <strong>{workflowControl.blocked.length}</strong>
+            </div>
+            <div>
+              <span>No workflow state</span>
+              <strong>{workflowControl.missing.length}</strong>
+            </div>
+          </div>
+          {workflowControl.flagged.length > 0 ? (
+            <div className="notification-list compact">
+              {workflowControl.flagged.slice(0, 3).map((shipment) => (
+                <article className="notification-row" key={shipment.id}>
+                  <span className="badge priority-critical">manual review</span>
+                  <div>
+                    <strong>{shipment.shipment_code}</strong>
+                    <p>{shipment.manual_review_reason || 'Manual review required'}</p>
+                  </div>
+                  <Link to={`/shipments/${shipment.id}`}>Open</Link>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="muted">No shipments need manual workflow review.</p>
           )}
         </section>
       )}

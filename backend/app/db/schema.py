@@ -33,6 +33,76 @@ PARTY_PHASE35_COLUMNS = {
 }
 
 
+SHIPMENT_PHASE10_COLUMNS = {
+    "workflow_state": "VARCHAR(80) NULL",
+    "workflow_state_updated_at": "TIMESTAMP NULL",
+    "workflow_state_reason": "TEXT NULL",
+    "manual_review_required": "BOOLEAN NOT NULL DEFAULT FALSE",
+    "manual_review_reason": "TEXT NULL",
+}
+
+
+def ensure_phase10_workflow_schema(engine: Engine) -> None:
+    """Ensure Phase 10 shipment columns and workflow indexes exist."""
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+
+    with engine.begin() as connection:
+        if "shipments" in table_names:
+            existing_columns = {column["name"] for column in inspector.get_columns("shipments")}
+            for name, column_type in SHIPMENT_PHASE10_COLUMNS.items():
+                if name in existing_columns:
+                    continue
+                connection.execute(
+                    text(f"ALTER TABLE shipments ADD COLUMN {name} {column_type}")
+                )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_shipments_workflow_state "
+                    "ON shipments (workflow_state)"
+                )
+            )
+        if "workflow_state_definitions" in table_names:
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_workflow_state_def_flow_type "
+                    "ON workflow_state_definitions (flow_type)"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_workflow_state_def_state_key "
+                    "ON workflow_state_definitions (state_key)"
+                )
+            )
+        if "workflow_transition_definitions" in table_names:
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_workflow_transition_def_flow_type "
+                    "ON workflow_transition_definitions (flow_type)"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_workflow_transition_def_from_state "
+                    "ON workflow_transition_definitions (from_state)"
+                )
+            )
+        if "workflow_transition_logs" in table_names:
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_workflow_logs_shipment_id "
+                    "ON workflow_transition_logs (shipment_id)"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_workflow_logs_status "
+                    "ON workflow_transition_logs (status)"
+                )
+            )
+
+
 def ensure_phase9_event_validation_schema(engine: Engine) -> None:
     """Ensure Phase 9 indexes exist on databases booted via create_all."""
     inspector = inspect(engine)

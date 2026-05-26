@@ -68,6 +68,31 @@ See:
 - `../MASTER_1_1_GAP_MAP.md`
 - `../docs/EVENT_VALIDATION_FOUNDATION.md`
 - `../docs/PHASE_9_EVENT_VALIDATION_RULE_ENGINE.md`
+- `../docs/PHASE_10_EXPORT_IMPORT_STATE_MACHINES.md`
+
+## Phase 10 Export Import State Machines
+
+Phase 10 layers a controlled state-machine on top of existing shipments without
+removing any current behaviour:
+
+- Canonical export and import states are seeded into `workflow_state_definitions`.
+- Transitions are seeded into `workflow_transition_definitions` and gated by
+  `is_sensitive`, `requires_confirmation`, `requires_reason`, and
+  `requires_manual_review` flags.
+- `workflow_transition_logs` records every transition attempt with status,
+  validation status, actor, reason, and links to the operational event/issue.
+- Shipments gain `workflow_state`, `workflow_state_updated_at`,
+  `workflow_state_reason`, `manual_review_required`, and `manual_review_reason`.
+
+API base path: `/api/workflow`. See `../docs/PHASE_10_EXPORT_IMPORT_STATE_MACHINES.md`
+for the full state list, transition rules, permissions, and rule integration.
+
+The Shipment detail page now includes a Workflow tab with a state badge,
+available transitions, and a transition timeline. Sensitive transitions require
+explicit confirmation and ADMIN role. VIEW_ONLY users can read state and
+timeline only.
+
+For migration: `alembic upgrade head` applies `phase10_export_import_states`.
 
 ## Phase 9 Event Validation Rule Engine
 

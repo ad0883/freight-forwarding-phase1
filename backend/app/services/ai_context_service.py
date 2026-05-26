@@ -74,6 +74,12 @@ def build_ai_context(
         return _validation_issues_context(db, question, limit)
     if intent == "events_recent":
         return _recent_events_context(db, question, limit)
+    if intent == "workflow_review_summary":
+        return _workflow_review_context(db, question, limit)
+    if intent == "shipment_workflow_state":
+        return _shipment_workflow_state_context(db, question, shipment_code, request.shipment_id)
+    if intent == "shipment_workflow_next_steps":
+        return _shipment_workflow_next_steps_context(db, question, shipment_code, request.shipment_id, current_user)
     if intent == "notifications_summary" and current_user:
         return _notifications_summary_context(db, question, current_user)
     if intent == "general_dashboard_summary":
@@ -122,6 +128,18 @@ def _shipment_code_from_request(request: AIAskRequest) -> Optional[str]:
 
 def _detect_intent(question: str, shipment_code: Optional[str]) -> str:
     text = question.lower()
+    if (
+        "stuck" in text
+        or "manual workflow review" in text
+        or "manual review" in text and ("workflow" in text or "shipment" in text)
+        or "invalid workflow transition" in text
+        or "blocked transition" in text
+    ):
+        return "workflow_review_summary"
+    if shipment_code and ("workflow state" in text or "workflow status" in text):
+        return "shipment_workflow_state"
+    if "next steps for" in text and shipment_code:
+        return "shipment_workflow_next_steps"
     if (
         "validation issue" in text
         or "manual review" in text
@@ -695,6 +713,158 @@ def _unknown_context(question: str) -> AIContextBundle:
         question=question,
         summary="No specific database context matched this question.",
         result_note="The system does not have enough scoped data to answer this question.",
+    )
+
+
+def _workflow_review_context(db: Session, question: str, limit: int) -> AIContextBundle:
+    flagged = (
+        db.query(Shipment)
+        .filter(Shipment.manual_review_required.is_(True), Shipment.is_archived.is_(False))
+        .order_by(Shipment.workflow_state_updated_at.desc().nullslast())
+        .limit(limit)
+        .all()
+    )
+    from app.models.workflow_state_machine import WorkflowTransitionLog
+
+    blocked = (
+        db.query(WorkflowTransitionLog)
+        .filter(WorkflowTransitionLog.status.in_(["blocked", "manual_review_required"]))
+        .order_by(WorkflowTransitionLog.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    records = [
+        {
+            "shipment_code": shipment.shipment_code,
+            "workflow_state": shipment.workflow_state,
+            "manual_review_reason": shipment.manual_review_reason,
+            "is_archived": shipment.is_archived,
+        }
+        for shipment in flagged
+    ]
+    blocked_records = [
+        {
+            "shipment_id": entry.shipment_id,
+            "from_state": entry.from_state,
+            "to_state": entry.to_state,
+            "status": entry.status,
+            "reason": entry.reason,
+            "created_at": entry.created_at,
+        }
+        for entry in blocked
+    ]
+    priority: AIPriority = "critical" if records else ("warning" if blocked_records else "none")
+    return AIContextBundle(
+        intent="workflow_review_summary",
+        question=question,
+        summary=f"Workflow review summary with {len(records)} flagged shipment(s).",
+        records=records,
+        totals={"flagged": len(records), "blocked_transitions": len(blocked_records)},
+        data_points=[
+            AIDataPoint(label="Manual review", value=str(len(records))),
+            AIDataPoint(label="Blocked transitions", value=str(len(blocked_records))),
+        ],
+        suggested_actions=[entry.get("reason") or f"Review {entry.get('to_state')}" for entry in blocked_records[:3]],
+        priority=priority,
+    )
+
+
+def _shipment_workflow_state_context(
+    db: Session,
+    question: str,
+    shipment_code: Optional[str],
+    shipment_id: Optional[int],
+) -> AIContextBundle:
+    shipment = _get_shipment(db, shipment_code, shipment_id)
+    if not shipment:
+        code = shipment_code or f"shipment #{shipment_id}"
+        return AIContextBundle(
+            intent="shipment_workflow_state",
+            question=question,
+            shipment_code=shipment_code,
+            summary=f"Shipment {code} was not found.",
+            result_note=f"I could not find shipment {code} in the system.",
+        )
+    return AIContextBundle(
+        intent="shipment_workflow_state",
+        question=question,
+        shipment_code=shipment.shipment_code,
+        summary=f"Workflow state for {shipment.shipment_code}.",
+        records=[
+            {
+                "shipment_code": shipment.shipment_code,
+                "workflow_state": shipment.workflow_state,
+                "manual_review_required": shipment.manual_review_required,
+                "manual_review_reason": shipment.manual_review_reason,
+                "type": shipment.type,
+                "is_archived": shipment.is_archived,
+            }
+        ],
+        data_points=[
+            AIDataPoint(label="Shipment", value=shipment.shipment_code),
+            AIDataPoint(label="Workflow state", value=str(shipment.workflow_state or "unset")),
+        ],
+        priority="warning" if shipment.manual_review_required else "none",
+    )
+
+
+def _shipment_workflow_next_steps_context(
+    db: Session,
+    question: str,
+    shipment_code: Optional[str],
+    shipment_id: Optional[int],
+    current_user,
+) -> AIContextBundle:
+    shipment = _get_shipment(db, shipment_code, shipment_id)
+    if not shipment or not current_user:
+        return AIContextBundle(
+            intent="shipment_workflow_next_steps",
+            question=question,
+            shipment_code=shipment_code,
+            summary="Shipment or user context unavailable.",
+            result_note="Workflow next steps need both a shipment and an authenticated user.",
+        )
+    try:
+        from app.services.workflow_state_machine_service import (
+            get_or_infer_state,
+            list_available_transitions,
+        )
+
+        current_state, rows = list_available_transitions(db, shipment, current_user)
+    except Exception:
+        current_state = None
+        rows = []
+    actions = [
+        transition.label
+        for transition, _target, permitted, _reason in rows
+        if permitted
+    ][:5]
+    records = [
+        {
+            "transition_key": transition.transition_key,
+            "to_state": transition.to_state,
+            "label": transition.label,
+            "requires_confirmation": transition.requires_confirmation,
+            "is_sensitive": transition.is_sensitive,
+            "permitted": permitted,
+        }
+        for transition, _target, permitted, _reason in rows
+    ]
+    return AIContextBundle(
+        intent="shipment_workflow_next_steps",
+        question=question,
+        shipment_code=shipment.shipment_code,
+        summary=(
+            f"Available next workflow steps for {shipment.shipment_code} "
+            f"from {current_state or 'unset state'}."
+        ),
+        records=records,
+        data_points=[
+            AIDataPoint(label="Current state", value=str(current_state or "unset")),
+            AIDataPoint(label="Allowed next steps", value=str(len(actions))),
+        ],
+        suggested_actions=actions,
+        priority="info" if actions else "none",
     )
 
 

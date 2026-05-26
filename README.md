@@ -28,6 +28,7 @@ Phase 1 implementation of a freight forwarding operations system with a FastAPI 
 - Phase 6 production hardening with audit logs, admin user lifecycle controls, status checks, CSV exports, dry-run cleanup, and password-change settings
 - Phase 7 internal notification center with per-user read/dismiss state, workflow reminder checks, daily operations summary, notification rules, and AI read-only attention summaries
 - Phase 9 operational event log, deterministic validation rule engine, and reviewable validation issues feeding deduped manual-review notifications
+- Phase 10 controlled export/import workflow state machines with transition logs, sensitivity-aware permissions, manual-review notifications, and a Workflow Control dashboard widget
 
 ## Backend Local Setup
 
@@ -280,6 +281,20 @@ Phase 9 adds the first operational-brain layer beside the existing flows:
 - The AI assistant can summarize validation issues and recent events read-only.
 
 Phase 9 cannot mutate shipments, tasks, charges, documents, BL records, parties, users, or Gmail records. See `docs/PHASE_9_EVENT_VALIDATION_RULE_ENGINE.md` for architecture, models, default rules, and the planned Phase 10 transition.
+
+## Phase 10 Export Import State Machines
+
+Phase 10 introduces controlled lifecycle states for export and import shipments without changing the existing shipment status fields:
+
+- Canonical export and import state catalogs (37 export, 33 import states) seeded on startup.
+- Transition definitions seeded with sensitivity, confirmation, reason, and manual-review flags. Sensitive transitions (`BL_APPROVED`, `FINAL_BL_RECEIVED`, `PAYMENT_RECEIVED`, `FREIGHT_PAID`, `EXPORT_COMPLETED`, `IMPORT_COMPLETED`) require ADMIN plus explicit `confirm_sensitive=true`.
+- New API base path `/api/workflow` exposes states, transitions, current state, available transitions, transition requests, and timelines.
+- Each transition produces an `OperationalEvent`, a `WorkflowTransitionLog`, and an `AuditLog` row. Manual-review and blocked outcomes also create deduped critical notifications and validation issues.
+- Shipment detail page adds a `Workflow` tab with a state badge, allowed next transitions, and a workflow timeline. The dashboard adds a `Workflow Control` widget for flagged shipments and recent blocked transitions.
+- Existing shipments without a `workflow_state` are inferred best-effort via `workflow_state_mapper`. Inference does not persist until a transition is applied.
+- Phase 10 cannot mutate BL approvals, payments, document releases, demurrage charges, customs filings, or any external system. The state machine remains a workflow-control layer, not an autonomous workflow.
+
+See `docs/PHASE_10_EXPORT_IMPORT_STATE_MACHINES.md` for full state lists, API contracts, permission model, and rule integration.
 
 ## Phase 1 Limitations
 
