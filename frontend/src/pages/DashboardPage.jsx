@@ -1,4 +1,4 @@
-import { AlertTriangle, Bell, CheckCircle2, Clock, DollarSign, Ship, Timer, WalletCards } from 'lucide-react';
+import { AlertTriangle, Bell, CheckCircle2, Clock, DollarSign, FileText, Ship, Timer, UploadCloud, WalletCards } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client.js';
@@ -12,6 +12,7 @@ function DashboardPage() {
   const [validationIssues, setValidationIssues] = useState(null);
   const [workflowControl, setWorkflowControl] = useState(null);
   const [containerRisk, setContainerRisk] = useState(null);
+  const [documentSummary, setDocumentSummary] = useState(null);
   const [error, setError] = useState('');
 
   async function load() {
@@ -50,6 +51,10 @@ function DashboardPage() {
         .get('/containers/risk', { params: { limit: 5 } })
         .then((response) => setContainerRisk(response.data))
         .catch(() => setContainerRisk(null));
+      api
+        .get('/document-versions/dashboard-summary')
+        .then((response) => setDocumentSummary(response.data))
+        .catch(() => setDocumentSummary(null));
     } catch (err) {
       setError(err.response?.data?.detail || 'Unable to load dashboard');
     }
@@ -189,6 +194,45 @@ function DashboardPage() {
               </article>
             ))}
             {!dailySummary.top_urgent_items?.length && <p className="muted">No urgent notification items.</p>}
+          </div>
+        </section>
+      )}
+
+      {documentSummary !== null && (
+        <section className="panel">
+          <div className="panel-header">
+            <h2>Document Review</h2>
+            <Link to="/shipments">Open shipments</Link>
+          </div>
+          <div className="dashboard-summary-strip">
+            <div>
+              <UploadCloud size={18} />
+              <span>Pending review</span>
+              <strong>{documentSummary.pending_review_count}</strong>
+            </div>
+            <div>
+              <FileText size={18} />
+              <span>Missing required</span>
+              <strong>{documentSummary.missing_required_count}</strong>
+            </div>
+            <div>
+              <FileText size={18} />
+              <span>Recent uploads</span>
+              <strong>{documentSummary.recent_uploads.length}</strong>
+            </div>
+          </div>
+          <div className="notification-list compact">
+            {(documentSummary.pending_review || []).slice(0, 3).map((version) => (
+              <article className="notification-row" key={version.id}>
+                <span className="badge priority-warning">review</span>
+                <div>
+                  <strong>{version.document_type} v{version.version_no}</strong>
+                  <p>{version.shipment_code || `Shipment #${version.shipment_id}`} · {version.file?.sanitized_filename || 'uploaded file'}</p>
+                </div>
+                <Link to={`/shipments/${version.shipment_id}`}>Open</Link>
+              </article>
+            ))}
+            {!documentSummary.pending_review?.length && <p className="muted">No document versions pending review.</p>}
           </div>
         </section>
       )}

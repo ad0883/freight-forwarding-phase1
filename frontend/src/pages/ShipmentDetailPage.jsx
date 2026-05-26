@@ -3,13 +3,16 @@ import {
   ArchiveRestore,
   Ban,
   CheckCircle2,
+  Download,
   Edit3,
   ExternalLink,
+  History,
   Plus,
   RotateCcw,
   Save,
   ToggleRight,
   Trash2,
+  UploadCloud,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
@@ -110,6 +113,22 @@ function formatMoney(amount, currency = 'INR') {
   })}`;
 }
 
+function reviewBadgeClass(status) {
+  if (status === 'approved') return 'priority-info';
+  if (status === 'rejected') return 'priority-critical';
+  if (status === 'pending_review') return 'priority-warning';
+  return 'priority-none';
+}
+
+function emptyUploadDraft() {
+  return {
+    file: null,
+    version_label: '',
+    notes: '',
+    review_status: 'pending_review',
+  };
+}
+
 function cleanNullableForm(form) {
   return Object.fromEntries(
     Object.entries(form).map(([key, value]) => {
@@ -124,6 +143,13 @@ function ShipmentDetailPage() {
   const { id } = useParams();
   const [shipment, setShipment] = useState(null);
   const [documents, setDocuments] = useState([]);
+  const [documentLibrary, setDocumentLibrary] = useState([]);
+  const [uploadTarget, setUploadTarget] = useState(null);
+  const [uploadDraft, setUploadDraft] = useState(emptyUploadDraft());
+  const [historyTarget, setHistoryTarget] = useState(null);
+  const [versionHistory, setVersionHistory] = useState([]);
+  const [historyEvents, setHistoryEvents] = useState({});
+  const [documentBusy, setDocumentBusy] = useState(false);
   const [tasks, setTasks] = useState([]);
   const [bl, setBl] = useState(null);
   const [demurrage, setDemurrage] = useState(null);
@@ -181,6 +207,7 @@ function ShipmentDetailPage() {
       partiesResponse,
       chargesResponse,
       pnlResponse,
+      documentLibraryResponse,
     ] =
       await Promise.all([
         api.get('/auth/me'),
@@ -198,6 +225,7 @@ function ShipmentDetailPage() {
         api.get('/parties'),
         api.get(`/shipments/${id}/charges`),
         api.get(`/shipments/${id}/pnl`),
+        api.get(`/shipments/${id}/document-library`).catch(() => ({ data: [] })),
       ]);
     setCurrentUser(meResponse.data);
     setShipment(shipmentResponse.data);
@@ -210,6 +238,7 @@ function ShipmentDetailPage() {
     setParties(partiesResponse.data);
     setCharges(chargesResponse.data);
     setPnl(pnlResponse.data);
+    setDocumentLibrary(documentLibraryResponse.data);
   }
 
   useEffect(() => {
@@ -241,6 +270,147 @@ function ShipmentDetailPage() {
       setNotice('Document saved');
     } catch (err) {
       setError(err.response?.data?.detail || 'Unable to save document');
+    }
+  }
+
+  async function loadDocumentLibrary() {
+    const response = await api.get(`/shipments/${id}/document-library`);
+    setDocumentLibrary(response.data);
+  }
+
+  function openUpload(document) {
+    setUploadTarget(document);
+    setUploadDraft(emptyUploadDraft());
+    setHistoryTarget(null);
+  }
+
+  async function uploadDocumentVersion(event) {
+    event.preventDefault();
+    if (!uploadTarget || !uploadDraft.file) {
+      setError('Choose a document file to upload');
+      return;
+    }
+    setNotice('');
+    setDocumentBusy(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', uploadDraft.file);
+      formData.append('document_id', uploadTarget.id);
+      formData.append('document_type', uploadTarget.doc_type);
+      formData.append('version_label', uploadDraft.version_label || '');
+      formData.append('notes', uploadDraft.notes || '');
+      formData.append('review_status', uploadDraft.review_status);
+      await api.post(`/shipments/${id}/document-versions/upload`, formData);
+      const [documentsResponse] = await Promise.all([
+        api.get(`/documents/shipment/${id}`),
+        loadDocumentLibrary(),
+      ]);
+      setDocuments(documentsResponse.data);
+      setUploadTarget(null);
+      setUploadDraft(emptyUploadDraft());
+      setNotice('Document version uploaded');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to upload document version');
+    } finally {
+      setDocumentBusy(false);
+    }
+  }
+
+  async function openVersionHistory(document) {
+    setDocumentBusy(true);
+    setHistoryTarget(document);
+    setUploadTarget(null);
+    setHistoryEvents({});
+    try {
+      const response = await api.get(`/shipments/${id}/document-versions`, {
+        params: { document_id: document.id },
+      });
+      setVersionHistory(response.data);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to load document history');
+    } finally {
+      setDocumentBusy(false);
+    }
+  }
+
+  async function loadVersionEvents(version) {
+    if (historyEvents[version.id]) {
+      setHistoryEvents((current) => {
+        const next = { ...current };
+        delete next[version.id];
+        return next;
+      });
+      return;
+    }
+    try {
+      const response = await api.get(`/document-versions/${version.id}/events`);
+      setHistoryEvents((current) => ({ ...current, [version.id]: response.data }));
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to load document version events');
+    }
+  }
+
+  async function refreshDocumentsAfterVersionAction() {
+    const [documentsResponse] = await Promise.all([
+      api.get(`/documents/shipment/${id}`),
+      loadDocumentLibrary(),
+    ]);
+    setDocuments(documentsResponse.data);
+    if (historyTarget) {
+      const response = await api.get(`/shipments/${id}/document-versions`, {
+        params: { document_id: historyTarget.id },
+      });
+      setVersionHistory(response.data);
+    }
+  }
+
+  async function downloadDocumentVersion(version) {
+    setNotice('');
+    try {
+      const response = await api.get(`/document-versions/${version.id}/download`, {
+        responseType: 'blob',
+      });
+      const blobUrl = URL.createObjectURL(new Blob([response.data], { type: version.file?.content_type || 'application/octet-stream' }));
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = version.file?.sanitized_filename || `${version.document_type}-v${version.version_no}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(blobUrl);
+      setNotice('Document download started');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Unable to download document');
+    }
+  }
+
+  async function runVersionAction(version, action) {
+    setNotice('');
+    let payload = {};
+    if (action === 'reject' || action === 'archive' || action === 'rollback') {
+      const reason = window.prompt(`${action} ${version.document_type} v${version.version_no}`, '');
+      if (reason === null) return;
+      payload = action === 'archive' || action === 'rollback' ? { reason } : { notes: reason };
+    }
+    setDocumentBusy(true);
+    try {
+      if (action === 'rollback') {
+        await api.post(`/document-versions/${version.id}/rollback`, payload);
+      } else {
+        await api.patch(`/document-versions/${version.id}/${action}`, payload);
+      }
+      await refreshDocumentsAfterVersionAction();
+      const pastTense = {
+        approve: 'approved',
+        reject: 'rejected',
+        archive: 'archived',
+        rollback: 'restored',
+      }[action];
+      setNotice(`Document version ${pastTense}`);
+    } catch (err) {
+      setError(err.response?.data?.detail || `Unable to ${action} document version`);
+    } finally {
+      setDocumentBusy(false);
     }
   }
 
@@ -615,6 +785,8 @@ function ShipmentDetailPage() {
                   <tr>
                     <th>Document Type</th>
                     <th>Status</th>
+                    <th>Latest Version</th>
+                    <th>Uploaded File</th>
                     <th>File Link</th>
                     <th>Notes</th>
                     <th>Action</th>
@@ -637,6 +809,19 @@ function ShipmentDetailPage() {
                           <option value="not_required">not_required</option>
                         </select>
                       </td>
+                      <td>
+                        {document.current_version_no ? (
+                          <div className="document-version-cell">
+                            <span className="badge priority-info">v{document.current_version_no}</span>
+                            <span className={`badge ${reviewBadgeClass(document.current_review_status)}`}>
+                              {document.current_review_status || 'not reviewed'}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="muted">No upload</span>
+                        )}
+                      </td>
+                      <td>{document.latest_file_name || '-'}</td>
                       <td className="link-cell">
                         <input
                           value={document.file_url || ''}
@@ -659,16 +844,202 @@ function ShipmentDetailPage() {
                         />
                       </td>
                       <td>
-                        {canWrite && (
-                          <button className="icon-button" type="button" onClick={() => saveDocument(document)} title="Save">
-                            <Save size={16} />
+                        <div className="row-actions">
+                          {canWrite && (
+                            <>
+                              <button className="icon-button" type="button" onClick={() => saveDocument(document)} title="Save checklist row">
+                                <Save size={16} />
+                              </button>
+                              <button className="icon-button" type="button" onClick={() => openUpload(document)} title="Upload version">
+                                <UploadCloud size={16} />
+                              </button>
+                            </>
+                          )}
+                          <button className="icon-button" type="button" onClick={() => openVersionHistory(document)} title="Version history">
+                            <History size={16} />
                           </button>
-                        )}
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+          {uploadTarget && (
+            <form className="inline-panel form-grid" onSubmit={uploadDocumentVersion}>
+              <div className="panel-header span-2 no-margin">
+                <h3>Upload {uploadTarget.doc_type}</h3>
+                <button className="secondary-button" type="button" onClick={() => setUploadTarget(null)}>
+                  Cancel
+                </button>
+              </div>
+              <label>
+                File
+                <input
+                  type="file"
+                  onChange={(event) => setUploadDraft((current) => ({ ...current, file: event.target.files?.[0] || null }))}
+                />
+              </label>
+              <label>
+                Version Label
+                <input
+                  value={uploadDraft.version_label}
+                  onChange={(event) => setUploadDraft((current) => ({ ...current, version_label: event.target.value }))}
+                  placeholder="Draft, revised, final"
+                />
+              </label>
+              <label>
+                Review Status
+                <select
+                  value={uploadDraft.review_status}
+                  onChange={(event) => setUploadDraft((current) => ({ ...current, review_status: event.target.value }))}
+                >
+                  <option value="pending_review">pending_review</option>
+                  <option value="approved">approved</option>
+                  <option value="not_required">not_required</option>
+                </select>
+              </label>
+              <label>
+                Notes
+                <input
+                  value={uploadDraft.notes}
+                  onChange={(event) => setUploadDraft((current) => ({ ...current, notes: event.target.value }))}
+                  placeholder="Optional upload notes"
+                />
+              </label>
+              <div className="form-actions span-2">
+                <button className="primary-button" type="submit" disabled={documentBusy}>
+                  <UploadCloud size={18} />
+                  <span>Upload Version</span>
+                </button>
+              </div>
+            </form>
+          )}
+          {historyTarget && (
+            <div className="inline-panel">
+              <div className="panel-header">
+                <h3>{historyTarget.doc_type} History</h3>
+                <button className="secondary-button" type="button" onClick={() => setHistoryTarget(null)}>
+                  Close
+                </button>
+              </div>
+              {!versionHistory.length ? (
+                <p className="muted">No uploaded versions yet.</p>
+              ) : (
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Version</th>
+                        <th>File</th>
+                        <th>Status</th>
+                        <th>Uploaded</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {versionHistory.map((version) => (
+                        <tr key={version.id}>
+                          <td>
+                            <strong>v{version.version_no}</strong>
+                            {version.version_label ? <p className="muted">{version.version_label}</p> : null}
+                          </td>
+                          <td>{version.file?.sanitized_filename || '-'}</td>
+                          <td>
+                            <span className={`badge ${version.is_current ? 'priority-info' : 'priority-none'}`}>
+                              {version.is_current ? 'current' : version.status}
+                            </span>
+                            <span className={`badge ${reviewBadgeClass(version.review_status)}`}>
+                              {version.review_status}
+                            </span>
+                          </td>
+                          <td>
+                            {version.created_at ? new Date(version.created_at).toLocaleString() : '-'}
+                            {version.created_by_name ? <p className="muted">{version.created_by_name}</p> : null}
+                          </td>
+                          <td>
+                            <div className="row-actions">
+                              <button className="secondary-button" type="button" onClick={() => downloadDocumentVersion(version)}>
+                                <Download size={16} />
+                                <span>Download</span>
+                              </button>
+                              <button className="secondary-button" type="button" onClick={() => loadVersionEvents(version)}>
+                                <History size={16} />
+                                <span>Events</span>
+                              </button>
+                              {canWrite && version.review_status !== 'approved' && (
+                                <button className="secondary-button" type="button" onClick={() => runVersionAction(version, 'approve')}>
+                                  <CheckCircle2 size={16} />
+                                  <span>Approve</span>
+                                </button>
+                              )}
+                              {canWrite && version.review_status !== 'rejected' && (
+                                <button className="secondary-button danger-text" type="button" onClick={() => runVersionAction(version, 'reject')}>
+                                  <Ban size={16} />
+                                  <span>Reject</span>
+                                </button>
+                              )}
+                              {canAdmin && version.status !== 'archived' && (
+                                <button className="secondary-button danger-text" type="button" onClick={() => runVersionAction(version, 'archive')}>
+                                  <Archive size={16} />
+                                  <span>Archive</span>
+                                </button>
+                              )}
+                              {canAdmin && !version.is_current && version.status !== 'archived' && version.status !== 'rejected' && (
+                                <button className="secondary-button" type="button" onClick={() => runVersionAction(version, 'rollback')}>
+                                  <RotateCcw size={16} />
+                                  <span>Rollback</span>
+                                </button>
+                              )}
+                            </div>
+                            {historyEvents[version.id] && (
+                              <div className="event-mini-list">
+                                {historyEvents[version.id].map((entry) => (
+                                  <p key={entry.id}>
+                                    <strong>{entry.event_type}</strong>
+                                    {entry.actor_name ? ` · ${entry.actor_name}` : ''}
+                                  </p>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+          {documentLibrary.length > 0 && (
+            <div className="inline-panel">
+              <div className="panel-header">
+                <h3>Document Library</h3>
+              </div>
+              <div className="document-library-grid">
+                {documentLibrary.map((item) => (
+                  <article className="document-library-row" key={`${item.document_id || 'custom'}-${item.document_type}`}>
+                    <div>
+                      <strong>{item.document_type}</strong>
+                      <p className="muted">
+                        {item.versions.length} version{item.versions.length === 1 ? '' : 's'}
+                        {item.required ? ' · required' : ''}
+                      </p>
+                    </div>
+                    {item.current_version ? (
+                      <div className="document-library-current">
+                        <span className="badge priority-info">v{item.current_version.version_no}</span>
+                        <span className={`badge ${reviewBadgeClass(item.current_version.review_status)}`}>
+                          {item.current_version.review_status}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="badge priority-warning">missing</span>
+                    )}
+                  </article>
+                ))}
+              </div>
             </div>
           )}
         </section>

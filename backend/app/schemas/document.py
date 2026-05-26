@@ -16,6 +16,12 @@ class DocumentRead(BaseModel):
     file_url: Optional[str] = None
     notes: Optional[str] = None
     is_required: bool
+    current_version_id: Optional[int] = None
+    current_version_no: Optional[int] = None
+    current_review_status: Optional[str] = None
+    uploaded_file_count: int = 0
+    latest_uploaded_at: Optional[datetime] = None
+    latest_file_name: Optional[str] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

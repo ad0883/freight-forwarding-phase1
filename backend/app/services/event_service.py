@@ -47,6 +47,12 @@ class OperationalEventType(str, Enum):
     CHARGE_MARKED_RECEIVED = "charge.marked_received"
 
     DOCUMENT_UPDATED = "document.updated"
+    DOCUMENT_VERSION_UPLOADED = "document.version_uploaded"
+    DOCUMENT_VERSION_APPROVED = "document.version_approved"
+    DOCUMENT_VERSION_REJECTED = "document.version_rejected"
+    DOCUMENT_VERSION_ARCHIVED = "document.version_archived"
+    DOCUMENT_VERSION_ROLLBACK = "document.version_rollback"
+    DOCUMENT_FILE_DOWNLOADED = "document.file_downloaded"
     BL_MANAGEMENT_UPDATED = "bl.updated"
     DEMURRAGE_UPDATED = "demurrage.updated"
 

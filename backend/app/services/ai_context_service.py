@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.bl_management import BLManagement
 from app.models.demurrage import Demurrage
 from app.models.document import Document
+from app.models.document_version import DocumentVersion
 from app.models.followup import FollowUpLog
 from app.models.party import Party
 from app.models.shipment import Shipment
@@ -92,6 +93,8 @@ def build_ai_context(
         return _container_empty_return_overdue_context(db, question, limit)
     if intent == "container_shipment_exposure":
         return _container_shipment_exposure_context(db, question, shipment_code, request.shipment_id)
+    if intent == "document_versions_summary":
+        return _document_versions_context(db, question, shipment_code, request.shipment_id, limit)
     if intent == "notifications_summary" and current_user:
         return _notifications_summary_context(db, question, current_user)
     if intent == "general_dashboard_summary":
@@ -166,6 +169,8 @@ def _detect_intent(question: str, shipment_code: Optional[str]) -> str:
         return "container_summary"
     if "container" in text and ("status of" in text or "show container" in text):
         return "container_status_lookup"
+    if _has_document_version_keyword(text, shipment_code):
+        return "document_versions_summary"
     if (
         "validation issue" in text
         or "manual review" in text
@@ -250,6 +255,28 @@ def _notifications_summary_context(
 
 def _has_bl_keyword(text: str) -> bool:
     return bool(re.search(r"\bbl\b", text)) or "bill of lading" in text
+
+
+def _has_document_version_keyword(text: str, shipment_code: Optional[str]) -> bool:
+    document_terms = (
+        "document" in text
+        or "documents" in text
+        or "invoice" in text
+        or "packing list" in text
+        or "delivery order" in text
+        or _has_bl_keyword(text)
+    )
+    version_terms = (
+        "version" in text
+        or "uploaded" in text
+        or "upload" in text
+        or "file" in text
+        or "pending review" in text
+        or "missing required" in text
+        or "latest" in text
+        or "history" in text
+    )
+    return document_terms and (version_terms or bool(shipment_code))
 
 
 def _dashboard_context(db: Session, question: str) -> AIContextBundle:
@@ -456,6 +483,102 @@ def _bl_pending_context(db: Session, question: str, limit: int) -> AIContextBund
         data_points=[AIDataPoint(label="BL pending records", value=str(len(records)))],
         suggested_actions=["Follow up with line or exporter for BL approval"] if records else [],
         priority="warning" if records else "none",
+    )
+
+
+def _document_versions_context(
+    db: Session,
+    question: str,
+    shipment_code: Optional[str],
+    shipment_id: Optional[int],
+    limit: int,
+) -> AIContextBundle:
+    shipment = _get_shipment(db, shipment_code, shipment_id)
+    if shipment:
+        versions = (
+            db.query(DocumentVersion)
+            .options(joinedload(DocumentVersion.file), joinedload(DocumentVersion.shipment))
+            .filter(DocumentVersion.shipment_id == shipment.id)
+            .order_by(DocumentVersion.created_at.desc(), DocumentVersion.id.desc())
+            .limit(limit)
+            .all()
+        )
+        missing_docs = (
+            db.query(Document)
+            .filter(
+                Document.shipment_id == shipment.id,
+                Document.is_required.is_(True),
+                Document.current_version_id.is_(None),
+            )
+            .order_by(Document.doc_type.asc())
+            .limit(limit)
+            .all()
+        )
+        return AIContextBundle(
+            intent="document_versions_summary",
+            question=question,
+            shipment_code=shipment.shipment_code,
+            summary=f"Document upload metadata for {shipment.shipment_code}. File contents are not read by AI.",
+            records=[_document_version_row(version) for version in versions],
+            totals={
+                "versions": len(versions),
+                "missing_required_documents": len(missing_docs),
+            },
+            data_points=[
+                AIDataPoint(label="Uploaded versions", value=str(len(versions))),
+                AIDataPoint(label="Missing required", value=str(len(missing_docs))),
+            ],
+            suggested_actions=[f"Upload {doc.doc_type}" for doc in missing_docs[:3]],
+            priority="warning" if missing_docs else ("info" if versions else "none"),
+        )
+
+    pending = (
+        db.query(DocumentVersion)
+        .options(joinedload(DocumentVersion.file), joinedload(DocumentVersion.shipment))
+        .join(Shipment, Shipment.id == DocumentVersion.shipment_id)
+        .filter(DocumentVersion.review_status == "pending_review", Shipment.is_archived.is_(False))
+        .order_by(DocumentVersion.created_at.desc(), DocumentVersion.id.desc())
+        .limit(limit)
+        .all()
+    )
+    missing_docs = (
+        db.query(Document, Shipment)
+        .join(Shipment, Shipment.id == Document.shipment_id)
+        .filter(
+            Document.is_required.is_(True),
+            Document.current_version_id.is_(None),
+            Shipment.is_archived.is_(False),
+        )
+        .order_by(Shipment.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    missing_records = [
+        {
+            "shipment_code": shipment.shipment_code,
+            "document_type": document.doc_type,
+            "status": document.status,
+        }
+        for document, shipment in missing_docs
+    ]
+    return AIContextBundle(
+        intent="document_versions_summary",
+        question=question,
+        summary="Document upload/version summary. File contents are not read by AI.",
+        records=[_document_version_row(version) for version in pending] + missing_records,
+        totals={
+            "pending_review": len(pending),
+            "missing_required_documents": len(missing_records),
+        },
+        data_points=[
+            AIDataPoint(label="Pending review", value=str(len(pending))),
+            AIDataPoint(label="Missing required", value=str(len(missing_records))),
+        ],
+        suggested_actions=[
+            "Review pending document versions",
+            "Upload missing required documents",
+        ] if pending or missing_records else [],
+        priority="warning" if pending or missing_records else "none",
     )
 
 
@@ -1143,6 +1266,27 @@ def _document_row(document: Document, shipment_code: str) -> dict[str, Any]:
         "doc_type": document.doc_type,
         "status": document.status,
         "shipment_code": shipment_code,
+        "current_version_id": document.current_version_id,
+        "current_version_no": document.current_version_no,
+        "current_review_status": document.current_review_status,
+        "uploaded_file_count": document.uploaded_file_count,
+    }
+
+
+def _document_version_row(version: DocumentVersion) -> dict[str, Any]:
+    return {
+        "shipment_code": version.shipment.shipment_code if version.shipment else None,
+        "document_type": version.document_type,
+        "version_no": version.version_no,
+        "version_label": version.version_label,
+        "status": version.status,
+        "review_status": version.review_status,
+        "is_current": version.is_current,
+        "file_name": version.file.sanitized_filename if version.file else None,
+        "content_type": version.file.content_type if version.file else None,
+        "file_size": version.file.file_size if version.file else None,
+        "uploaded_by_name": version.created_by_name,
+        "uploaded_at": version.created_at,
     }
 
 

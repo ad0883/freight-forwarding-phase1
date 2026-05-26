@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     EMAIL_LOOKBACK_DAYS: int = 30
     TOKEN_ENCRYPTION_KEY: str = ""
 
+    DOCUMENT_STORAGE_BACKEND: str = "database"
+    DOCUMENT_MAX_UPLOAD_MB: int = 10
+    DOCUMENT_LOCAL_STORAGE_DIR: str = "uploaded_documents"
+
     ADMIN_NAME: str = "Admin"
     ADMIN_EMAIL: str = "admin@example.com"
     ADMIN_PASSWORD: str = "admin123"

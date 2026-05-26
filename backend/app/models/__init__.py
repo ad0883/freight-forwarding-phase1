@@ -12,6 +12,13 @@ from app.models.container import (
 )
 from app.models.demurrage import Demurrage
 from app.models.document import Document
+from app.models.document_version import (
+    DocumentAccessLog,
+    DocumentFile,
+    DocumentFileBlob,
+    DocumentVersion,
+    DocumentVersionEvent,
+)
 from app.models.email import EmailConnection, EmailMessageCache, EmailSuggestion
 from app.models.followup import FollowUpLog
 from app.models.notification import Notification, NotificationRule, NotificationUserState
@@ -42,6 +49,11 @@ __all__ = [
     "Demurrage",
     "DemurrageDetentionRule",
     "Document",
+    "DocumentAccessLog",
+    "DocumentFile",
+    "DocumentFileBlob",
+    "DocumentVersion",
+    "DocumentVersionEvent",
     "EmailConnection",
     "EmailMessageCache",
     "EmailSuggestion",

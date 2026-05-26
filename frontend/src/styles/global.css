@@ -900,6 +900,51 @@ label {
   gap: 0.45rem;
 }
 
+.inline-panel {
+  margin-top: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  background: #fbfdff;
+}
+
+.document-version-cell,
+.document-library-current {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.event-mini-list {
+  margin-top: 0.6rem;
+  display: grid;
+  gap: 0.25rem;
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+}
+
+.event-mini-list p {
+  margin: 0;
+}
+
+.document-library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 0.7rem;
+}
+
+.document-library-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  background: var(--color-surface);
+}
+
 .button-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(140px, 1fr));

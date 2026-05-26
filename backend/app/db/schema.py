@@ -62,6 +62,12 @@ EMAIL_SUGGESTION_PHASE91_COLUMNS = {
     "extracted_data_hash": "VARCHAR(64) NULL",
 }
 
+DOCUMENT_PHASE12_COLUMNS = {
+    "current_version_id": "INTEGER NULL",
+    "uploaded_file_count": "INTEGER NOT NULL DEFAULT 0",
+    "latest_uploaded_at": "TIMESTAMP NULL",
+}
+
 
 def ensure_phase10_workflow_schema(engine: Engine) -> None:
     """Ensure Phase 10 shipment columns and workflow indexes exist."""
@@ -241,6 +247,70 @@ def ensure_phase11_container_schema(engine: Engine) -> None:
                         f"ON {table} (status)"
                     )
                 )
+
+
+def ensure_phase12_document_schema(engine: Engine) -> None:
+    """Ensure Phase 12 document-version columns and indexes exist for create_all databases."""
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+
+    with engine.begin() as connection:
+        if "documents" in table_names:
+            existing_columns = {column["name"] for column in inspector.get_columns("documents")}
+            for name, column_type in DOCUMENT_PHASE12_COLUMNS.items():
+                if name not in existing_columns:
+                    connection.execute(
+                        text(f"ALTER TABLE documents ADD COLUMN {name} {column_type}")
+                    )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_documents_current_version_id "
+                    "ON documents (current_version_id)"
+                )
+            )
+        if "document_files" in table_names:
+            for index_name, column_name in (
+                ("ix_document_files_shipment_id", "shipment_id"),
+                ("ix_document_files_document_id", "document_id"),
+                ("ix_document_files_sha256", "sha256"),
+                ("ix_document_files_status", "status"),
+                ("ix_document_files_uploaded_at", "uploaded_at"),
+            ):
+                connection.execute(
+                    text(
+                        f"CREATE INDEX IF NOT EXISTS {index_name} "
+                        f"ON document_files ({column_name})"
+                    )
+                )
+        if "document_versions" in table_names:
+            for index_name, column_name in (
+                ("ix_document_versions_shipment_id", "shipment_id"),
+                ("ix_document_versions_document_id", "document_id"),
+                ("ix_document_versions_document_type", "document_type"),
+                ("ix_document_versions_review_status", "review_status"),
+                ("ix_document_versions_is_current", "is_current"),
+                ("ix_document_versions_created_at", "created_at"),
+            ):
+                connection.execute(
+                    text(
+                        f"CREATE INDEX IF NOT EXISTS {index_name} "
+                        f"ON document_versions ({column_name})"
+                    )
+                )
+        if "document_version_events" in table_names:
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_document_version_events_version_id "
+                    "ON document_version_events (document_version_id)"
+                )
+            )
+        if "document_access_logs" in table_names:
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_document_access_logs_version_id "
+                    "ON document_access_logs (document_version_id)"
+                )
+            )
 
 
 def ensure_phase9_event_validation_schema(engine: Engine) -> None:

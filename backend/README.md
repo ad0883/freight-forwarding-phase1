@@ -71,6 +71,35 @@ See:
 - `../docs/PHASE_9_1_GMAIL_HARDENING.md`
 - `../docs/PHASE_10_EXPORT_IMPORT_STATE_MACHINES.md`
 - `../docs/PHASE_11_CONTAINER_LIFECYCLE_DEMURRAGE_DETENTION.md`
+- `../docs/PHASE_12_DOCUMENT_UPLOAD_VERSIONING.md`
+
+## Phase 12 Document Upload + Versioning
+
+Phase 12 adds controlled upload and version history for shipment documents
+without changing existing checklist behavior. Run `alembic upgrade head` to
+apply `phase12_document_versions`.
+
+Document storage settings:
+
+```txt
+DOCUMENT_STORAGE_BACKEND=database
+DOCUMENT_MAX_UPLOAD_MB=10
+DOCUMENT_LOCAL_STORAGE_DIR=uploaded_documents
+```
+
+The default `database` backend stores file bytes in `document_file_blobs`.
+`local` is intended for local development only and writes under the ignored
+`uploaded_documents` directory. Do not commit uploaded files.
+
+Allowed uploads are PDF, PNG/JPEG, Word, Excel, CSV, and plain text documents.
+Executable uploads are blocked. Uploaded files are not OCR-read, AI-parsed,
+Gmail-ingested, or used to mutate shipment data in Phase 12.
+
+Review permissions:
+
+- `ADMIN`: upload, approve, reject, archive, rollback, download, list.
+- `STAFF`: upload, approve, reject, download, list.
+- `VIEW_ONLY`: download and list only.
 
 ## Phase 11 Container Lifecycle + Demurrage/Detention
 

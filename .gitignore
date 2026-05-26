@@ -9,6 +9,8 @@ __pycache__/
 backend/.venv/
 backend/.env
 client_secret*.json
+uploaded_documents/
+backend/uploaded_documents/
 
 # Node
 node_modules/
