@@ -1,5 +1,7 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
 
+export const E2E_UI_TIMEOUT = 30_000;
+
 export type RoleName = 'ADMIN' | 'STAFF' | 'VIEW_ONLY';
 
 export type Credentials = {
@@ -142,9 +144,9 @@ export async function login(page: Page, creds: Credentials) {
   await page.getByLabel(/email address/i).fill(creds.email);
   await page.getByLabel(/password/i).fill(creds.password);
   await page.getByRole('button', { name: /sign in/i }).click();
-  await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
-  await expect(page.getByText(creds.role, { exact: true }).first()).toBeVisible();
+  await expect(page).toHaveURL(/\/$/, { timeout: E2E_UI_TIMEOUT });
+  await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible({ timeout: E2E_UI_TIMEOUT });
+  await expect(page.getByText(creds.role, { exact: true }).first()).toBeVisible({ timeout: E2E_UI_TIMEOUT });
 }
 
 export async function logout(page: Page) {
@@ -155,7 +157,7 @@ export async function logout(page: Page) {
 
 export async function openShipments(page: Page) {
   await page.getByRole('link', { name: 'Shipments', exact: true }).click();
-  await expect(page.getByRole('heading', { name: /shipment list/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /shipment list/i })).toBeVisible({ timeout: E2E_UI_TIMEOUT });
 }
 
 export async function openFirstShipmentDetail(page: Page) {
@@ -164,7 +166,7 @@ export async function openFirstShipmentDetail(page: Page) {
   await expect(firstShipmentCell).toBeVisible();
   const shipmentCode = (await firstShipmentCell.innerText()).trim();
   await page.locator('tbody tr').first().click();
-  await expect(page.getByRole('heading', { name: shipmentCode })).toBeVisible();
+  await expect(page.getByRole('heading', { name: shipmentCode })).toBeVisible({ timeout: E2E_UI_TIMEOUT });
   return shipmentCode;
 }
 

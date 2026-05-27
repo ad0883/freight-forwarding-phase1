@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.common import ContainerType, ShipmentStatus, ShipmentType
 from app.schemas.alert import AlertRead
@@ -32,7 +32,12 @@ class ShipmentBase(BaseModel):
 
 
 class ShipmentCreate(ShipmentBase):
-    pass
+    @model_validator(mode="before")
+    @classmethod
+    def reject_supplied_shipment_code(cls, data):
+        if isinstance(data, dict) and "shipment_code" in data:
+            raise ValueError("shipment_code is auto-generated and cannot be supplied during creation.")
+        return data
 
 
 class ShipmentUpdate(BaseModel):

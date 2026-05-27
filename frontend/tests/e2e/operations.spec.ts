@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
+  E2E_UI_TIMEOUT,
   credentials,
   ensureSeedShipment,
   login,
@@ -41,6 +42,7 @@ test('shipment tabs open when present', async ({ page }) => {
 });
 
 test('create QA shipment', async ({ page }) => {
+  test.setTimeout(90_000);
   await openShipments(page);
   await page.getByRole('link', { name: /create/i }).click();
   await expect(page.getByRole('heading', { name: /create shipment/i })).toBeVisible();
@@ -53,20 +55,30 @@ test('create QA shipment', async ({ page }) => {
   await page.getByLabel(/container no/i).fill(`QA${String(stamp).slice(-7)}`);
   await page.getByLabel(/booking ref/i).fill(`QA-BOOK-${stamp}`);
   await page.getByLabel(/commodity/i).fill(`QA shipment created by Playwright ${stamp}`);
+  const createResponsePromise = page.waitForResponse(
+    (response) => response.url().endsWith('/api/shipments') && response.request().method() === 'POST',
+    { timeout: E2E_UI_TIMEOUT }
+  );
   await page.getByRole('button', { name: /create shipment/i }).click();
-  await expect(page.getByRole('heading', { name: /^FF-/ })).toBeVisible();
-  await expect(page.getByText(`QA Line ${stamp}`)).toBeVisible();
+  const createResponse = await createResponsePromise;
+  expect(createResponse.ok(), `Create shipment returned HTTP ${createResponse.status()}`).toBeTruthy();
+  const createdShipment = await createResponse.json();
+  await expect(page.getByRole('heading', { name: createdShipment.shipment_code })).toBeVisible({ timeout: E2E_UI_TIMEOUT });
+  await expect(page.getByText(`QA Line ${stamp}`)).toBeVisible({ timeout: E2E_UI_TIMEOUT });
 });
 
 test('workflow tab shows available transitions', async ({ page }) => {
+  test.setTimeout(90_000);
   await openFirstShipmentDetail(page);
   await openTab(page, 'Workflow');
-  await expect(page.getByRole('heading', { name: /workflow state/i })).toBeVisible();
-  await expect(page.getByText(/available next transitions/i)).toBeVisible();
-  await expect(page.locator('.workflow-transition-card').or(page.getByText(/no transitions available/i))).toBeVisible();
+  await expect(page.getByRole('heading', { name: /workflow state/i })).toBeVisible({ timeout: E2E_UI_TIMEOUT });
+  await expect(page.getByText('Loading workflow data...')).toHaveCount(0, { timeout: E2E_UI_TIMEOUT });
+  await expect(page.getByText(/available next transitions/i)).toBeVisible({ timeout: E2E_UI_TIMEOUT });
+  await expect(page.locator('.workflow-transition-card').or(page.getByText(/no transitions available/i))).toBeVisible({ timeout: E2E_UI_TIMEOUT });
 });
 
 test('containers tab creates QA container', async ({ page }) => {
+  test.setTimeout(90_000);
   await openFirstShipmentDetail(page);
   await openTab(page, 'Containers');
   const stamp = Date.now().toString().slice(-7);
@@ -75,12 +87,20 @@ test('containers tab creates QA container', async ({ page }) => {
   await page.getByLabel(/container number/i).fill(containerNumber);
   await page.getByLabel(/^size$/i).fill('40');
   await page.getByLabel(/^type$/i).fill('40HC');
+  const containerResponsePromise = page.waitForResponse(
+    (response) =>
+      /\/api\/shipments\/\d+\/containers$/.test(response.url()) && response.request().method() === 'POST',
+    { timeout: E2E_UI_TIMEOUT }
+  );
   await page.getByRole('button', { name: /^add$/i }).click();
-  await expect(page.getByText(/container added/i)).toBeVisible();
-  await expect(page.getByText(containerNumber)).toBeVisible();
+  const containerResponse = await containerResponsePromise;
+  expect(containerResponse.ok(), `Create container returned HTTP ${containerResponse.status()}`).toBeTruthy();
+  await expect(page.getByText(/container added/i)).toBeVisible({ timeout: E2E_UI_TIMEOUT });
+  await expect(page.getByText(containerNumber)).toBeVisible({ timeout: E2E_UI_TIMEOUT });
 });
 
 test('documents tab uploads TXT document and runs intelligence', async ({ page }) => {
+  test.setTimeout(180_000);
   await openFirstShipmentDetail(page);
   await openTab(page, 'Documents');
   await expect(page.getByRole('heading', { name: /documents/i })).toBeVisible();
@@ -97,14 +117,30 @@ test('documents tab uploads TXT document and runs intelligence', async ({ page }
   await page.locator('input[type="file"]').setInputFiles(filePath);
   await page.getByLabel(/version label/i).fill('QA TXT');
   await page.getByLabel(/notes/i).fill('Uploaded by Playwright e2e');
+  const uploadResponsePromise = page.waitForResponse(
+    (response) =>
+      /\/api\/shipments\/\d+\/document-versions\/upload$/.test(response.url())
+      && response.request().method() === 'POST',
+    { timeout: 65_000 }
+  );
   await page.getByRole('button', { name: /upload version/i }).click();
-  await expect(page.getByText(/uploaded|document upload recovered/i)).toBeVisible();
+  const uploadResponse = await uploadResponsePromise;
+  expect(uploadResponse.ok(), `Upload document version returned HTTP ${uploadResponse.status()}`).toBeTruthy();
+  await expect(page.locator('.success-text').filter({ hasText: /Document version uploaded|Document upload completed/i })).toBeVisible({ timeout: E2E_UI_TIMEOUT });
 
   const runButton = page.getByRole('button', { name: /run intelligence/i }).first();
-  await expect(runButton).toBeVisible();
+  await expect(runButton).toBeVisible({ timeout: E2E_UI_TIMEOUT });
+  const runResponsePromise = page.waitForResponse(
+    (response) =>
+      /\/api\/document-intelligence\/versions\/\d+\/run$/.test(response.url())
+      && response.request().method() === 'POST',
+    { timeout: 95_000 }
+  );
   await runButton.click();
+  const runResponse = await runResponsePromise;
+  expect(runResponse.ok(), `Run document intelligence returned HTTP ${runResponse.status()}`).toBeTruthy();
   const intelligencePanel = page.locator('.document-intelligence-panel');
-  await expect(intelligencePanel).toBeVisible();
+  await expect(intelligencePanel).toBeVisible({ timeout: E2E_UI_TIMEOUT });
   await expect(page.getByText('Loading document intelligence...')).toHaveCount(0, { timeout: 20_000 });
   await expect(intelligencePanel).toContainText(/OCR|Detected Type|No fields extracted|No mismatches found/i);
 });

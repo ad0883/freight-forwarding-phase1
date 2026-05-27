@@ -235,9 +235,15 @@ function ShipmentDetailPage() {
   }
 
   async function loadAll() {
+    const [meResponse, shipmentResponse] = await Promise.all([
+      api.get('/auth/me'),
+      api.get(`/shipments/${id}`),
+    ]);
+    setCurrentUser(meResponse.data);
+    setShipment(shipmentResponse.data);
+    setWorkflowStatus(shipmentResponse.data.status);
+
     const [
-      meResponse,
-      shipmentResponse,
       documentsResponse,
       tasksResponse,
       blResponse,
@@ -249,8 +255,6 @@ function ShipmentDetailPage() {
       documentLibraryResponse,
     ] =
       await Promise.all([
-        api.get('/auth/me'),
-        api.get(`/shipments/${id}`),
         api.get(`/documents/shipment/${id}`),
         api.get('/tasks', {
           params: {
@@ -266,9 +270,6 @@ function ShipmentDetailPage() {
         api.get(`/shipments/${id}/pnl`),
         api.get(`/shipments/${id}/document-library`).catch(() => ({ data: [] })),
       ]);
-    setCurrentUser(meResponse.data);
-    setShipment(shipmentResponse.data);
-    setWorkflowStatus(shipmentResponse.data.status);
     setDocuments(documentsResponse.data);
     setTasks(tasksResponse.data);
     setBl(blResponse.data);
@@ -487,6 +488,8 @@ function ShipmentDetailPage() {
     try {
       const response = await api.post(`/document-intelligence/versions/${document.current_version_id}/run`, {
         run_type: 'full',
+      }, {
+        timeout: 90000,
       });
       setIntelligenceSummary(response.data);
       setNotice('Document intelligence completed');

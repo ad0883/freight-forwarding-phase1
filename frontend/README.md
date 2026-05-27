@@ -13,3 +13,9 @@ npm run dev
 ```
 
 The app runs at `http://localhost:5173` by default.
+
+## QA Account Emails
+
+For automated/local QA users, avoid reserved domains such as `example.com` and
+`example.org`; backend email validation may reject them. Use a valid test domain
+such as `testmail.dev` for throwaway QA accounts.

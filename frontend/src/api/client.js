@@ -1,8 +1,11 @@
 import axios from 'axios';
 
+const parsedTimeout = Number.parseInt(import.meta.env.VITE_API_TIMEOUT_MS || '30000', 10);
+const timeout = Number.isFinite(parsedTimeout) && parsedTimeout > 0 ? parsedTimeout : 30000;
+
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api',
-  timeout: 10000,
+  timeout,
 });
 
 api.interceptors.request.use((config) => {
