@@ -30,6 +30,7 @@ from app.api.routes import (
     notifications,
     parties,
     charges,
+    portal,
     reports,
     rules,
     shipments,
@@ -255,6 +256,8 @@ app.include_router(exception_cases.shipment_exception_router, prefix="/api")
 app.include_router(approvals.router, prefix="/api")
 app.include_router(approvals.shipment_approval_router, prefix="/api")
 app.include_router(bot_governance.router, prefix="/api")
+app.include_router(portal.router, prefix="/api")
+app.include_router(portal.admin_portal_router, prefix="/api")
 
 
 @app.get("/")

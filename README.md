@@ -35,6 +35,7 @@ Phase 1 implementation of a freight forwarding operations system with a FastAPI 
 - Phase 15 exception engine + manual review center: central exception layer tying together validation issues, document mismatches, finance holds, workflow blocks, container risks, Gmail suggestions, and overdue tasks. Includes detection, dedupe, assignment, escalation, resolution, SLA policies, and a full Manual Review Center UI. AI can summarize exceptions read-only.
 - Phase 16 approval engine + HOD bot governance: formal approval layer for sensitive actions (finance hold waivers, document releases, workflow transitions, credit overrides, bot actions). Includes maker-checker policies, multi-step approvals, action locks, bot governance proposals, approval delegation, and an Approval Center UI. AI remains read-only.
 - Phase 17 bot governance + learning system: measurable bot performance with action records, human feedback, learning candidates, prompt/rule versioning, training cases, evaluation runs, guardrail violations, and quality reviews. Bots cannot self-modify; all improvements require human approval. Bot Governance UI with agent management, scorecards, and guardrail monitoring.
+- Phase 18 exporter/importer portal: customer-scoped portal for exporters/importers to view assigned shipments, milestones, containers, customer-visible documents, finance status, and raise requests. Permission-isolated with explicit shipment access grants. Internal cost/margin/payables/Gmail/audit/bot data hidden from portal users.
 
 ## Backend Local Setup
 

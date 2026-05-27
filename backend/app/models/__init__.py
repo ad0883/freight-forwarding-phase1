@@ -79,6 +79,17 @@ from app.models.notification import Notification, NotificationRule, Notification
 from app.models.operational_event import OperationalEvent
 from app.models.organization import Organization
 from app.models.party import Party
+from app.models.portal import (
+    PortalAccount,
+    PortalActivityLog,
+    PortalDocumentAccess,
+    PortalNotification,
+    PortalPartyLink,
+    PortalPreference,
+    PortalRequest,
+    PortalRequestComment,
+    PortalShipmentAccess,
+)
 from app.models.rule_definition import RuleDefinition
 from app.models.shipment import Shipment
 from app.models.task import Task
@@ -162,6 +173,15 @@ __all__ = [
     "OperationalEvent",
     "Organization",
     "Party",
+    "PortalAccount",
+    "PortalActivityLog",
+    "PortalDocumentAccess",
+    "PortalNotification",
+    "PortalPartyLink",
+    "PortalPreference",
+    "PortalRequest",
+    "PortalRequestComment",
+    "PortalShipmentAccess",
     "RuleDefinition",
     "Shipment",
     "Task",
