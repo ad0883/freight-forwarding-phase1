@@ -16,6 +16,7 @@ function DashboardPage() {
   const [documentIntelligence, setDocumentIntelligence] = useState(null);
   const [financeOverview, setFinanceOverview] = useState(null);
   const [exceptionSummary, setExceptionSummary] = useState(null);
+  const [approvalSummary, setApprovalSummary] = useState(null);
   const [error, setError] = useState('');
 
   async function load() {
@@ -70,6 +71,10 @@ function DashboardPage() {
         .get('/exceptions/summary')
         .then((response) => setExceptionSummary(response.data))
         .catch(() => setExceptionSummary(null));
+      api
+        .get('/approvals/summary')
+        .then((response) => setApprovalSummary(response.data))
+        .catch(() => setApprovalSummary(null));
     } catch (err) {
       setError(err.response?.data?.detail || 'Unable to load dashboard');
     }
@@ -388,6 +393,37 @@ function DashboardPage() {
               <CheckCircle2 size={18} />
               <span>Assigned to Me</span>
               <strong>{exceptionSummary.total_assigned_to_me}</strong>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {approvalSummary !== null && (
+        <section className="panel">
+          <div className="panel-header">
+            <h2>Pending Approvals</h2>
+            <Link to="/approvals">Open approval center</Link>
+          </div>
+          <div className="dashboard-summary-strip">
+            <div>
+              <FileText size={18} />
+              <span>Pending</span>
+              <strong>{approvalSummary.total_pending}</strong>
+            </div>
+            <div>
+              <AlertTriangle size={18} />
+              <span>High Risk</span>
+              <strong>{approvalSummary.total_high_risk}</strong>
+            </div>
+            <div>
+              <Clock size={18} />
+              <span>Overdue</span>
+              <strong>{approvalSummary.total_overdue}</strong>
+            </div>
+            <div>
+              <CheckCircle2 size={18} />
+              <span>Assigned to Me</span>
+              <strong>{approvalSummary.total_assigned_to_me}</strong>
             </div>
           </div>
         </section>

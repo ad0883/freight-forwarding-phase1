@@ -10,6 +10,7 @@ from app.api.routes import (
     ai,
     alerts,
     admin,
+    approvals,
     audit,
     auth,
     bl_management,
@@ -62,6 +63,7 @@ from app.services.notification_service import seed_default_notification_rules
 from app.services.organization_scope_service import assign_default_organization
 from app.services.rule_engine import seed_default_rule_definitions
 from app.services.exception_sla_seed import seed_default_sla_policies
+from app.services.approval_policy_seed import seed_default_approval_policies
 from app.services.workflow_definitions import seed_workflow_definitions
 from app.services.workflow_notification_service import run_notification_checks
 
@@ -179,6 +181,7 @@ async def lifespan(app: FastAPI):
         seed_default_rule_definitions(db)
         seed_workflow_definitions(db)
         seed_default_sla_policies(db)
+        seed_default_approval_policies(db)
         warm_dashboard_cache(db)
     finally:
         db.close()
@@ -246,6 +249,8 @@ app.include_router(containers.container_router, prefix="/api")
 app.include_router(containers.shipment_container_router, prefix="/api")
 app.include_router(exception_cases.router, prefix="/api")
 app.include_router(exception_cases.shipment_exception_router, prefix="/api")
+app.include_router(approvals.router, prefix="/api")
+app.include_router(approvals.shipment_approval_router, prefix="/api")
 
 
 @app.get("/")

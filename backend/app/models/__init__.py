@@ -1,5 +1,16 @@
 from app.models.alert import Alert
 from app.models.ai_log import AIInteractionLog
+from app.models.approval import (
+    ApprovalActionLock,
+    ApprovalDelegation,
+    ApprovalOverride,
+    ApprovalPolicy,
+    ApprovalPolicyRule,
+    ApprovalRequest,
+    ApprovalRequestEvidence,
+    ApprovalStep,
+    BotGovernanceAction,
+)
 from app.models.audit import AuditLog
 from app.models.bl_management import BLManagement
 from app.models.charge import Charge
@@ -68,6 +79,15 @@ from app.models.workflow_state_machine import (
 __all__ = [
     "Alert",
     "AIInteractionLog",
+    "ApprovalActionLock",
+    "ApprovalDelegation",
+    "ApprovalOverride",
+    "ApprovalPolicy",
+    "ApprovalPolicyRule",
+    "ApprovalRequest",
+    "ApprovalRequestEvidence",
+    "ApprovalStep",
+    "BotGovernanceAction",
     "AuditLog",
     "BLManagement",
     "Charge",

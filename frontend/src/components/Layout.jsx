@@ -7,6 +7,7 @@ import {
   Check,
   ClipboardList,
   CreditCard,
+  FileCheck,
   FileClock,
   GitBranch,
   LayoutDashboard,
@@ -47,6 +48,7 @@ const adminLinks = [
 
 const operationalBrainLinks = [
   { to: '/manual-review', label: 'Manual Review', icon: AlertTriangle },
+  { to: '/approvals', label: 'Approvals', icon: FileCheck },
   { to: '/events', label: 'Events', icon: ScrollText, writeRoleOnly: true },
   { to: '/validation-issues', label: 'Validation Issues', icon: ShieldAlert, writeRoleOnly: true },
   { to: '/rules', label: 'Rules', icon: GitBranch, writeRoleOnly: true },
