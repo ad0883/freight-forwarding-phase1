@@ -27,6 +27,16 @@ from app.models.document_intelligence import (
     DocumentMismatchResult,
 )
 from app.models.email import EmailConnection, EmailMessageCache, EmailSuggestion
+from app.models.exception_case import (
+    ExceptionCase,
+    ExceptionCaseAssignment,
+    ExceptionCaseComment,
+    ExceptionCaseEscalation,
+    ExceptionCaseLink,
+    ExceptionCaseSlaPolicy,
+    ExceptionCaseStatusHistory,
+    ExceptionCaseWatcher,
+)
 from app.models.finance_control import (
     CreditHoldRecord,
     FinanceAdjustment,
@@ -81,6 +91,14 @@ __all__ = [
     "EmailConnection",
     "EmailMessageCache",
     "EmailSuggestion",
+    "ExceptionCase",
+    "ExceptionCaseAssignment",
+    "ExceptionCaseComment",
+    "ExceptionCaseEscalation",
+    "ExceptionCaseLink",
+    "ExceptionCaseSlaPolicy",
+    "ExceptionCaseStatusHistory",
+    "ExceptionCaseWatcher",
     "CreditHoldRecord",
     "FinanceAdjustment",
     "FinanceAgingSnapshot",

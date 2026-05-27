@@ -15,6 +15,7 @@ function DashboardPage() {
   const [documentSummary, setDocumentSummary] = useState(null);
   const [documentIntelligence, setDocumentIntelligence] = useState(null);
   const [financeOverview, setFinanceOverview] = useState(null);
+  const [exceptionSummary, setExceptionSummary] = useState(null);
   const [error, setError] = useState('');
 
   async function load() {
@@ -65,6 +66,10 @@ function DashboardPage() {
         .get('/finance/overview')
         .then((response) => setFinanceOverview(response.data))
         .catch(() => setFinanceOverview(null));
+      api
+        .get('/exceptions/summary')
+        .then((response) => setExceptionSummary(response.data))
+        .catch(() => setExceptionSummary(null));
     } catch (err) {
       setError(err.response?.data?.detail || 'Unable to load dashboard');
     }
@@ -355,6 +360,37 @@ function DashboardPage() {
             </article>
           </section>
         </>
+      )}
+
+      {exceptionSummary !== null && (
+        <section className="panel">
+          <div className="panel-header">
+            <h2>Manual Review Queue</h2>
+            <Link to="/manual-review">Open review center</Link>
+          </div>
+          <div className="dashboard-summary-strip">
+            <div>
+              <AlertTriangle size={18} />
+              <span>Open Exceptions</span>
+              <strong>{exceptionSummary.total_open}</strong>
+            </div>
+            <div>
+              <AlertTriangle size={18} />
+              <span>Critical</span>
+              <strong>{exceptionSummary.total_critical}</strong>
+            </div>
+            <div>
+              <Clock size={18} />
+              <span>Overdue</span>
+              <strong>{exceptionSummary.total_overdue}</strong>
+            </div>
+            <div>
+              <CheckCircle2 size={18} />
+              <span>Assigned to Me</span>
+              <strong>{exceptionSummary.total_assigned_to_me}</strong>
+            </div>
+          </div>
+        </section>
       )}
 
       {validationIssues !== null && (

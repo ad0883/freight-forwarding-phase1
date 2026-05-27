@@ -21,6 +21,7 @@ import StatusPage from './pages/StatusPage.jsx';
 import TasksPage from './pages/TasksPage.jsx';
 import UsersAdminPage from './pages/UsersAdminPage.jsx';
 import ValidationIssuesPage from './pages/ValidationIssuesPage.jsx';
+import ManualReviewPage from './pages/ManualReviewPage.jsx';
 
 function App() {
   return (
@@ -113,6 +114,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['ADMIN', 'STAFF']}>
               <RulesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="manual-review"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'STAFF', 'VIEW_ONLY']}>
+              <ManualReviewPage />
             </ProtectedRoute>
           }
         />

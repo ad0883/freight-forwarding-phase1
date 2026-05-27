@@ -20,6 +20,10 @@ AI_EXAMPLES = [
     "What are today's urgent issues?",
     "What validation issues exist?",
     "What needs manual review?",
+    "Show critical exceptions.",
+    "Which exceptions are overdue?",
+    "Show my assigned exceptions.",
+    "What is the recommended action for this exception?",
     "What recent events happened?",
     "What is the workflow state of shipment FF-EXP-2026-001?",
     "What are the next steps for FF-EXP-2026-001?",
@@ -46,6 +50,9 @@ AI_EXAMPLES = [
     "Show archived shipments.",
     "Show inactive parties.",
     "Show cancelled tasks.",
+    "Which finance holds are active?",
+    "Which document mismatches need attention?",
+    "Which shipments are blocked?",
 ]
 
 

@@ -1,5 +1,6 @@
 import {
   Activity,
+  AlertTriangle,
   Bot,
   BarChart3,
   Bell,
@@ -45,6 +46,7 @@ const adminLinks = [
 ];
 
 const operationalBrainLinks = [
+  { to: '/manual-review', label: 'Manual Review', icon: AlertTriangle },
   { to: '/events', label: 'Events', icon: ScrollText, writeRoleOnly: true },
   { to: '/validation-issues', label: 'Validation Issues', icon: ShieldAlert, writeRoleOnly: true },
   { to: '/rules', label: 'Rules', icon: GitBranch, writeRoleOnly: true },

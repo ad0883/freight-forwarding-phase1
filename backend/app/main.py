@@ -20,6 +20,7 @@ from app.api.routes import (
     document_versions,
     email,
     events,
+    exception_cases,
     exports,
     finance_control,
     followups,
@@ -50,6 +51,7 @@ from app.db.schema import (
     ensure_phase12_document_schema,
     ensure_phase13_document_intelligence_schema,
     ensure_phase14_finance_credit_schema,
+    ensure_phase15_exception_engine_schema,
 )
 from app.db.session import Base, SessionLocal, engine
 from app.models import User
@@ -59,6 +61,7 @@ from app.services.dashboard_service import warm_dashboard_cache
 from app.services.notification_service import seed_default_notification_rules
 from app.services.organization_scope_service import assign_default_organization
 from app.services.rule_engine import seed_default_rule_definitions
+from app.services.exception_sla_seed import seed_default_sla_policies
 from app.services.workflow_definitions import seed_workflow_definitions
 from app.services.workflow_notification_service import run_notification_checks
 
@@ -167,6 +170,7 @@ async def lifespan(app: FastAPI):
         ensure_phase12_document_schema(engine)
         ensure_phase13_document_intelligence_schema(engine)
         ensure_phase14_finance_credit_schema(engine)
+        ensure_phase15_exception_engine_schema(engine)
         ensure_performance_indexes(engine)
     db = SessionLocal()
     try:
@@ -174,6 +178,7 @@ async def lifespan(app: FastAPI):
         seed_default_notification_rules(db)
         seed_default_rule_definitions(db)
         seed_workflow_definitions(db)
+        seed_default_sla_policies(db)
         warm_dashboard_cache(db)
     finally:
         db.close()
@@ -239,6 +244,8 @@ app.include_router(rules.router, prefix="/api")
 app.include_router(workflow_state_machine.router, prefix="/api")
 app.include_router(containers.container_router, prefix="/api")
 app.include_router(containers.shipment_container_router, prefix="/api")
+app.include_router(exception_cases.router, prefix="/api")
+app.include_router(exception_cases.shipment_exception_router, prefix="/api")
 
 
 @app.get("/")

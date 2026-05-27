@@ -78,6 +78,8 @@ def build_ai_context(
 
     if intent == "validation_issues_summary":
         return _validation_issues_context(db, question, limit)
+    if intent == "exception_summary":
+        return _exception_summary_context(db, question, limit, current_user)
     if intent == "events_recent":
         return _recent_events_context(db, question, limit)
     if intent == "workflow_review_summary":
@@ -183,8 +185,16 @@ def _detect_intent(question: str, shipment_code: Optional[str]) -> str:
     if _has_document_version_keyword(text, shipment_code):
         return "document_versions_summary"
     if (
+        "exception" in text
+        or "critical exception" in text
+        or ("manual review" in text and "exception" not in text and "workflow" not in text and "shipment" not in text)
+        or "review queue" in text
+        or "my assigned exception" in text
+        or "overdue exception" in text
+    ):
+        return "exception_summary"
+    if (
         "validation issue" in text
-        or "manual review" in text
         or "failed validation" in text
         or "broken workflow" in text
     ):
@@ -1063,6 +1073,67 @@ def _validation_issues_context(db: Session, question: str, limit: int) -> AICont
         ],
         suggested_actions=[row.message for row in critical[:3]],
         priority=priority,
+    )
+
+
+def _exception_summary_context(
+    db: Session, question: str, limit: int, current_user: Optional[AuthenticatedUser] = None
+) -> AIContextBundle:
+    """Build AI context for exception/manual review queries."""
+    from app.models.exception_case import ExceptionCase
+    from app.services.exception_service import ACTIVE_STATUSES
+
+    rows = (
+        db.query(ExceptionCase)
+        .filter(ExceptionCase.status.in_(ACTIVE_STATUSES))
+        .order_by(ExceptionCase.priority.asc(), ExceptionCase.risk_score.desc())
+        .limit(limit)
+        .all()
+    )
+    critical = [r for r in rows if r.severity == "critical"]
+    high = [r for r in rows if r.severity == "high"]
+    my_items = [r for r in rows if current_user and r.assigned_to_user_id == current_user.id]
+    priority: AIPriority = "critical" if critical else ("warning" if high else "info")
+
+    records = [
+        {
+            "case_number": r.case_number,
+            "title": r.title,
+            "category": r.category,
+            "source": r.source,
+            "severity": r.severity,
+            "priority": r.priority,
+            "status": r.status,
+            "risk_score": r.risk_score,
+            "shipment_id": r.shipment_id,
+            "assigned_to_name": r.assigned_to_name,
+            "due_at": r.due_at,
+            "created_at": r.created_at,
+        }
+        for r in rows
+    ]
+    return AIContextBundle(
+        intent="exception_summary",
+        question=question,
+        summary=f"Showing {len(records)} active exceptions. {len(critical)} critical, {len(high)} high severity.",
+        records=records,
+        totals={
+            "active_count": len(rows),
+            "critical": len(critical),
+            "high": len(high),
+            "assigned_to_me": len(my_items),
+        },
+        data_points=[
+            AIDataPoint(label="Active exceptions", value=str(len(rows))),
+            AIDataPoint(label="Critical", value=str(len(critical))),
+            AIDataPoint(label="High", value=str(len(high))),
+            AIDataPoint(label="Assigned to me", value=str(len(my_items))),
+        ],
+        suggested_actions=[
+            f"Review: {r.title[:80]}" for r in critical[:3]
+        ],
+        priority=priority,
+        result_note="AI is read-only. Cannot resolve, dismiss, assign, or escalate exceptions.",
     )
 
 

@@ -449,6 +449,62 @@ def ensure_phase14_finance_credit_schema(engine: Engine) -> None:
             )
 
 
+def ensure_phase15_exception_engine_schema(engine: Engine) -> None:
+    """Ensure Phase 15 exception engine indexes exist for create_all databases."""
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+    index_specs: dict[str, tuple[tuple[str, str], ...]] = {
+        "exception_cases": (
+            ("ix_exception_cases_case_number", "case_number"),
+            ("ix_exception_cases_category", "category"),
+            ("ix_exception_cases_source", "source"),
+            ("ix_exception_cases_severity", "severity"),
+            ("ix_exception_cases_priority", "priority"),
+            ("ix_exception_cases_status", "status"),
+            ("ix_exception_cases_dedupe_key", "dedupe_key"),
+            ("ix_exception_cases_shipment_id", "shipment_id"),
+            ("ix_exception_cases_party_id", "party_id"),
+            ("ix_exception_cases_assigned_to_user_id", "assigned_to_user_id"),
+            ("ix_exception_cases_due_at", "due_at"),
+            ("ix_exception_cases_created_at", "created_at"),
+        ),
+        "exception_case_links": (
+            ("ix_exception_case_links_case_id", "exception_case_id"),
+            ("ix_exception_case_links_linked_type", "linked_type"),
+        ),
+        "exception_case_comments": (
+            ("ix_exception_case_comments_case_id", "exception_case_id"),
+        ),
+        "exception_case_assignments": (
+            ("ix_exception_case_assignments_case_id", "exception_case_id"),
+        ),
+        "exception_case_status_history": (
+            ("ix_exception_case_status_history_case_id", "exception_case_id"),
+        ),
+        "exception_case_escalations": (
+            ("ix_exception_case_escalations_case_id", "exception_case_id"),
+        ),
+        "exception_case_watchers": (
+            ("ix_exception_case_watchers_case_id", "exception_case_id"),
+        ),
+        "exception_case_sla_policies": (
+            ("ix_exception_case_sla_policies_category", "category"),
+            ("ix_exception_case_sla_policies_severity", "severity"),
+        ),
+    }
+    with engine.begin() as connection:
+        for table_name, indexes in index_specs.items():
+            if table_name not in table_names:
+                continue
+            for index_name, column_name in indexes:
+                connection.execute(
+                    text(
+                        f"CREATE INDEX IF NOT EXISTS {index_name} "
+                        f"ON {table_name} ({column_name})"
+                    )
+                )
+
+
 def ensure_phase9_event_validation_schema(engine: Engine) -> None:
     """Ensure Phase 9 indexes exist on databases booted via create_all."""
     inspector = inspect(engine)

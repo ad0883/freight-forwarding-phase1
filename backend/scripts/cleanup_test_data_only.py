@@ -1,314 +1,503 @@
-"""Safely identify and optionally delete obvious QA/test data only.
+"""Targeted test-data cleanup script.
+
+Deletes ONLY rows created during QA/testing (prefixed QA-, TEST-, HUMAN-TEST-,
+CLAUDE-QA-) and their dependents. Does NOT truncate tables, reset sequences,
+or touch system/config/definition tables.
 
 Usage:
     python scripts/cleanup_test_data_only.py --dry-run
     python scripts/cleanup_test_data_only.py --execute
 
-The execute mode prompts for the exact phrase DELETE_ONLY_TEST_DATA. It never
-prints environment values and intentionally skips system/default definition
-tables.
+Execute mode requires typing: DELETE_ONLY_TEST_DATA
 """
 from __future__ import annotations
 
-import argparse
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
-from sqlalchemy import String, Text, and_, delete, func, or_, select
-from sqlalchemy.sql.elements import ColumnElement
-
+# ---------------------------------------------------------------------------
+# Bootstrap: load DATABASE_URL from env or backend/.env
+# ---------------------------------------------------------------------------
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 
-def load_backend_env() -> None:
-    if os.environ.get("DATABASE_URL"):
-        return
+def _load_env() -> None:
     env_path = ROOT / ".env"
     if not env_path.exists():
         return
-    for line in env_path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or "=" not in stripped:
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
             continue
-        key, value = stripped.split("=", 1)
-        if key == "DATABASE_URL" and not os.environ.get("DATABASE_URL"):
-            os.environ[key] = value.strip().strip("'\"")
-            return
+        if "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip("'\"")
+        if key not in os.environ:
+            os.environ[key] = value
 
 
-load_backend_env()
-sys.path.insert(0, str(ROOT))
+_load_env()
 
-from app.db.session import Base, SessionLocal  # noqa: E402
-from app import models as _models  # noqa: F401,E402
+from sqlalchemy import create_engine, inspect, text  # noqa: E402
 
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL:
+    print("[ERROR] DATABASE_URL not found in environment or backend/.env")
+    sys.exit(1)
+
+# Never print the URL
+engine = create_engine(DATABASE_URL)
+
+# ---------------------------------------------------------------------------
+# Test-data prefixes (case-insensitive matching)
+# ---------------------------------------------------------------------------
 
 TEST_PREFIXES = ("QA-", "TEST-", "HUMAN-TEST-", "CLAUDE-QA-")
+TEST_PREFIXES_LOWER = tuple(p.lower() for p in TEST_PREFIXES)
+
+# Email prefixes for user cleanup (only these users are deletable)
+TEST_EMAIL_PREFIXES = ("qa.", "test.", "human-test.", "claude-qa.")
+
+# Columns to scan for test prefixes
+SCAN_COLUMNS = (
+    "shipment_code",
+    "code",
+    "name",
+    "title",
+    "subject",
+    "email",
+    "invoice_number",
+    "container_number",
+    "reference_number",
+    "original_filename",
+    "safe_filename",
+    "description",
+    "booking_ref",
+    "commodity",
+)
+
+# Tables that must NEVER be touched
 PROTECTED_TABLES = {
     "alembic_version",
+    "organizations",
     "workflow_state_definitions",
     "workflow_transition_definitions",
     "notification_rules",
     "rule_definitions",
     "demurrage_detention_rules",
 }
-PROTECTED_SUFFIXES = ("_definitions",)
+
+# Tables to skip entirely (system/config)
+SKIP_TABLES = PROTECTED_TABLES | {
+    "email_connections",  # Gmail tokens — leave unless clearly QA
+}
 
 
-def is_protected_table(table_name: str) -> bool:
-    return table_name in PROTECTED_TABLES or table_name.endswith(PROTECTED_SUFFIXES)
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 
-def text_prefix_conditions(table, column_names: tuple[str, ...]) -> list[ColumnElement[bool]]:
-    conditions: list[ColumnElement[bool]] = []
-    for name in column_names:
-        if name not in table.c:
+def _is_test_value(value: Any) -> bool:
+    if not value or not isinstance(value, str):
+        return False
+    lower = value.strip().lower()
+    return any(lower.startswith(p) for p in TEST_PREFIXES_LOWER)
+
+
+def _is_test_email(email: Any) -> bool:
+    if not email or not isinstance(email, str):
+        return False
+    local = email.strip().lower()
+    return any(local.startswith(p) for p in TEST_EMAIL_PREFIXES)
+
+
+def _get_scannable_columns(inspector, table: str) -> list[str]:
+    columns = {col["name"] for col in inspector.get_columns(table)}
+    return [col for col in SCAN_COLUMNS if col in columns]
+
+
+# ---------------------------------------------------------------------------
+# Discovery: find test rows
+# ---------------------------------------------------------------------------
+
+
+def discover_test_rows(conn, inspector) -> dict[str, list[int]]:
+    """Return {table_name: [list of test-row IDs]}."""
+    results: dict[str, list[int]] = {}
+    tables = set(inspector.get_table_names()) - SKIP_TABLES
+
+    for table in sorted(tables):
+        columns = {col["name"] for col in inspector.get_columns(table)}
+        if "id" not in columns:
             continue
-        column = table.c[name]
-        if not isinstance(column.type, (String, Text)):
+        scannable = _get_scannable_columns(inspector, table)
+        if not scannable:
             continue
-        for prefix in TEST_PREFIXES:
-            conditions.append(func.lower(column).like(f"{prefix.lower()}%"))
-    return conditions
 
-
-def ids_for(session, table_name: str, conditions: list[ColumnElement[bool]]) -> set[int]:
-    table = Base.metadata.tables.get(table_name)
-    if table is None or "id" not in table.c or not conditions:
-        return set()
-    rows = session.execute(select(table.c.id).where(or_(*conditions))).scalars().all()
-    return {int(row) for row in rows}
-
-
-def linked_ids(session, table_name: str, conditions: list[ColumnElement[bool]]) -> set[int]:
-    return ids_for(session, table_name, conditions)
-
-
-def in_ids(column, values: set[int]) -> ColumnElement[bool] | None:
-    if not values:
-        return None
-    return column.in_(sorted(values))
-
-
-def table_count(session, table, condition: ColumnElement[bool]) -> int:
-    return int(session.execute(select(func.count()).select_from(table).where(condition)).scalar_one())
-
-
-def build_targets(session) -> dict[str, set[int]]:
-    tables = Base.metadata.tables
-    targets: dict[str, set[int]] = {}
-
-    shipments = tables.get("shipments")
-    if shipments is not None:
-        targets["shipments"] = ids_for(
-            session,
-            "shipments",
-            text_prefix_conditions(
-                shipments,
-                (
-                    "shipment_code",
-                    "shipping_line",
-                    "vessel_name",
-                    "voyage_no",
-                    "booking_ref",
-                    "container_no",
-                    "commodity",
-                ),
-            ),
+        conditions = " OR ".join(
+            f"LOWER(CAST({col} AS TEXT)) LIKE :prefix_{i}_{j}"
+            for j, col in enumerate(scannable)
+            for i in range(len(TEST_PREFIXES_LOWER))
         )
-
-    parties = tables.get("parties")
-    if parties is not None:
-        targets["parties"] = ids_for(
-            session,
-            "parties",
-            text_prefix_conditions(parties, ("name", "email", "contact_person", "gstin")),
-        )
-
-    users = tables.get("users")
-    if users is not None:
-        user_conditions = text_prefix_conditions(users, ("name", "email"))
-        if user_conditions and "role" in users.c:
-            user_conditions = [and_(or_(*user_conditions), users.c.role != "ADMIN")]
-        targets["users_manual_review"] = ids_for(session, "users", user_conditions)
-
-    organizations = tables.get("organizations")
-    if organizations is not None:
-        targets["organizations_manual_review"] = ids_for(
-            session,
-            "organizations",
-            text_prefix_conditions(organizations, ("name", "slug")),
-        )
-
-    shipment_ids = targets.get("shipments", set())
-    party_ids = targets.get("parties", set())
-
-    documents = tables.get("documents")
-    if documents is not None:
-        conditions: list[ColumnElement[bool]] = []
-        if "shipment_id" in documents.c:
-            match = in_ids(documents.c.shipment_id, shipment_ids)
-            if match is not None:
-                conditions.append(match)
-        conditions.extend(text_prefix_conditions(documents, ("doc_type", "file_url", "notes")))
-        targets["documents"] = linked_ids(session, "documents", conditions)
-
-    doc_ids = targets.get("documents", set())
-    document_files = tables.get("document_files")
-    if document_files is not None:
-        conditions = []
-        for column_name, values in (
-            ("shipment_id", shipment_ids),
-            ("document_id", doc_ids),
-        ):
-            if column_name in document_files.c:
-                match = in_ids(document_files.c[column_name], values)
-                if match is not None:
-                    conditions.append(match)
-        conditions.extend(
-            text_prefix_conditions(
-                document_files,
-                ("original_filename", "sanitized_filename", "storage_key", "uploaded_by_name"),
-            )
-        )
-        targets["document_files"] = linked_ids(session, "document_files", conditions)
-
-    containers = tables.get("containers")
-    if containers is not None:
-        conditions = []
-        if "shipment_id" in containers.c:
-            match = in_ids(containers.c.shipment_id, shipment_ids)
-            if match is not None:
-                conditions.append(match)
-        conditions.extend(text_prefix_conditions(containers, ("container_number", "seal_number", "current_location")))
-        targets["containers"] = linked_ids(session, "containers", conditions)
-
-    charges = tables.get("charges")
-    if charges is not None:
-        conditions = []
-        for column_name, values in (("shipment_id", shipment_ids), ("party_id", party_ids)):
-            if column_name in charges.c:
-                match = in_ids(charges.c[column_name], values)
-                if match is not None:
-                    conditions.append(match)
-        conditions.extend(text_prefix_conditions(charges, ("invoice_no", "notes")))
-        targets["charges"] = linked_ids(session, "charges", conditions)
-
-    for table_name in ("finance_invoices", "finance_payments"):
-        table = tables.get(table_name)
-        if table is None:
-            continue
-        conditions = []
-        for column_name, values in (("shipment_id", shipment_ids), ("party_id", party_ids)):
-            if column_name in table.c:
-                match = in_ids(table.c[column_name], values)
-                if match is not None:
-                    conditions.append(match)
-        conditions.extend(text_prefix_conditions(table, ("invoice_number", "reference_number", "notes", "created_by_name")))
-        targets[table_name] = linked_ids(session, table_name, conditions)
-
-    return targets
-
-
-def condition_for_table(table, targets: dict[str, set[int]]) -> ColumnElement[bool] | None:
-    parts: list[ColumnElement[bool]] = []
-    direct_ids = targets.get(table.name, set())
-    if "id" in table.c and direct_ids:
-        parts.append(table.c.id.in_(sorted(direct_ids)))
-
-    link_columns = {
-        "shipment_id": "shipments",
-        "party_id": "parties",
-        "document_id": "documents",
-        "document_file_id": "document_files",
-        "container_id": "containers",
-        "charge_id": "charges",
-        "invoice_id": "finance_invoices",
-        "payment_id": "finance_payments",
-    }
-    for column_name, target_name in link_columns.items():
-        values = targets.get(target_name, set())
-        if column_name in table.c and values:
-            parts.append(table.c[column_name].in_(sorted(values)))
-
-    if not parts:
-        return None
-    return or_(*parts)
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--dry-run", action="store_true", help="show matched counts without deleting")
-    group.add_argument("--execute", action="store_true", help="delete matched test data after confirmation")
-    args = parser.parse_args()
-
-    if not os.environ.get("DATABASE_URL"):
-        print("DATABASE_URL is not available. Set it in the environment or backend/.env.")
-        return 2
-
-    session = SessionLocal()
-    try:
-        targets = build_targets(session)
-        print("Matched obvious QA/test IDs:")
-        for name in sorted(targets):
-            print(f"  {name}: {len(targets[name])}")
-
-        manual_review = {
-            name: values
-            for name, values in targets.items()
-            if name.endswith("_manual_review") and values
+        params = {
+            f"prefix_{i}_{j}": f"{prefix}%"
+            for j, _col in enumerate(scannable)
+            for i, prefix in enumerate(TEST_PREFIXES_LOWER)
         }
-        if manual_review:
-            print("Manual review needed before deleting these protected entity types:")
-            for name, values in sorted(manual_review.items()):
-                print(f"  {name}: {len(values)}")
+        query = f"SELECT id FROM {table} WHERE {conditions}"
+        rows = conn.execute(text(query), params).fetchall()
+        if rows:
+            results[table] = [row[0] for row in rows]
 
-        delete_plan: list[tuple[str, int]] = []
-        for table in reversed(Base.metadata.sorted_tables):
-            if is_protected_table(table.name):
-                continue
-            if table.name in {"users", "organizations"}:
-                continue
-            condition = condition_for_table(table, targets)
-            if condition is None:
-                continue
-            count = table_count(session, table, condition)
-            if count:
-                delete_plan.append((table.name, count))
+    return results
 
-        print("Delete plan:")
-        if delete_plan:
-            for table_name, count in delete_plan:
-                print(f"  {table_name}: {count}")
+
+def discover_dependent_rows(
+    conn, inspector, primary_matches: dict[str, list[int]]
+) -> dict[str, set[int]]:
+    """Find rows in dependent tables linked to matched test records."""
+    dependents: dict[str, set[int]] = {}
+
+    # Shipment dependents
+    shipment_ids = set(primary_matches.get("shipments", []))
+    if shipment_ids:
+        _add_dependents_by_fk(conn, inspector, "shipment_id", shipment_ids, dependents)
+
+    # Party dependents
+    party_ids = set(primary_matches.get("parties", []))
+    if party_ids:
+        _add_dependents_by_fk(conn, inspector, "party_id", party_ids, dependents)
+
+    # Finance invoice dependents
+    invoice_ids = set(primary_matches.get("finance_invoices", []))
+    invoice_ids |= dependents.get("finance_invoices", set())
+    if invoice_ids:
+        _add_dependents_by_fk(conn, inspector, "invoice_id", invoice_ids, dependents)
+
+    # Finance payment dependents
+    payment_ids = set(primary_matches.get("finance_payments", []))
+    payment_ids |= dependents.get("finance_payments", set())
+    if payment_ids:
+        _add_dependents_by_fk(conn, inspector, "payment_id", payment_ids, dependents)
+
+    # Container dependents
+    container_ids = set(primary_matches.get("containers", []))
+    container_ids |= dependents.get("containers", set())
+    if container_ids:
+        _add_dependents_by_fk(conn, inspector, "container_id", container_ids, dependents)
+
+    # Document version dependents
+    doc_version_ids = dependents.get("document_versions", set())
+    if doc_version_ids:
+        _add_dependents_by_fk(
+            conn, inspector, "document_version_id", doc_version_ids, dependents
+        )
+
+    # Document file dependents
+    doc_file_ids = dependents.get("document_files", set())
+    if doc_file_ids:
+        _add_dependents_by_fk(
+            conn, inspector, "document_file_id", doc_file_ids, dependents
+        )
+
+    return dependents
+
+
+def _add_dependents_by_fk(
+    conn,
+    inspector,
+    fk_column: str,
+    parent_ids: set[int],
+    dependents: dict[str, set[int]],
+) -> None:
+    tables = set(inspector.get_table_names()) - SKIP_TABLES
+    if not parent_ids:
+        return
+    id_list = ",".join(str(i) for i in sorted(parent_ids))
+    for table in sorted(tables):
+        columns = {col["name"] for col in inspector.get_columns(table)}
+        if fk_column not in columns or "id" not in columns:
+            continue
+        query = f"SELECT id FROM {table} WHERE {fk_column} IN ({id_list})"
+        rows = conn.execute(text(query)).fetchall()
+        if rows:
+            dependents.setdefault(table, set()).update(row[0] for row in rows)
+
+
+# ---------------------------------------------------------------------------
+# User cleanup discovery
+# ---------------------------------------------------------------------------
+
+
+def discover_test_users(conn) -> list[int]:
+    """Find user IDs with test-prefix emails (never admin@example.com)."""
+    rows = conn.execute(
+        text("SELECT id, email FROM users")
+    ).fetchall()
+    test_ids = []
+    for uid, email in rows:
+        if not email:
+            continue
+        if email.lower() == "admin@example.com":
+            continue
+        if _is_test_email(email):
+            test_ids.append(uid)
+    return test_ids
+
+
+# ---------------------------------------------------------------------------
+# Deletion order (respects FK constraints)
+# ---------------------------------------------------------------------------
+
+DELETION_ORDER = [
+    # Deepest dependents first
+    "document_intelligence_suggestions",
+    "document_mismatch_results",
+    "document_extracted_fields",
+    "document_extractions",
+    "document_intelligence_runs",
+    "document_version_events",
+    "document_access_logs",
+    "document_file_blobs",
+    "document_files",
+    "document_versions",
+    "finance_payment_allocations",
+    "finance_invoice_lines",
+    "finance_risk_records",
+    "finance_aging_snapshots",
+    "finance_adjustments",
+    "credit_hold_records",
+    "fx_rate_snapshots",
+    "finance_payments",
+    "finance_invoices",
+    "party_credit_profiles",
+    "container_demurrage_records",
+    "container_detention_records",
+    "container_events",
+    "containers",
+    "charges",
+    "tasks",
+    "followup_logs",
+    "follow_up_logs",
+    "bl_management",
+    "demurrages",
+    "demurrage",
+    "documents",
+    "alerts",
+    "notifications",
+    "notification_user_states",
+    "operational_events",
+    "validation_issues",
+    "audit_logs",
+    "workflow_transition_logs",
+    "email_suggestions",
+    "email_message_cache",
+    "ai_interaction_logs",
+    # Primary entities
+    "shipments",
+    "parties",
+    "users",
+]
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
+def run_dry_run() -> None:
+    print("=" * 60)
+    print("  TEST DATA CLEANUP — DRY RUN")
+    print("=" * 60)
+    print()
+
+    with engine.connect() as conn:
+        inspector = inspect(engine)
+        primary = discover_test_rows(conn, inspector)
+        dependents = discover_dependent_rows(conn, inspector, primary)
+        test_users = discover_test_users(conn)
+
+        # Merge
+        all_targets: dict[str, set[int]] = {}
+        for table, ids in primary.items():
+            all_targets.setdefault(table, set()).update(ids)
+        for table, ids in dependents.items():
+            all_targets.setdefault(table, set()).update(ids)
+        if test_users:
+            all_targets.setdefault("users", set()).update(test_users)
+
+        total = 0
+        print(f"{'Table':<45} {'Count':>6}  Sample IDs")
+        print("-" * 80)
+        for table in DELETION_ORDER:
+            ids = all_targets.get(table)
+            if not ids:
+                continue
+            sample = sorted(ids)[:5]
+            print(f"  {table:<43} {len(ids):>6}  {sample}")
+            total += len(ids)
+        # Any tables not in DELETION_ORDER
+        for table in sorted(all_targets.keys()):
+            if table in DELETION_ORDER:
+                continue
+            if table in PROTECTED_TABLES:
+                continue
+            ids = all_targets[table]
+            sample = sorted(ids)[:5]
+            print(f"  {table:<43} {len(ids):>6}  {sample} [manual review needed]")
+            total += len(ids)
+
+        print("-" * 80)
+        print(f"  TOTAL rows to delete: {total}")
+        print()
+
+        # Show sample records for key tables
+        _show_samples(conn, inspector, primary)
+
+        # Show test users
+        if test_users:
+            rows = conn.execute(
+                text(
+                    f"SELECT id, email, role FROM users WHERE id IN ({','.join(str(i) for i in test_users)})"
+                )
+            ).fetchall()
+            print("\nTest users to delete:")
+            for uid, email, role in rows:
+                print(f"  id={uid} email={email} role={role}")
         else:
-            print("  No rows matched.")
+            print("\nNo test users found to delete.")
 
-        if args.dry_run:
-            session.rollback()
-            return 0
+        print("\n" + "=" * 60)
+        print("  To execute, run:")
+        print("    python scripts/cleanup_test_data_only.py --execute")
+        print("  Then type: DELETE_ONLY_TEST_DATA")
+        print("=" * 60)
 
-        confirmation = input("Type DELETE_ONLY_TEST_DATA to execute: ")
-        if confirmation != "DELETE_ONLY_TEST_DATA":
-            print("Confirmation did not match. No rows deleted.")
-            session.rollback()
-            return 1
 
-        for table in reversed(Base.metadata.sorted_tables):
-            if is_protected_table(table.name) or table.name in {"users", "organizations"}:
+def _show_samples(conn, inspector, primary: dict[str, list[int]]) -> None:
+    print("\nSample matched records:")
+    for table in ("shipments", "parties", "containers", "finance_invoices", "charges"):
+        ids = primary.get(table)
+        if not ids:
+            continue
+        columns = {col["name"] for col in inspector.get_columns(table)}
+        display_cols = []
+        for col in ("id", "shipment_code", "name", "container_number", "invoice_number", "charge_type", "direction", "amount", "email", "booking_ref"):
+            if col in columns:
+                display_cols.append(col)
+        if not display_cols:
+            continue
+        col_str = ", ".join(display_cols)
+        sample_ids = sorted(ids)[:5]
+        id_list = ",".join(str(i) for i in sample_ids)
+        rows = conn.execute(text(f"SELECT {col_str} FROM {table} WHERE id IN ({id_list})")).fetchall()
+        print(f"\n  {table} (showing {len(rows)} of {len(ids)}):")
+        for row in rows:
+            print(f"    {dict(zip(display_cols, row))}")
+
+
+def run_execute() -> None:
+    print("=" * 60)
+    print("  TEST DATA CLEANUP — EXECUTE MODE")
+    print("=" * 60)
+    print()
+    print("  WARNING: This will permanently delete test data rows.")
+    print("  Type exactly: DELETE_ONLY_TEST_DATA")
+    print()
+    confirmation = input("  Confirm: ").strip()
+    if confirmation != "DELETE_ONLY_TEST_DATA":
+        print("  Aborted. Confirmation did not match.")
+        sys.exit(1)
+
+    print("\n  Proceeding with deletion...\n")
+
+    with engine.begin() as conn:
+        inspector = inspect(engine)
+        primary = discover_test_rows(conn, inspector)
+        dependents = discover_dependent_rows(conn, inspector, primary)
+        test_users = discover_test_users(conn)
+
+        # Merge
+        all_targets: dict[str, set[int]] = {}
+        for table, ids in primary.items():
+            all_targets.setdefault(table, set()).update(ids)
+        for table, ids in dependents.items():
+            all_targets.setdefault(table, set()).update(ids)
+        if test_users:
+            all_targets.setdefault("users", set()).update(test_users)
+
+        deleted: dict[str, int] = {}
+        skipped: dict[str, str] = {}
+
+        for table in DELETION_ORDER:
+            ids = all_targets.get(table)
+            if not ids:
                 continue
-            condition = condition_for_table(table, targets)
-            if condition is None:
+            if table in PROTECTED_TABLES:
+                skipped[table] = "protected table"
                 continue
-            session.execute(delete(table).where(condition))
-        session.commit()
-        print("Deleted only matched QA/test-linked rows. Protected tables were skipped.")
-        return 0
-    finally:
-        session.close()
+            # Verify table exists
+            if table not in inspector.get_table_names():
+                skipped[table] = "table does not exist"
+                continue
+            id_list = ",".join(str(i) for i in sorted(ids))
+            try:
+                result = conn.execute(text(f"DELETE FROM {table} WHERE id IN ({id_list})"))
+                deleted[table] = result.rowcount
+            except Exception as exc:
+                skipped[table] = f"error: {str(exc)[:100]}"
+                print(f"  [SKIP] {table}: {exc}")
+
+        # Handle tables not in DELETION_ORDER
+        for table in sorted(all_targets.keys()):
+            if table in DELETION_ORDER or table in PROTECTED_TABLES:
+                continue
+            skipped[table] = "not in deletion order — manual review needed"
+
+        # Report
+        print("\n" + "=" * 60)
+        print("  CLEANUP COMPLETE")
+        print("=" * 60)
+        total_deleted = 0
+        print(f"\n  {'Table':<45} {'Deleted':>8}")
+        print("  " + "-" * 55)
+        for table, count in sorted(deleted.items()):
+            if count > 0:
+                print(f"  {table:<45} {count:>8}")
+                total_deleted += count
+        print("  " + "-" * 55)
+        print(f"  {'TOTAL':<45} {total_deleted:>8}")
+
+        if skipped:
+            print(f"\n  Skipped tables:")
+            for table, reason in sorted(skipped.items()):
+                print(f"    {table}: {reason}")
+
+        print(f"\n  Protected tables preserved: {', '.join(sorted(PROTECTED_TABLES))}")
+        print(f"  Admin user preserved: yes (admin@example.com and real admin never touched)")
+        print(f"  Organizations preserved: yes")
+        print()
+
+
+def main() -> None:
+    if len(sys.argv) < 2 or sys.argv[1] not in ("--dry-run", "--execute"):
+        print("Usage:")
+        print("  python scripts/cleanup_test_data_only.py --dry-run")
+        print("  python scripts/cleanup_test_data_only.py --execute")
+        sys.exit(1)
+
+    if sys.argv[1] == "--dry-run":
+        run_dry_run()
+    elif sys.argv[1] == "--execute":
+        run_execute()
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

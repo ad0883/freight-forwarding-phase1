@@ -32,6 +32,7 @@ Phase 1 implementation of a freight forwarding operations system with a FastAPI 
 - Phase 10 controlled export/import workflow state machines with transition logs, sensitivity-aware permissions, manual-review notifications, and a Workflow Control dashboard widget
 - Phase 11 multi-container support with append-only container events, separated demurrage/detention engines, container risk dashboard widget, and a safe legacy-field backfill
 - Phase 14 finance + credit control: invoices, payments + allocations, party credit profiles, credit holds, aging buckets, FX rate snapshots, finance risk records, and advisory release controls (OBL/DO/dispatch). Existing charges/P&L flow unchanged.
+- Phase 15 exception engine + manual review center: central exception layer tying together validation issues, document mismatches, finance holds, workflow blocks, container risks, Gmail suggestions, and overdue tasks. Includes detection, dedupe, assignment, escalation, resolution, SLA policies, and a full Manual Review Center UI. AI can summarize exceptions read-only.
 
 ## Backend Local Setup
 
