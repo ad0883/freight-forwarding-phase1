@@ -23,6 +23,7 @@ import UsersAdminPage from './pages/UsersAdminPage.jsx';
 import ValidationIssuesPage from './pages/ValidationIssuesPage.jsx';
 import ManualReviewPage from './pages/ManualReviewPage.jsx';
 import ApprovalsPage from './pages/ApprovalsPage.jsx';
+import BotGovernancePage from './pages/BotGovernancePage.jsx';
 
 function App() {
   return (
@@ -131,6 +132,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['ADMIN', 'STAFF', 'VIEW_ONLY']}>
               <ApprovalsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="bot-governance"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'STAFF', 'VIEW_ONLY']}>
+              <BotGovernancePage />
             </ProtectedRoute>
           }
         />

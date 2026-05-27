@@ -13,6 +13,20 @@ from app.models.approval import (
 )
 from app.models.audit import AuditLog
 from app.models.bl_management import BLManagement
+from app.models.bot_governance import (
+    BotActionRecord,
+    BotAgent,
+    BotEvaluationResult,
+    BotEvaluationRun,
+    BotFeedbackRecord,
+    BotGuardrailViolation,
+    BotLearningCandidate,
+    BotPerformanceSnapshot,
+    BotPromptVersion,
+    BotQualityReview,
+    BotRuleVersion,
+    BotTrainingCase,
+)
 from app.models.charge import Charge
 from app.models.container import (
     Container,
@@ -90,6 +104,18 @@ __all__ = [
     "BotGovernanceAction",
     "AuditLog",
     "BLManagement",
+    "BotActionRecord",
+    "BotAgent",
+    "BotEvaluationResult",
+    "BotEvaluationRun",
+    "BotFeedbackRecord",
+    "BotGuardrailViolation",
+    "BotLearningCandidate",
+    "BotPerformanceSnapshot",
+    "BotPromptVersion",
+    "BotQualityReview",
+    "BotRuleVersion",
+    "BotTrainingCase",
     "Charge",
     "Container",
     "ContainerDemurrageRecord",
