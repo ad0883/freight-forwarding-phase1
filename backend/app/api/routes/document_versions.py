@@ -97,7 +97,8 @@ def document_dashboard_summary_route(
     db: Session = Depends(get_db),
     _: AuthenticatedUser = Depends(get_current_user),
 ) -> DocumentDashboardSummary:
-    pending = (
+    # Pending review: get count and top 5 in one pass
+    pending_query = (
         db.query(DocumentVersion)
         .join(Shipment, Shipment.id == DocumentVersion.shipment_id)
         .filter(
@@ -106,10 +107,16 @@ def document_dashboard_summary_route(
             DocumentVersion.is_current.is_(True),
             Shipment.is_archived.is_(False),
         )
+    )
+    pending_count = pending_query.count()
+    pending = (
+        pending_query
         .order_by(DocumentVersion.created_at.desc(), DocumentVersion.id.desc())
         .limit(5)
         .all()
     )
+
+    # Recent uploads: top 5
     recent = (
         db.query(DocumentVersion)
         .join(Shipment, Shipment.id == DocumentVersion.shipment_id)
@@ -118,7 +125,9 @@ def document_dashboard_summary_route(
         .limit(5)
         .all()
     )
-    missing_rows = (
+
+    # Missing required: count and top 10
+    missing_query = (
         db.query(Document)
         .join(Shipment, Shipment.id == Document.shipment_id)
         .filter(
@@ -126,6 +135,10 @@ def document_dashboard_summary_route(
             Document.current_version_id.is_(None),
             Shipment.is_archived.is_(False),
         )
+    )
+    missing_count = missing_query.count()
+    missing_rows = (
+        missing_query
         .order_by(Document.created_at.desc(), Document.id.desc())
         .limit(10)
         .all()
@@ -139,24 +152,7 @@ def document_dashboard_summary_route(
         }
         for row in missing_rows
     ]
-    pending_count = (
-        db.query(DocumentVersion)
-        .join(Shipment, Shipment.id == DocumentVersion.shipment_id)
-        .filter(
-            DocumentVersion.review_status == "pending_review",
-            DocumentVersion.status == "active",
-            DocumentVersion.is_current.is_(True),
-            Shipment.is_archived.is_(False),
-        )
-        .count()
-    )
-    missing_count = (
-        db.query(Document)
-        .join(Shipment, Shipment.id == Document.shipment_id)
-        .filter(Document.is_required.is_(True), Document.current_version_id.is_(None))
-        .filter(Shipment.is_archived.is_(False))
-        .count()
-    )
+
     return DocumentDashboardSummary(
         pending_review_count=pending_count,
         missing_required_count=missing_count,

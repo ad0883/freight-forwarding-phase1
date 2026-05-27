@@ -186,6 +186,48 @@ def create_exception(
 
 
 # ---------------------------------------------------------------------------
+# SLA Policies (must be before /{case_id} to avoid path conflict)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/sla-policies", response_model=list[ExceptionCaseSlaPolicyRead])
+def list_sla_policies(
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = AnyUser,
+) -> list[ExceptionCaseSlaPolicyRead]:
+    policies = db.query(ExceptionCaseSlaPolicy).order_by(ExceptionCaseSlaPolicy.id).all()
+    return [ExceptionCaseSlaPolicyRead.model_validate(p) for p in policies]
+
+
+@router.patch("/sla-policies/{policy_id}", response_model=ExceptionCaseSlaPolicyRead)
+def update_sla_policy(
+    policy_id: int,
+    body: ExceptionCaseSlaPolicyUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: AuthenticatedUser = AdminUser,
+) -> ExceptionCaseSlaPolicyRead:
+    policy = db.query(ExceptionCaseSlaPolicy).filter(ExceptionCaseSlaPolicy.id == policy_id).first()
+    if not policy:
+        raise HTTPException(status_code=404, detail="SLA policy not found")
+    updates = body.model_dump(exclude_unset=True)
+    for key, value in updates.items():
+        setattr(policy, key, value)
+    from datetime import datetime
+    policy.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(policy)
+    record_audit_log(
+        db, current_user, "exception.sla_policy_update", "exception_sla_policy",
+        entity_id=policy.id,
+        description="SLA policy updated.",
+        metadata={"fields": list(updates.keys())},
+        request=request,
+    )
+    return ExceptionCaseSlaPolicyRead.model_validate(policy)
+
+
+# ---------------------------------------------------------------------------
 # Detail / Update
 # ---------------------------------------------------------------------------
 
@@ -485,46 +527,6 @@ def get_history(
 
 # ---------------------------------------------------------------------------
 # SLA Policies
-# ---------------------------------------------------------------------------
-
-
-@router.get("/sla-policies", response_model=list[ExceptionCaseSlaPolicyRead])
-def list_sla_policies(
-    db: Session = Depends(get_db),
-    current_user: AuthenticatedUser = AnyUser,
-) -> list[ExceptionCaseSlaPolicyRead]:
-    policies = db.query(ExceptionCaseSlaPolicy).order_by(ExceptionCaseSlaPolicy.id).all()
-    return [ExceptionCaseSlaPolicyRead.model_validate(p) for p in policies]
-
-
-@router.patch("/sla-policies/{policy_id}", response_model=ExceptionCaseSlaPolicyRead)
-def update_sla_policy(
-    policy_id: int,
-    body: ExceptionCaseSlaPolicyUpdate,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: AuthenticatedUser = AdminUser,
-) -> ExceptionCaseSlaPolicyRead:
-    policy = db.query(ExceptionCaseSlaPolicy).filter(ExceptionCaseSlaPolicy.id == policy_id).first()
-    if not policy:
-        raise HTTPException(status_code=404, detail="SLA policy not found")
-    updates = body.model_dump(exclude_unset=True)
-    for key, value in updates.items():
-        setattr(policy, key, value)
-    from datetime import datetime
-    policy.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(policy)
-    record_audit_log(
-        db, current_user, "exception.sla_policy_update", "exception_sla_policy",
-        entity_id=policy.id,
-        description="SLA policy updated.",
-        metadata={"fields": list(updates.keys())},
-        request=request,
-    )
-    return ExceptionCaseSlaPolicyRead.model_validate(policy)
-
-
 # ---------------------------------------------------------------------------
 # Shipment-specific routes
 # ---------------------------------------------------------------------------

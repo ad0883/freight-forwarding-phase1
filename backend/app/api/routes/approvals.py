@@ -89,6 +89,92 @@ def create_approval(
     return ApprovalRequestRead.model_validate(req)
 
 
+# --- Policies (must be before /{approval_id}) ---
+
+@router.get("/policies", response_model=list[ApprovalPolicyRead])
+def list_policies(db: Session = Depends(get_db), current_user: AuthenticatedUser = AnyUser):
+    policies = db.query(ApprovalPolicy).order_by(ApprovalPolicy.id).all()
+    return [ApprovalPolicyRead.model_validate(p) for p in policies]
+
+
+@router.patch("/policies/{policy_id}", response_model=ApprovalPolicyRead)
+def update_policy(policy_id: int, body: ApprovalPolicyUpdate, request: Request, db: Session = Depends(get_db), current_user: AuthenticatedUser = AdminUser):
+    policy = db.query(ApprovalPolicy).filter(ApprovalPolicy.id == policy_id).first()
+    if not policy:
+        raise HTTPException(status_code=404, detail="Policy not found")
+    from datetime import datetime
+    updates = body.model_dump(exclude_unset=True)
+    for k, v in updates.items():
+        setattr(policy, k, v)
+    policy.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(policy)
+    record_audit_log(db, current_user, "approval.policy_update", "approval_policy", entity_id=policy.id, description="Approval policy updated.", request=request)
+    return ApprovalPolicyRead.model_validate(policy)
+
+
+# --- Action Locks (must be before /{approval_id}) ---
+
+@router.get("/action-locks", response_model=list[ActionLockRead])
+def list_locks(db: Session = Depends(get_db), current_user: AuthenticatedUser = AnyUser):
+    locks = db.query(ApprovalActionLock).filter(ApprovalActionLock.status == "active").order_by(ApprovalActionLock.created_at.desc()).limit(100).all()
+    return [ActionLockRead.model_validate(l) for l in locks]
+
+
+@router.post("/action-locks/check", response_model=ActionLockCheckResponse)
+def check_lock(body: ActionLockCheckRequest, db: Session = Depends(get_db), current_user: AuthenticatedUser = AnyUser):
+    result = check_action_allowed(db, body.entity_type, body.entity_id, body.action_key)
+    return ActionLockCheckResponse(**result)
+
+
+@router.post("/action-locks/{lock_id}/release", response_model=ActionLockRead)
+def release_lock(lock_id: int, request: Request, db: Session = Depends(get_db), current_user: AuthenticatedUser = AdminUser):
+    try:
+        lock = release_action_lock(db, lock_id, current_user)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    record_audit_log(db, current_user, "approval.lock_release", "action_lock", entity_id=lock.id, description="Action lock released.", request=request)
+    return ActionLockRead.model_validate(lock)
+
+
+# --- Bot Governance Actions (must be before /{approval_id}) ---
+
+@router.get("/bot-actions", response_model=list[BotGovernanceActionRead])
+def list_bot(status: Optional[str] = None, limit: int = Query(default=50, ge=1, le=200), db: Session = Depends(get_db), current_user: AuthenticatedUser = AnyUser):
+    items = list_bot_actions(db, status_filter=status, limit=limit)
+    return [BotGovernanceActionRead.model_validate(i) for i in items]
+
+
+@router.post("/bot-actions/{bot_action_id}/submit", response_model=BotGovernanceActionRead)
+def submit_bot(bot_action_id: int, request: Request, db: Session = Depends(get_db), current_user: AuthenticatedUser = OperationalUser):
+    try:
+        action = submit_bot_action_for_approval(db, bot_action_id, current_user)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    record_audit_log(db, current_user, "bot_action.submit", "bot_governance_action", entity_id=action.id, description="Bot action submitted for approval.", request=request)
+    return BotGovernanceActionRead.model_validate(action)
+
+
+@router.post("/bot-actions/{bot_action_id}/approve", response_model=BotGovernanceActionRead)
+def approve_bot(bot_action_id: int, request: Request, db: Session = Depends(get_db), current_user: AuthenticatedUser = AdminUser):
+    try:
+        action = approve_bot_action(db, bot_action_id, current_user)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    record_audit_log(db, current_user, "bot_action.approve", "bot_governance_action", entity_id=action.id, description="Bot action approved.", request=request)
+    return BotGovernanceActionRead.model_validate(action)
+
+
+@router.post("/bot-actions/{bot_action_id}/reject", response_model=BotGovernanceActionRead)
+def reject_bot(bot_action_id: int, body: ApprovalDecisionRequest, request: Request, db: Session = Depends(get_db), current_user: AuthenticatedUser = AdminUser):
+    try:
+        action = reject_bot_action(db, bot_action_id, current_user, body.notes)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    record_audit_log(db, current_user, "bot_action.reject", "bot_governance_action", entity_id=action.id, description="Bot action rejected.", request=request)
+    return BotGovernanceActionRead.model_validate(action)
+
+
 @router.get("/{approval_id}", response_model=ApprovalRequestRead)
 def get_detail(approval_id: int, db: Session = Depends(get_db), current_user: AuthenticatedUser = AnyUser):
     req = get_approval_request(db, approval_id)
@@ -217,92 +303,6 @@ def add_evidence(approval_id: int, body: ApprovalEvidenceCreate, db: Session = D
     db.commit()
     db.refresh(ev)
     return ApprovalEvidenceRead.model_validate(ev)
-
-
-# --- Policies ---
-
-@router.get("/policies", response_model=list[ApprovalPolicyRead])
-def list_policies(db: Session = Depends(get_db), current_user: AuthenticatedUser = AnyUser):
-    policies = db.query(ApprovalPolicy).order_by(ApprovalPolicy.id).all()
-    return [ApprovalPolicyRead.model_validate(p) for p in policies]
-
-
-@router.patch("/policies/{policy_id}", response_model=ApprovalPolicyRead)
-def update_policy(policy_id: int, body: ApprovalPolicyUpdate, request: Request, db: Session = Depends(get_db), current_user: AuthenticatedUser = AdminUser):
-    policy = db.query(ApprovalPolicy).filter(ApprovalPolicy.id == policy_id).first()
-    if not policy:
-        raise HTTPException(status_code=404, detail="Policy not found")
-    from datetime import datetime
-    updates = body.model_dump(exclude_unset=True)
-    for k, v in updates.items():
-        setattr(policy, k, v)
-    policy.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(policy)
-    record_audit_log(db, current_user, "approval.policy_update", "approval_policy", entity_id=policy.id, description="Approval policy updated.", request=request)
-    return ApprovalPolicyRead.model_validate(policy)
-
-
-# --- Action Locks ---
-
-@router.get("/action-locks", response_model=list[ActionLockRead])
-def list_locks(db: Session = Depends(get_db), current_user: AuthenticatedUser = AnyUser):
-    locks = db.query(ApprovalActionLock).filter(ApprovalActionLock.status == "active").order_by(ApprovalActionLock.created_at.desc()).limit(100).all()
-    return [ActionLockRead.model_validate(l) for l in locks]
-
-
-@router.post("/action-locks/check", response_model=ActionLockCheckResponse)
-def check_lock(body: ActionLockCheckRequest, db: Session = Depends(get_db), current_user: AuthenticatedUser = AnyUser):
-    result = check_action_allowed(db, body.entity_type, body.entity_id, body.action_key)
-    return ActionLockCheckResponse(**result)
-
-
-@router.post("/action-locks/{lock_id}/release", response_model=ActionLockRead)
-def release_lock(lock_id: int, request: Request, db: Session = Depends(get_db), current_user: AuthenticatedUser = AdminUser):
-    try:
-        lock = release_action_lock(db, lock_id, current_user)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    record_audit_log(db, current_user, "approval.lock_release", "action_lock", entity_id=lock.id, description="Action lock released.", request=request)
-    return ActionLockRead.model_validate(lock)
-
-
-# --- Bot Governance ---
-
-@router.get("/bot-actions", response_model=list[BotGovernanceActionRead])
-def list_bot(status: Optional[str] = None, limit: int = Query(default=50, ge=1, le=200), db: Session = Depends(get_db), current_user: AuthenticatedUser = AnyUser):
-    items = list_bot_actions(db, status_filter=status, limit=limit)
-    return [BotGovernanceActionRead.model_validate(i) for i in items]
-
-
-@router.post("/bot-actions/{bot_action_id}/submit", response_model=BotGovernanceActionRead)
-def submit_bot(bot_action_id: int, request: Request, db: Session = Depends(get_db), current_user: AuthenticatedUser = OperationalUser):
-    try:
-        action = submit_bot_action_for_approval(db, bot_action_id, current_user)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    record_audit_log(db, current_user, "bot_action.submit", "bot_governance_action", entity_id=action.id, description="Bot action submitted for approval.", request=request)
-    return BotGovernanceActionRead.model_validate(action)
-
-
-@router.post("/bot-actions/{bot_action_id}/approve", response_model=BotGovernanceActionRead)
-def approve_bot(bot_action_id: int, request: Request, db: Session = Depends(get_db), current_user: AuthenticatedUser = AdminUser):
-    try:
-        action = approve_bot_action(db, bot_action_id, current_user)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    record_audit_log(db, current_user, "bot_action.approve", "bot_governance_action", entity_id=action.id, description="Bot action approved.", request=request)
-    return BotGovernanceActionRead.model_validate(action)
-
-
-@router.post("/bot-actions/{bot_action_id}/reject", response_model=BotGovernanceActionRead)
-def reject_bot(bot_action_id: int, body: ApprovalDecisionRequest, request: Request, db: Session = Depends(get_db), current_user: AuthenticatedUser = AdminUser):
-    try:
-        action = reject_bot_action(db, bot_action_id, current_user, body.notes)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    record_audit_log(db, current_user, "bot_action.reject", "bot_governance_action", entity_id=action.id, description="Bot action rejected.", request=request)
-    return BotGovernanceActionRead.model_validate(action)
 
 
 # --- Shipment-specific ---

@@ -56,7 +56,7 @@ function DashboardPage() {
         .then((response) => setContainerRisk(response.data))
         .catch(() => setContainerRisk(null));
       api
-        .get('/document-versions/dashboard-summary')
+        .get('/document-versions/dashboard-summary', { timeout: 8000 })
         .then((response) => setDocumentSummary(response.data))
         .catch(() => setDocumentSummary(null));
       api
