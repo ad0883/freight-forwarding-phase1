@@ -25,6 +25,7 @@ import ManualReviewPage from './pages/ManualReviewPage.jsx';
 import ApprovalsPage from './pages/ApprovalsPage.jsx';
 import BotGovernancePage from './pages/BotGovernancePage.jsx';
 import PortalPage from './pages/PortalPage.jsx';
+import CustomsPage from './pages/CustomsPage.jsx';
 
 function App() {
   return (
@@ -145,6 +146,14 @@ function App() {
           }
         />
         <Route path="portal" element={<ProtectedRoute><PortalPage /></ProtectedRoute>} />
+        <Route
+          path="customs"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'STAFF', 'VIEW_ONLY']}>
+              <CustomsPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="admin/audit-logs" element={<Navigate to="/audit-logs" replace />} />
         <Route path="admin/users" element={<Navigate to="/users" replace />} />
         <Route path="admin/status" element={<Navigate to="/status" replace />} />

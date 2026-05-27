@@ -16,6 +16,7 @@ from app.api.routes import (
     bl_management,
     bot_governance,
     containers,
+    customs,
     demurrage,
     document_intelligence,
     documents,
@@ -258,6 +259,8 @@ app.include_router(approvals.shipment_approval_router, prefix="/api")
 app.include_router(bot_governance.router, prefix="/api")
 app.include_router(portal.router, prefix="/api")
 app.include_router(portal.admin_portal_router, prefix="/api")
+app.include_router(customs.router, prefix="/api")
+app.include_router(customs.shipment_customs_router, prefix="/api")
 
 
 @app.get("/")

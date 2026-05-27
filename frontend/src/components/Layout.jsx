@@ -31,6 +31,7 @@ import { RoleBadge } from './States.jsx';
 const mainLinks = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/shipments', label: 'Shipments', icon: Ship },
+  { to: '/customs', label: 'Customs', icon: ShieldCheck, writeRoleOnly: true },
   { to: '/parties', label: 'Parties', icon: Users },
   { to: '/tasks', label: 'Tasks', icon: ClipboardList },
   { to: '/reports', label: 'Reports', icon: BarChart3 },

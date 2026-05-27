@@ -35,6 +35,18 @@ from app.models.container import (
     ContainerEvent,
     DemurrageDetentionRule,
 )
+from app.models.customs import (
+    CustomsActivityLog,
+    CustomsCase,
+    CustomsCaseMilestone,
+    CustomsChecklistItem,
+    CustomsDocumentRequirement,
+    CustomsDutyRecord,
+    CustomsPartyAssignment,
+    CustomsQuery,
+    CustomsQueryComment,
+    CustomsReferenceNumber,
+)
 from app.models.demurrage import Demurrage
 from app.models.document import Document
 from app.models.document_version import (
@@ -132,6 +144,16 @@ __all__ = [
     "ContainerDemurrageRecord",
     "ContainerDetentionRecord",
     "ContainerEvent",
+    "CustomsActivityLog",
+    "CustomsCase",
+    "CustomsCaseMilestone",
+    "CustomsChecklistItem",
+    "CustomsDocumentRequirement",
+    "CustomsDutyRecord",
+    "CustomsPartyAssignment",
+    "CustomsQuery",
+    "CustomsQueryComment",
+    "CustomsReferenceNumber",
     "Demurrage",
     "DemurrageDetentionRule",
     "Document",
