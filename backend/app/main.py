@@ -36,6 +36,7 @@ from app.api.routes import (
     rules,
     shipments,
     tasks,
+    transport,
     users,
     validation_issues,
     workflow_state_machine,
@@ -261,6 +262,9 @@ app.include_router(portal.router, prefix="/api")
 app.include_router(portal.admin_portal_router, prefix="/api")
 app.include_router(customs.router, prefix="/api")
 app.include_router(customs.shipment_customs_router, prefix="/api")
+app.include_router(transport.router, prefix="/api")
+app.include_router(transport.shipment_transport_router, prefix="/api")
+app.include_router(transport.portal_transport_router, prefix="/api")
 
 
 @app.get("/")

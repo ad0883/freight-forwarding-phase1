@@ -26,6 +26,7 @@ import ApprovalsPage from './pages/ApprovalsPage.jsx';
 import BotGovernancePage from './pages/BotGovernancePage.jsx';
 import PortalPage from './pages/PortalPage.jsx';
 import CustomsPage from './pages/CustomsPage.jsx';
+import TransportPage from './pages/TransportPage.jsx';
 
 function App() {
   return (
@@ -151,6 +152,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['ADMIN', 'STAFF', 'VIEW_ONLY']}>
               <CustomsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="transport"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'STAFF', 'VIEW_ONLY']}>
+              <TransportPage />
             </ProtectedRoute>
           }
         />

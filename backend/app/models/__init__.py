@@ -47,6 +47,18 @@ from app.models.customs import (
     CustomsQueryComment,
     CustomsReferenceNumber,
 )
+from app.models.transport import (
+    TransportActivityLog,
+    TransportChargeRef,
+    TransportDocument,
+    TransportDriver,
+    TransportException,
+    TransportJob,
+    TransportJobContainer,
+    TransportLocationUpdate,
+    TransportMilestone,
+    TransportVehicle,
+)
 from app.models.demurrage import Demurrage
 from app.models.document import Document
 from app.models.document_version import (
@@ -156,6 +168,7 @@ __all__ = [
     "CustomsReferenceNumber",
     "Demurrage",
     "DemurrageDetentionRule",
+    "DemurrageDetentionRule",
     "Document",
     "DocumentAccessLog",
     "DocumentExtractedField",
@@ -212,4 +225,14 @@ __all__ = [
     "WorkflowStateDefinition",
     "WorkflowTransitionDefinition",
     "WorkflowTransitionLog",
+    "TransportActivityLog",
+    "TransportChargeRef",
+    "TransportDocument",
+    "TransportDriver",
+    "TransportException",
+    "TransportJob",
+    "TransportJobContainer",
+    "TransportLocationUpdate",
+    "TransportMilestone",
+    "TransportVehicle",
 ]
