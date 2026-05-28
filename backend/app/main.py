@@ -38,6 +38,7 @@ from app.api.routes import (
     tasks,
     tracking,
     transport,
+    control_tower,
     users,
     validation_issues,
     workflow_state_machine,
@@ -271,6 +272,7 @@ app.include_router(transport.portal_transport_router, prefix="/api")
 app.include_router(tracking.router, prefix="/api")
 app.include_router(tracking.shipment_tracking_router, prefix="/api")
 app.include_router(tracking.portal_tracking_router, prefix="/api")
+app.include_router(control_tower.router, prefix="/api")
 
 
 @app.get("/")

@@ -70,6 +70,12 @@ from app.models.tracking import (
     TrackingSyncRun,
     TrackingWatchItem,
 )
+from app.models.control_tower import (
+    ControlTowerActivityLog,
+    ControlTowerSavedView,
+    ControlTowerSnapshot,
+    ControlTowerWidgetPreference,
+)
 from app.models.demurrage import Demurrage
 from app.models.document import Document
 from app.models.document_version import (
@@ -255,4 +261,8 @@ __all__ = [
     "TrackingSuggestedUpdate",
     "TrackingSyncRun",
     "TrackingWatchItem",
+    "ControlTowerActivityLog",
+    "ControlTowerSavedView",
+    "ControlTowerSnapshot",
+    "ControlTowerWidgetPreference",
 ]
