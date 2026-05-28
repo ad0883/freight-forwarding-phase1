@@ -59,6 +59,17 @@ from app.models.transport import (
     TransportMilestone,
     TransportVehicle,
 )
+from app.models.tracking import (
+    TrackingActivityLog,
+    TrackingAdapterConfig,
+    TrackingEvent,
+    TrackingMismatch,
+    TrackingObservation,
+    TrackingProvider,
+    TrackingSuggestedUpdate,
+    TrackingSyncRun,
+    TrackingWatchItem,
+)
 from app.models.demurrage import Demurrage
 from app.models.document import Document
 from app.models.document_version import (
@@ -235,4 +246,13 @@ __all__ = [
     "TransportLocationUpdate",
     "TransportMilestone",
     "TransportVehicle",
+    "TrackingActivityLog",
+    "TrackingAdapterConfig",
+    "TrackingEvent",
+    "TrackingMismatch",
+    "TrackingObservation",
+    "TrackingProvider",
+    "TrackingSuggestedUpdate",
+    "TrackingSyncRun",
+    "TrackingWatchItem",
 ]

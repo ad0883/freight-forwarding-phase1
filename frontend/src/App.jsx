@@ -27,6 +27,7 @@ import BotGovernancePage from './pages/BotGovernancePage.jsx';
 import PortalPage from './pages/PortalPage.jsx';
 import CustomsPage from './pages/CustomsPage.jsx';
 import TransportPage from './pages/TransportPage.jsx';
+import TrackingPage from './pages/TrackingPage.jsx';
 
 function App() {
   return (
@@ -160,6 +161,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['ADMIN', 'STAFF', 'VIEW_ONLY']}>
               <TransportPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="tracking"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'STAFF', 'VIEW_ONLY']}>
+              <TrackingPage />
             </ProtectedRoute>
           }
         />

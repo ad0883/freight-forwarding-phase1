@@ -36,6 +36,7 @@ from app.api.routes import (
     rules,
     shipments,
     tasks,
+    tracking,
     transport,
     users,
     validation_issues,
@@ -69,6 +70,7 @@ from app.services.rule_engine import seed_default_rule_definitions
 from app.services.exception_sla_seed import seed_default_sla_policies
 from app.services.approval_policy_seed import seed_default_approval_policies
 from app.services.bot_governance.bot_registry_service import seed_default_bot_agents
+from app.services.tracking.tracking_provider_service import seed_default_tracking_providers
 from app.services.workflow_definitions import seed_workflow_definitions
 from app.services.workflow_notification_service import run_notification_checks
 
@@ -188,6 +190,7 @@ async def lifespan(app: FastAPI):
         seed_default_sla_policies(db)
         seed_default_approval_policies(db)
         seed_default_bot_agents(db)
+        seed_default_tracking_providers(db)
         warm_dashboard_cache(db)
     finally:
         db.close()
@@ -265,6 +268,9 @@ app.include_router(customs.shipment_customs_router, prefix="/api")
 app.include_router(transport.router, prefix="/api")
 app.include_router(transport.shipment_transport_router, prefix="/api")
 app.include_router(transport.portal_transport_router, prefix="/api")
+app.include_router(tracking.router, prefix="/api")
+app.include_router(tracking.shipment_tracking_router, prefix="/api")
+app.include_router(tracking.portal_tracking_router, prefix="/api")
 
 
 @app.get("/")
