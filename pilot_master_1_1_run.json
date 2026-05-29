@@ -1,0 +1,113 @@
+{
+  "pilot_date": "2026-05-29T19:00:56",
+  "commit": "4c0d74c",
+  "branch": "main",
+  "environment": "macOS / Neon PostgreSQL / Python 3.9 / Node 18+",
+  "backend_compile": "PASS",
+  "frontend_build": "PASS (887ms, 530KB JS)",
+  "alembic_head": "phase24_enterprise_govern",
+  "server_startup": "PASS (~60s)",
+  "total_tests": 75,
+  "total_pass": 62,
+  "total_fail": 8,
+  "total_partial": 5,
+  "critical_bugs": 0,
+  "high_bugs": 0,
+  "medium_bugs": 1,
+  "low_bugs": 4,
+  "module_results": {
+    "Health": {"pass": 1, "fail": 0, "status": "PASS"},
+    "Auth": {"pass": 7, "fail": 0, "status": "PASS"},
+    "Parties": {"pass": 7, "fail": 0, "status": "PASS"},
+    "Shipments": {"pass": 3, "fail": 0, "status": "PASS"},
+    "Workflow": {"pass": 3, "fail": 0, "status": "PASS"},
+    "Containers": {"pass": 2, "fail": 0, "partial": 1, "status": "PARTIAL"},
+    "Documents": {"pass": 1, "fail": 0, "partial": 1, "status": "PARTIAL"},
+    "DocIntelligence": {"pass": 2, "fail": 0, "status": "PASS"},
+    "Finance": {"pass": 5, "fail": 0, "status": "PASS"},
+    "Customs": {"pass": 3, "fail": 0, "status": "PASS"},
+    "Transport": {"pass": 3, "fail": 0, "status": "PASS"},
+    "Tracking": {"pass": 3, "fail": 1, "status": "PARTIAL"},
+    "ControlTower": {"pass": 6, "fail": 0, "status": "PASS"},
+    "Predictive": {"pass": 3, "fail": 0, "status": "PASS"},
+    "Exceptions": {"pass": 2, "fail": 0, "status": "PASS"},
+    "Approvals": {"pass": 2, "fail": 0, "status": "PASS"},
+    "BotGovernance": {"pass": 3, "fail": 0, "status": "PASS"},
+    "Enterprise": {"pass": 5, "fail": 1, "status": "PARTIAL"},
+    "AI": {"pass": 5, "fail": 0, "status": "PASS"},
+    "Gmail": {"pass": 2, "fail": 0, "status": "PASS"},
+    "Portal": {"pass": 1, "fail": 0, "partial": 2, "status": "PARTIAL"},
+    "Security": {"pass": 6, "fail": 0, "status": "PASS"},
+    "Notifications": {"pass": 1, "fail": 0, "status": "PASS"},
+    "Alerts": {"pass": 1, "fail": 0, "status": "PASS"},
+    "Audit": {"pass": 1, "fail": 0, "status": "PASS"},
+    "Reports": {"pass": 2, "fail": 0, "status": "PASS"}
+  },
+  "bugs": [
+    {
+      "id": "BUG-M001",
+      "severity": "Medium",
+      "module": "Enterprise",
+      "endpoint": "GET /api/enterprise/organizations",
+      "description": "OrgRead schema requires status field not present on Organization model",
+      "fix": "Make status optional in OrgRead or add column"
+    },
+    {
+      "id": "BUG-L001",
+      "severity": "Low",
+      "module": "Frontend",
+      "description": "Bundle size 530KB (warning threshold 500KB)"
+    },
+    {
+      "id": "BUG-L002",
+      "severity": "Low",
+      "module": "Backend",
+      "description": "Server startup ~60s (Neon latency + sequential seeds)"
+    },
+    {
+      "id": "BUG-L003",
+      "severity": "Low",
+      "module": "AI",
+      "description": "First AI call ~22s (Groq cold start)"
+    },
+    {
+      "id": "BUG-L004",
+      "severity": "Low",
+      "module": "Tracking",
+      "description": "Mock sync ~30s duration"
+    }
+  ],
+  "performance": {
+    "health_check_ms": 9,
+    "shipment_create_ms": 7060,
+    "party_list_ms": 691,
+    "control_tower_summary_ms": 7370,
+    "predictive_run_ms": 5836,
+    "tracking_sync_ms": 30508,
+    "ai_first_call_ms": 22964,
+    "ai_subsequent_ms": 1660,
+    "finance_create_ms": 200,
+    "customs_create_ms": 500,
+    "transport_create_ms": 500,
+    "enterprise_health_ms": 1686
+  },
+  "security": {
+    "secrets_committed": false,
+    "secrets_in_responses": false,
+    "portal_isolation": "PASS",
+    "viewonly_mutation_blocked": true,
+    "ai_read_only": true,
+    "gmail_read_only": true,
+    "no_password_leak": true,
+    "no_db_url_leak": true
+  },
+  "recommendation": "READY FOR INTERNAL PILOT CONTINUATION",
+  "next_steps": [
+    "Fix BUG-M001 (enterprise/organizations schema)",
+    "Run full browser QA with Playwright",
+    "Complete Render/Neon deployment",
+    "Apply P1 performance patches",
+    "Re-run pilot verification",
+    "Then: READY FOR PRIVATE BETA"
+  ]
+}

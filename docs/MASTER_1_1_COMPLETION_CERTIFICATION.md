@@ -5,9 +5,10 @@
 | Field | Value |
 |-------|-------|
 | Date | 2026-05-29 |
-| Commit Hash | 80b301f |
-| Branch | phase-25-master-1-1-completion-certification |
-| Test Environment | macOS / PostgreSQL (Neon) / Python 3.x / Node 18+ |
+| Certified Commit | 4c0d74c |
+| Certified Branch | main |
+| Original QA Branch | phase-25-master-1-1-completion-certification |
+| Test Environment | macOS / PostgreSQL (Neon) / Python 3.9 / Node 18+ |
 | Overall Status | **PASS** |
 | Release Recommendation | **READY FOR INTERNAL PILOT** |
 
@@ -108,9 +109,9 @@
 | Backend compile passes | ✅ PASS |
 | Frontend build passes | ✅ PASS |
 | Alembic single head confirmed | ✅ PASS (phase24_enterprise_govern) |
-| Fresh migration path confirmed | ✅ PASS (upgrade head succeeds) |
+| Fresh migration path confirmed | ⚠️ NOT FULLY TESTED — current DB upgrade head confirmed |
 | API regression passes | ✅ PASS (all routes registered, no conflicts) |
-| Browser QA passes or documented | ✅ PASS (build succeeds, Playwright configured) |
+| Browser QA passes or documented | ⚠️ PARTIAL / CONFIGURED — Frontend build passes. Playwright configured. Full human browser pilot remains part of Internal Pilot Plan. |
 | All core modules tested | ✅ PASS |
 | Export workflow certified | ✅ PASS |
 | Import workflow certified | ✅ PASS |
@@ -133,3 +134,31 @@
 **READY FOR INTERNAL PILOT**
 
 The system is complete, safe, and aligned with Master 1.1 scope. All 24 phases integrate correctly. No critical or high-severity bugs were found. Known limitations are documented and acceptable for the phased roadmap. The system is suitable for internal pilot deployment with controlled user access.
+
+---
+
+## Multi-Organization Warning
+
+Master 1.1 Internal Pilot is approved for single-organization pilot only.
+Multi-organization production use requires additional full query-level tenant isolation certification.
+
+---
+
+## Release Status
+
+```
+Master 1.1: COMPLETE
+Code certification: PASS
+Security certification: PASS
+Rule certification: PASS
+Release recommendation: READY FOR INTERNAL PILOT
+Production/public release: NOT YET
+Private beta: AFTER internal pilot patch
+```
+
+---
+
+## Deployment Status
+
+Code certified for internal pilot.
+Deployment sign-off requires Render/Neon environment variables, static hosting, backup plan, and final smoke test.

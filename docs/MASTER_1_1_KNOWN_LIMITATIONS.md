@@ -5,9 +5,10 @@
 | Field | Value |
 |-------|-------|
 | Date | 2026-05-29 |
-| Commit Hash | 80b301f |
-| Branch | phase-25-master-1-1-completion-certification |
-| Scope | Master 1.1 (Phases 1–24) |
+| Certified Commit | 4c0d74c |
+| Certified Branch | main |
+| Original QA Branch | phase-25-master-1-1-completion-certification |
+| Scope | Master 1.1 (Phases 1–25) |
 
 ---
 
