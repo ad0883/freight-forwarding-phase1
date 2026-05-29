@@ -53,6 +53,7 @@ const adminLinks = [
 ];
 
 const operationalBrainLinks = [
+  { to: '/predictive', label: 'Predictive', icon: BarChart3 },
   { to: '/manual-review', label: 'Manual Review', icon: AlertTriangle },
   { to: '/approvals', label: 'Approvals', icon: FileCheck },
   { to: '/bot-governance', label: 'Bot Governance', icon: Bot },

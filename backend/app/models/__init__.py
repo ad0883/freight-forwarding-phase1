@@ -76,6 +76,16 @@ from app.models.control_tower import (
     ControlTowerSnapshot,
     ControlTowerWidgetPreference,
 )
+from app.models.predictive import (
+    PredictionActivityLog,
+    PredictionExplanation,
+    PredictionFeedback,
+    PredictionModel,
+    PredictionOutcome,
+    PredictionRecommendation,
+    PredictionRecord,
+    PredictionRun,
+)
 from app.models.demurrage import Demurrage
 from app.models.document import Document
 from app.models.document_version import (
@@ -265,4 +275,12 @@ __all__ = [
     "ControlTowerSavedView",
     "ControlTowerSnapshot",
     "ControlTowerWidgetPreference",
+    "PredictionActivityLog",
+    "PredictionExplanation",
+    "PredictionFeedback",
+    "PredictionModel",
+    "PredictionOutcome",
+    "PredictionRecommendation",
+    "PredictionRecord",
+    "PredictionRun",
 ]

@@ -29,6 +29,7 @@ import CustomsPage from './pages/CustomsPage.jsx';
 import TransportPage from './pages/TransportPage.jsx';
 import TrackingPage from './pages/TrackingPage.jsx';
 import ControlTowerPage from './pages/ControlTowerPage.jsx';
+import PredictivePage from './pages/PredictivePage.jsx';
 
 function App() {
   return (
@@ -178,6 +179,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['ADMIN', 'STAFF', 'VIEW_ONLY']}>
               <ControlTowerPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="predictive"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'STAFF', 'VIEW_ONLY']}>
+              <PredictivePage />
             </ProtectedRoute>
           }
         />

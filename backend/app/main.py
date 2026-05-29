@@ -39,6 +39,7 @@ from app.api.routes import (
     tracking,
     transport,
     control_tower,
+    predictive,
     users,
     validation_issues,
     workflow_state_machine,
@@ -72,6 +73,7 @@ from app.services.exception_sla_seed import seed_default_sla_policies
 from app.services.approval_policy_seed import seed_default_approval_policies
 from app.services.bot_governance.bot_registry_service import seed_default_bot_agents
 from app.services.tracking.tracking_provider_service import seed_default_tracking_providers
+from app.services.predictive.predictive_service import seed_default_prediction_models
 from app.services.workflow_definitions import seed_workflow_definitions
 from app.services.workflow_notification_service import run_notification_checks
 
@@ -192,6 +194,7 @@ async def lifespan(app: FastAPI):
         seed_default_approval_policies(db)
         seed_default_bot_agents(db)
         seed_default_tracking_providers(db)
+        seed_default_prediction_models(db)
         warm_dashboard_cache(db)
     finally:
         db.close()
@@ -273,6 +276,8 @@ app.include_router(tracking.router, prefix="/api")
 app.include_router(tracking.shipment_tracking_router, prefix="/api")
 app.include_router(tracking.portal_tracking_router, prefix="/api")
 app.include_router(control_tower.router, prefix="/api")
+app.include_router(predictive.router, prefix="/api")
+app.include_router(predictive.shipment_predictive_router, prefix="/api")
 
 
 @app.get("/")
