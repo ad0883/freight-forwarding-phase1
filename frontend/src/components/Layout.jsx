@@ -46,6 +46,7 @@ const mainLinks = [
 ];
 
 const adminLinks = [
+  { to: '/enterprise', label: 'Enterprise', icon: ShieldCheck, adminOnly: true },
   { to: '/users', label: 'Users', icon: UserCog, adminOnly: true },
   { to: '/audit-logs', label: 'Audit Logs', icon: FileClock, adminOnly: true },
   { to: '/status', label: 'Status', icon: Activity, adminOnly: true },

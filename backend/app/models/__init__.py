@@ -86,6 +86,18 @@ from app.models.predictive import (
     PredictionRecord,
     PredictionRun,
 )
+from app.models.enterprise import (
+    EnterpriseAuditExport,
+    EnterpriseDataRetentionPolicy,
+    EnterpriseHealthSnapshot,
+    EnterpriseSecurityEvent,
+    OrganizationBranch,
+    OrganizationDepartment,
+    OrganizationMembership,
+    OrganizationRole,
+    OrganizationSetting,
+    RolePermissionPolicy,
+)
 from app.models.demurrage import Demurrage
 from app.models.document import Document
 from app.models.document_version import (
@@ -283,4 +295,14 @@ __all__ = [
     "PredictionRecommendation",
     "PredictionRecord",
     "PredictionRun",
+    "EnterpriseAuditExport",
+    "EnterpriseDataRetentionPolicy",
+    "EnterpriseHealthSnapshot",
+    "EnterpriseSecurityEvent",
+    "OrganizationBranch",
+    "OrganizationDepartment",
+    "OrganizationMembership",
+    "OrganizationRole",
+    "OrganizationSetting",
+    "RolePermissionPolicy",
 ]

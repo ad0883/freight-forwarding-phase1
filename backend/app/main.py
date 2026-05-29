@@ -40,6 +40,7 @@ from app.api.routes import (
     transport,
     control_tower,
     predictive,
+    enterprise,
     users,
     validation_issues,
     workflow_state_machine,
@@ -74,6 +75,7 @@ from app.services.approval_policy_seed import seed_default_approval_policies
 from app.services.bot_governance.bot_registry_service import seed_default_bot_agents
 from app.services.tracking.tracking_provider_service import seed_default_tracking_providers
 from app.services.predictive.predictive_service import seed_default_prediction_models
+from app.services.enterprise.enterprise_service import seed_enterprise_defaults, ensure_admin_membership
 from app.services.workflow_definitions import seed_workflow_definitions
 from app.services.workflow_notification_service import run_notification_checks
 
@@ -195,6 +197,8 @@ async def lifespan(app: FastAPI):
         seed_default_bot_agents(db)
         seed_default_tracking_providers(db)
         seed_default_prediction_models(db)
+        seed_enterprise_defaults(db)
+        ensure_admin_membership(db)
         warm_dashboard_cache(db)
     finally:
         db.close()
@@ -278,6 +282,7 @@ app.include_router(tracking.portal_tracking_router, prefix="/api")
 app.include_router(control_tower.router, prefix="/api")
 app.include_router(predictive.router, prefix="/api")
 app.include_router(predictive.shipment_predictive_router, prefix="/api")
+app.include_router(enterprise.router, prefix="/api")
 
 
 @app.get("/")

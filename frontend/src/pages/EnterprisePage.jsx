@@ -1,0 +1,112 @@
+import { AlertTriangle, CheckCircle2, Shield, ShieldCheck, Users } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import api from '../api/client.js';
+import { ErrorState, LoadingState } from '../components/States.jsx';
+
+function EnterprisePage() {
+  const [health, setHealth] = useState(null);
+  const [orgs, setOrgs] = useState([]);
+  const [roles, setRoles] = useState([]);
+  const [permissions, setPermissions] = useState([]);
+  const [securityEvents, setSecurityEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [tab, setTab] = useState('health');
+
+  async function load() {
+    setLoading(true); setError('');
+    try {
+      const [hRes, oRes, rRes, pRes, sRes] = await Promise.all([
+        api.get('/enterprise/health'),
+        api.get('/enterprise/organizations'),
+        api.get('/enterprise/roles'),
+        api.get('/enterprise/permissions/matrix'),
+        api.get('/enterprise/security-events'),
+      ]);
+      setHealth(hRes.data); setOrgs(oRes.data); setRoles(rRes.data);
+      setPermissions(pRes.data); setSecurityEvents(sRes.data);
+    } catch (err) { setError(err.response?.data?.detail || 'Failed to load'); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { load(); }, []);
+
+  if (error) return <ErrorState message={error} />;
+  if (loading) return <LoadingState />;
+
+  return (
+    <div className="page-stack">
+      <div className="page-header"><div><p className="eyebrow">Governance</p><h1>Enterprise</h1></div></div>
+
+      <nav style={{ display: 'flex', gap: '2px', borderBottom: '2px solid var(--color-border)', flexWrap: 'wrap' }}>
+        {['health', 'organizations', 'roles', 'permissions', 'security'].map((t) => (
+          <button key={t} onClick={() => setTab(t)} style={{ padding: '0.6rem 1rem', border: 'none', background: 'none', cursor: 'pointer', borderBottom: tab === t ? '2px solid var(--color-primary)' : '2px solid transparent', marginBottom: '-2px', color: tab === t ? 'var(--color-primary)' : 'var(--color-text-muted)', fontWeight: tab === t ? 700 : 500, fontSize: '0.85rem', textTransform: 'capitalize' }}>{t}</button>
+        ))}
+      </nav>
+
+      {tab === 'health' && health && (
+        <div className="panel" style={{ padding: '1rem' }}>
+          <h3 style={{ margin: '0 0 0.75rem' }}>Enterprise Health: <span style={{ color: health.overall_status === 'ok' ? '#16a34a' : '#dc2626' }}>{health.overall_status.toUpperCase()}</span></h3>
+          <div style={{ display: 'grid', gap: '0.5rem' }}>
+            {health.checks.map((c, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.6rem', background: 'var(--color-surface)', borderRadius: '4px' }}>
+                {c.status === 'ok' ? <CheckCircle2 size={16} color="#16a34a" /> : c.status === 'warning' ? <AlertTriangle size={16} color="#ca8a04" /> : <AlertTriangle size={16} color="#dc2626" />}
+                <span style={{ fontWeight: 500, fontSize: '0.85rem', minWidth: '200px' }}>{c.check.replace(/_/g, ' ')}</span>
+                <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>{c.detail}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === 'organizations' && (
+        <div className="panel" style={{ padding: 0 }}>
+          {orgs.length === 0 ? (
+            <div className="state-box empty-state" style={{ minHeight: '100px', border: 'none' }}><Shield size={24} /><div><strong>No organizations</strong></div></div>
+          ) : (
+            <div className="table-wrap"><table><thead><tr><th>Name</th><th>Type</th><th>Status</th><th>Created</th></tr></thead><tbody>
+              {orgs.map((o) => (
+                <tr key={o.id}><td>{o.name}</td><td>{o.organization_type || '—'}</td><td><span className="badge status-active">{o.status}</span></td><td style={{ fontSize: '0.78rem' }}>{new Date(o.created_at).toLocaleDateString()}</td></tr>
+              ))}
+            </tbody></table></div>
+          )}
+        </div>
+      )}
+
+      {tab === 'roles' && (
+        <div className="panel" style={{ padding: 0 }}>
+          <div className="table-wrap"><table><thead><tr><th>Key</th><th>Name</th><th>Scope</th><th>System</th><th>Active</th></tr></thead><tbody>
+            {roles.map((r) => (
+              <tr key={r.id}><td><code style={{ fontSize: '0.72rem' }}>{r.role_key}</code></td><td>{r.role_name}</td><td>{r.scope}</td><td>{r.is_system_role ? '✓' : '—'}</td><td>{r.is_active ? '✓' : '—'}</td></tr>
+            ))}
+          </tbody></table></div>
+        </div>
+      )}
+
+      {tab === 'permissions' && (
+        <div className="panel" style={{ padding: 0 }}>
+          <div className="table-wrap"><table><thead><tr><th>Role</th><th>Resource</th><th>Action</th><th>Effect</th></tr></thead><tbody>
+            {permissions.map((p) => (
+              <tr key={p.id}><td><code style={{ fontSize: '0.72rem' }}>{p.role_key}</code></td><td>{p.resource_key}</td><td>{p.action_key}</td><td><span className={`badge ${p.effect === 'allow' ? 'status-active' : 'status-critical'}`}>{p.effect}</span></td></tr>
+            ))}
+          </tbody></table></div>
+        </div>
+      )}
+
+      {tab === 'security' && (
+        <div className="panel" style={{ padding: 0 }}>
+          {securityEvents.length === 0 ? (
+            <div className="state-box empty-state" style={{ minHeight: '100px', border: 'none' }}><ShieldCheck size={24} /><div><strong>No security events</strong></div></div>
+          ) : (
+            <div className="table-wrap"><table><thead><tr><th>Type</th><th>Severity</th><th>Summary</th><th>Time</th></tr></thead><tbody>
+              {securityEvents.map((e) => (
+                <tr key={e.id}><td><span className="badge">{e.event_type}</span></td><td style={{ color: e.severity === 'critical' ? '#dc2626' : 'inherit' }}>{e.severity}</td><td>{e.safe_summary}</td><td style={{ fontSize: '0.78rem' }}>{new Date(e.created_at).toLocaleString()}</td></tr>
+              ))}
+            </tbody></table></div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default EnterprisePage;

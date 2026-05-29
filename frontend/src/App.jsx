@@ -30,6 +30,7 @@ import TransportPage from './pages/TransportPage.jsx';
 import TrackingPage from './pages/TrackingPage.jsx';
 import ControlTowerPage from './pages/ControlTowerPage.jsx';
 import PredictivePage from './pages/PredictivePage.jsx';
+import EnterprisePage from './pages/EnterprisePage.jsx';
 
 function App() {
   return (
@@ -187,6 +188,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['ADMIN', 'STAFF', 'VIEW_ONLY']}>
               <PredictivePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="enterprise"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN']}>
+              <EnterprisePage />
             </ProtectedRoute>
           }
         />
