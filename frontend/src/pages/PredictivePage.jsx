@@ -34,7 +34,8 @@ function PredictivePage() {
 
   return (
     <div className="page-stack">
-      <div className="page-header"><div><p className="eyebrow">Intelligence</p><h1>Predictive</h1></div></div>
+      <div className="page-header"><div><p className="eyebrow">Management</p><h1>Risk Alerts</h1></div></div>
+      <p className="page-helper">Review rule-based risk predictions and recommended preventive actions.</p>
 
       {summary && (
         <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))' }}>

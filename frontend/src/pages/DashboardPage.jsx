@@ -148,7 +148,7 @@ function DashboardPage() {
           New Shipment
         </Link>
       </div>
-
+      <p className="page-helper">Full operational metrics. For daily action items, use the Today page.</p>
       <section className="metric-grid">
         {cards.map(({ label, value, icon: Icon }) => (
           <article className="metric-card" key={label}>

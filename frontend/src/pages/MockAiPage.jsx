@@ -1,4 +1,4 @@
-import { Bot, Send } from 'lucide-react';
+import { Bot, Info, Send } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import api from '../api/client.js';
 import { ErrorState } from '../components/States.jsx';
@@ -122,6 +122,16 @@ function MockAiPage() {
         <div className="ai-status">
           <span className={`status-dot ${status?.ai_enabled ? 'ready' : 'fallback'}`} />
           <strong>{statusText}</strong>
+        </div>
+      </div>
+      <p className="page-helper">Ask for read-only guidance. AI cannot approve, release, send, or change records.</p>
+
+      <div className="ai-notice">
+        <Info size={20} />
+        <div>
+          <strong>AI Assistant is read-only.</strong> It can summarize, explain, and suggest next checks.
+          It cannot approve, release, send emails, close shipments, waive finance holds, or modify records.
+          For unsafe requests, the assistant will guide you to the correct manual workflow.
         </div>
       </div>
 

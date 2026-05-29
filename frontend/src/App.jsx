@@ -5,6 +5,7 @@ import AdminToolsPage from './pages/AdminToolsPage.jsx';
 import AuditLogsPage from './pages/AuditLogsPage.jsx';
 import CreateShipmentPage from './pages/CreateShipmentPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
+import TodayPage from './pages/TodayPage.jsx';
 import EmailAutomationPage from './pages/EmailAutomationPage.jsx';
 import EventsPage from './pages/EventsPage.jsx';
 import FinancePage from './pages/FinancePage.jsx';
@@ -44,7 +45,9 @@ function App() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<DashboardPage />} />
+        <Route index element={<TodayPage />} />
+        <Route path="today" element={<TodayPage />} />
+        <Route path="dashboard" element={<DashboardPage />} />
         <Route path="shipments" element={<ShipmentsPage />} />
         <Route
           path="shipments/new"

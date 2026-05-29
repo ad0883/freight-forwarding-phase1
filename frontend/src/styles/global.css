@@ -1933,3 +1933,307 @@ label {
   opacity: 0.55;
   cursor: not-allowed;
 }
+
+/* ============================================================
+   S1 — UX Simplification Styles
+   ============================================================ */
+
+/* --- Page Helper Text --- */
+.page-helper {
+  color: var(--color-text-muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  margin-top: -0.4rem;
+}
+
+/* --- Next Action Card --- */
+.next-action-card {
+  display: grid;
+  gap: 0.55rem;
+  border: 2px solid var(--color-primary-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-primary-light);
+  padding: 1.15rem 1.25rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.next-action-card .next-action-header {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.next-action-card .next-action-header svg {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.next-action-card .next-action-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.next-action-card .next-action-reason {
+  color: var(--color-text-secondary);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.next-action-card .next-action-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.25rem;
+}
+
+/* --- Step-Based Workspace --- */
+.workspace-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.step-card {
+  display: grid;
+  gap: 0.45rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  padding: 1rem;
+  transition: box-shadow var(--transition-normal), border-color var(--transition-normal);
+}
+
+.step-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.step-card .step-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.step-card .step-name {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.step-card .step-desc {
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.step-card .step-issues {
+  color: var(--color-warning);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.step-card.step-complete {
+  border-color: var(--color-success-border);
+  background: var(--color-success-light);
+}
+
+.step-card.step-in-progress {
+  border-color: var(--color-primary-border);
+  background: var(--color-primary-light);
+}
+
+.step-card.step-needs-attention {
+  border-color: var(--color-warning-border);
+  background: var(--color-warning-light);
+}
+
+.step-card.step-blocked {
+  border-color: var(--color-danger-border);
+  background: var(--color-danger-light);
+}
+
+/* --- Today Page --- */
+.today-grid {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.today-section {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.today-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1.1rem;
+  border-bottom: 1px solid var(--color-border);
+  background: #fafbfc;
+}
+
+.today-section-header h3 {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.today-section-header .today-count {
+  display: inline-grid;
+  min-width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: var(--radius-full);
+  color: #fff;
+  background: var(--color-primary);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.today-section-header .today-count.warning {
+  background: var(--color-warning);
+}
+
+.today-section-header .today-count.danger {
+  background: var(--color-danger);
+}
+
+.today-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.72rem 1.1rem;
+  border-bottom: 1px solid var(--color-border);
+  transition: background var(--transition-fast);
+}
+
+.today-item:last-child {
+  border-bottom: 0;
+}
+
+.today-item:hover {
+  background: #f7fafc;
+}
+
+.today-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.today-item-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.today-item-meta {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  margin-top: 0.15rem;
+}
+
+.today-item .secondary-button {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.55rem;
+  min-height: 30px;
+}
+
+/* --- AI Notice --- */
+.ai-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  border: 1px solid var(--color-info-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-info-light);
+  padding: 0.95rem 1.1rem;
+  color: var(--color-text-secondary);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.ai-notice svg {
+  color: var(--color-info);
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.ai-notice strong {
+  color: var(--color-text);
+}
+
+/* --- Quick Actions Strip --- */
+.quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.quick-actions .secondary-button {
+  font-size: 0.82rem;
+  padding: 0.4rem 0.65rem;
+  min-height: 32px;
+}
+
+/* --- Onboarding Card --- */
+.onboarding-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  padding: 1.1rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.onboarding-card h3 {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: 0.65rem;
+}
+
+.onboarding-card ol {
+  margin: 0;
+  padding-left: 1.3rem;
+}
+
+.onboarding-card li {
+  color: var(--color-text-secondary);
+  font-size: 0.86rem;
+  line-height: 1.7;
+}
+
+/* --- Empty State Enhanced --- */
+.empty-state-guidance {
+  text-align: center;
+  padding: 2.5rem 1.5rem;
+  color: var(--color-text-muted);
+}
+
+.empty-state-guidance h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.45rem;
+}
+
+.empty-state-guidance p {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  margin-bottom: 1rem;
+  max-width: 420px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.empty-state-guidance .quick-actions {
+  justify-content: center;
+}

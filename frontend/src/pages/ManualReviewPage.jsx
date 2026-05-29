@@ -202,8 +202,8 @@ function ManualReviewPage() {
       {/* Header */}
       <div className="page-header">
         <div>
-          <p className="eyebrow">Operations</p>
-          <h1>Manual Review Center</h1>
+          <p className="eyebrow">Daily Work</p>
+          <h1>Issues</h1>
         </div>
         <div className="header-actions">
           {canMutate && (
@@ -216,6 +216,7 @@ function ManualReviewPage() {
           </button>
         </div>
       </div>
+      <p className="page-helper">Review missing documents, delays, mismatches, and blocked work. Resolve or escalate issues.</p>
 
       {/* Detection result banner */}
       {detectionResult && (

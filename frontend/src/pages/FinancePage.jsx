@@ -479,7 +479,7 @@ function FinancePage() {
           </button>
         </div>
       </div>
-
+      <p className="page-helper">Track receivables, payables, credit holds, and release status.</p>
       <ErrorState message={error} onRetry={loadAll} />
 
       <div className="tabs">

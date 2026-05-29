@@ -174,6 +174,103 @@ function cleanNullableForm(form) {
   );
 }
 
+/* --- S1: Next Action Logic (deterministic, frontend-only) --- */
+function computeNextAction(shipment, documents, charges, tasks, documentLibrary) {
+  if (!shipment) return null;
+  const isComplete = shipment.status === 'Completed';
+  if (isComplete) return null;
+
+  const docs = Array.isArray(documents) ? documents : [];
+  const lib = Array.isArray(documentLibrary) ? documentLibrary : [];
+  const chg = Array.isArray(charges) ? charges : [];
+
+  // 1. No documents
+  const uploadedDocs = docs.filter(d => d.status !== 'not_required' && (d.uploaded_file_count > 0 || d.current_version_id));
+  if (docs.length > 0 && uploadedDocs.length === 0) {
+    return { title: 'Upload documents', reason: 'No invoice, packing list, or BL documents are uploaded yet.', button: 'Open Documents', tab: 'documents' };
+  }
+
+  // 2. Document issues
+  const pendingReview = docs.filter(d => d.current_review_status === 'pending_review');
+  if (pendingReview.length > 0) {
+    return { title: 'Review document issues', reason: `${pendingReview.length} document(s) pending review.`, button: 'Open Documents', tab: 'documents' };
+  }
+
+  // 3. No charges
+  if (chg.length === 0) {
+    return { title: 'Add charges', reason: 'No receivable or payable charges added yet. Add freight charges once pricing is confirmed.', button: 'Add Charge', tab: 'charges' };
+  }
+
+  // 4. Finance release
+  if (shipment.finance_release_status === 'hold') {
+    return { title: 'Review finance release', reason: 'Shipment has a finance hold. Review charges and release status.', button: 'Open Finance', tab: 'finance' };
+  }
+
+  // 5. Open tasks
+  const openTasks = (Array.isArray(tasks) ? tasks : []).filter(t => t.status === 'open');
+  if (openTasks.length > 0) {
+    return { title: 'Complete open tasks', reason: `${openTasks.length} open task(s) remaining.`, button: 'Open Tasks', tab: 'tasks' };
+  }
+
+  // 6. Ready for closure
+  return { title: 'Ready for closure review', reason: 'All major steps appear complete. Review and close the shipment.', button: 'Review Workflow', tab: 'workflow' };
+}
+
+/* --- S1: Step-Based Workspace (deterministic, frontend-only) --- */
+function computeWorkspaceSteps(shipment, documents, charges, tasks, documentLibrary) {
+  if (!shipment) return [];
+  const isExport = shipment.type === 'export';
+  const isComplete = shipment.status === 'Completed';
+  const docs = Array.isArray(documents) ? documents : [];
+  const chg = Array.isArray(charges) ? charges : [];
+  const tsk = Array.isArray(tasks) ? tasks : [];
+
+  function status(done, hasData, hasIssue) {
+    if (isComplete && done) return 'complete';
+    if (isComplete) return 'complete';
+    if (hasIssue) return 'needs-attention';
+    if (done) return 'complete';
+    if (hasData) return 'in-progress';
+    return 'not-started';
+  }
+
+  function badge(s) {
+    const map = { 'complete': 'status-completed', 'in-progress': 'status-active', 'needs-attention': 'priority-warning', 'not-started': 'priority-none', 'blocked': 'priority-critical' };
+    return map[s] || 'priority-none';
+  }
+
+  function labelFor(s) {
+    return s.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+  }
+
+  const hasDocs = docs.some(d => d.uploaded_file_count > 0 || d.current_version_id);
+  const hasDocIssue = docs.some(d => d.current_review_status === 'pending_review');
+  const hasCharges = chg.length > 0;
+  const hasOpenTasks = tsk.some(t => t.status === 'open');
+  const financeHold = shipment.finance_release_status === 'hold';
+
+  const steps = [
+    { name: 'Basic Details', status: status(true, true, false), desc: `${shipment.origin} → ${shipment.destination}`, tab: 'overview', actionLabel: 'View Details' },
+    { name: 'Documents', status: status(hasDocs && !hasDocIssue, hasDocs, hasDocIssue), desc: hasDocs ? `${docs.length} document type(s) tracked` : 'Upload invoice, BL, packing list', tab: 'documents', actionLabel: 'Open Documents', issues: hasDocIssue ? docs.filter(d => d.current_review_status === 'pending_review').length : 0 },
+    { name: 'Containers', status: status(false, false, false), desc: 'Container details and tracking', tab: 'containers', actionLabel: 'Manage Containers' },
+    { name: isExport ? 'Customs / LEO' : 'Customs / OOC', status: status(false, false, false), desc: isExport ? 'Create export customs case and LEO' : 'Create import customs case and OOC', tab: 'overview', actionLabel: 'View Details' },
+    { name: isExport ? 'Transport Pickup' : 'Transport Delivery', status: status(false, false, false), desc: isExport ? 'Schedule pickup from factory' : 'Schedule delivery to consignee', tab: 'overview', actionLabel: 'View Details' },
+  ];
+
+  if (!isExport) {
+    steps.push({ name: 'Empty Return', status: status(false, false, false), desc: 'Return empty container to depot', tab: 'overview', actionLabel: 'View Details' });
+  }
+
+  steps.push(
+    { name: 'Finance', status: status(hasCharges && !financeHold, hasCharges, financeHold), desc: hasCharges ? `${chg.length} charge(s) recorded` : 'Add receivable and payable charges', tab: 'charges', actionLabel: financeHold ? 'Check Finance' : 'Open Charges', issues: financeHold ? 1 : 0 },
+    { name: 'Tracking', status: status(false, false, false), desc: 'Monitor container/BL tracking updates', tab: 'overview', actionLabel: 'View Details' },
+    { name: 'Issues', status: status(!hasOpenTasks, hasOpenTasks, hasOpenTasks), desc: hasOpenTasks ? `${tsk.filter(t => t.status === 'open').length} open task(s)` : 'No open issues', tab: 'tasks', actionLabel: 'View Tasks', issues: tsk.filter(t => t.status === 'open').length },
+    { name: 'Closure', status: status(isComplete, false, false), desc: isComplete ? 'Shipment completed' : 'Review and close shipment', tab: 'workflow', actionLabel: 'Review Workflow' },
+  );
+
+  return steps.map(s => ({ ...s, badgeClass: badge(s.status), statusLabel: labelFor(s.status) }));
+}
+
 function ShipmentDetailPage() {
   const { id } = useParams();
   const [shipment, setShipment] = useState(null);
@@ -891,6 +988,55 @@ function ShipmentDetailPage() {
 
       <ErrorState message={error} />
       {notice && <p className="success-text">{notice}</p>}
+
+      {/* --- S1: Next Action Card --- */}
+      {(() => {
+        const action = computeNextAction(shipment, documents, charges, tasks, documentLibrary);
+        if (!action) return null;
+        return (
+          <div className="next-action-card">
+            <div className="next-action-header">
+              <FileText size={20} />
+              <span className="next-action-title">Next Action: {action.title}</span>
+            </div>
+            <p className="next-action-reason">{action.reason}</p>
+            <div className="next-action-actions">
+              <button className="primary-button" type="button" onClick={() => { if (action.tab) setActiveTab(action.tab); }}>
+                {action.button}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* --- S1: Step-Based Workspace --- */}
+      {(() => {
+        const steps = computeWorkspaceSteps(shipment, documents, charges, tasks, documentLibrary);
+        return (
+          <div className="panel">
+            <div className="panel-header">
+              <h2>Shipment Workspace</h2>
+            </div>
+            <div className="workspace-steps">
+              {steps.map((step) => (
+                <div key={step.name} className={`step-card step-${step.status.replace(/\s+/g, '-').toLowerCase()}`}>
+                  <div className="step-header">
+                    <span className="step-name">{step.name}</span>
+                    <span className={`badge ${step.badgeClass}`}>{step.statusLabel}</span>
+                  </div>
+                  <p className="step-desc">{step.desc}</p>
+                  {step.issues > 0 && <span className="step-issues">{step.issues} issue(s)</span>}
+                  {step.tab && canWrite && (
+                    <button className="secondary-button" type="button" onClick={() => setActiveTab(step.tab)} style={{fontSize:'0.78rem',padding:'0.3rem 0.5rem',minHeight:'28px'}}>
+                      {step.actionLabel}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="tabs" role="tablist">
         {['overview', 'workflow', 'containers', 'documents', 'tasks', 'bl', 'followups', 'demurrage', 'charges', 'finance'].map((tab) => (

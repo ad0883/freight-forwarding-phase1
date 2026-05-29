@@ -9,17 +9,17 @@ import {
   CreditCard,
   FileCheck,
   FileClock,
-  GitBranch,
+  FileText,
   LayoutDashboard,
   LogOut,
   Mail,
   Menu,
   Satellite,
-  ScrollText,
   Settings,
   ShieldAlert,
   ShieldCheck,
   Ship,
+  Sun,
   Truck,
   Users,
   UserCog,
@@ -30,41 +30,51 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import api from '../api/client.js';
 import { RoleBadge } from './States.jsx';
 
-const mainLinks = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/control-tower', label: 'Control Tower', icon: Activity },
+/* ---------------------------------------------------------------
+   S1 — Simplified, role-based, grouped sidebar navigation
+   --------------------------------------------------------------- */
+
+const dailyWorkLinks = [
+  { to: '/today', label: 'Today', icon: Sun },
   { to: '/shipments', label: 'Shipments', icon: Ship },
-  { to: '/customs', label: 'Customs', icon: ShieldCheck, writeRoleOnly: true },
+  { to: '/validation-issues', label: 'Document Check', icon: FileText },
+  { to: '/manual-review', label: 'Issues', icon: AlertTriangle },
+];
+
+const operationsLinks = [
+  { to: '/customs', label: 'Customs', icon: ShieldCheck },
   { to: '/transport', label: 'Transport', icon: Truck },
-  { to: '/tracking', label: 'Tracking', icon: Satellite },
-  { to: '/parties', label: 'Parties', icon: Users },
-  { to: '/tasks', label: 'Tasks', icon: ClipboardList },
-  { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/finance', label: 'Finance', icon: CreditCard },
-  { to: '/ai', label: 'AI Assistant', icon: Bot },
-  { to: '/email', label: 'Email Automation', icon: Mail, writeRoleOnly: true },
-];
-
-const adminLinks = [
-  { to: '/enterprise', label: 'Enterprise', icon: ShieldCheck, adminOnly: true },
-  { to: '/users', label: 'Users', icon: UserCog, adminOnly: true },
-  { to: '/audit-logs', label: 'Audit Logs', icon: FileClock, adminOnly: true },
-  { to: '/status', label: 'Status', icon: Activity, adminOnly: true },
-  { to: '/admin/tools', label: 'Admin Tools', icon: ShieldCheck, adminOnly: true },
-];
-
-const operationalBrainLinks = [
-  { to: '/predictive', label: 'Predictive', icon: BarChart3 },
-  { to: '/manual-review', label: 'Manual Review', icon: AlertTriangle },
   { to: '/approvals', label: 'Approvals', icon: FileCheck },
-  { to: '/bot-governance', label: 'Bot Governance', icon: Bot },
-  { to: '/events', label: 'Events', icon: ScrollText, writeRoleOnly: true },
-  { to: '/validation-issues', label: 'Validation Issues', icon: ShieldAlert, writeRoleOnly: true },
-  { to: '/rules', label: 'Rules', icon: GitBranch, writeRoleOnly: true },
 ];
 
-const bottomLinks = [
+const managementLinks = [
+  { to: '/control-tower', label: 'Management Dashboard', icon: Activity },
+  { to: '/predictive', label: 'Risk Alerts', icon: BarChart3 },
+  { to: '/ai', label: 'AI Assistant', icon: Bot },
+];
+
+const adminAdvancedLinks = [
+  { to: '/enterprise', label: 'Enterprise', icon: ShieldCheck },
+  { to: '/bot-governance', label: 'AI Control', icon: Bot },
+  { to: '/tracking', label: 'Tracking Setup', icon: Satellite },
+  { to: '/users', label: 'Users', icon: UserCog },
+  { to: '/audit-logs', label: 'Audit Logs', icon: FileClock },
   { to: '/settings', label: 'Settings', icon: Settings },
+  { to: '/admin/tools', label: 'Admin Tools', icon: ShieldCheck },
+  { to: '/email', label: 'Email Automation', icon: Mail },
+  { to: '/events', label: 'Events', icon: ClipboardList },
+  { to: '/rules', label: 'Rules', icon: ShieldAlert },
+  { to: '/status', label: 'System Status', icon: Activity },
+];
+
+/* Extra links available to STAFF but not in the primary groups */
+const staffExtraLinks = [
+  { to: '/tracking', label: 'Tracking Updates', icon: Satellite },
+  { to: '/tasks', label: 'Tasks', icon: ClipboardList },
+  { to: '/parties', label: 'Parties', icon: Users },
+  { to: '/reports', label: 'Reports', icon: BarChart3 },
+  { to: '/email', label: 'Email Automation', icon: Mail },
 ];
 
 function cachedUser() {
@@ -75,13 +85,43 @@ function cachedUser() {
   }
 }
 
-function canShowLink(link, currentUser, userLoading) {
-  if (link.adminOnly) return currentUser?.role === 'ADMIN';
-  if (link.writeRoleOnly) {
-    if (!currentUser) return userLoading;
-    return ['ADMIN', 'STAFF'].includes(currentUser.role);
+function getVisibleGroups(role) {
+  if (role === 'ADMIN') {
+    return [
+      { label: 'Daily Work', links: dailyWorkLinks },
+      { label: 'Operations', links: operationsLinks },
+      { label: 'Management', links: managementLinks },
+      { label: 'More', links: [
+        { to: '/tasks', label: 'Tasks', icon: ClipboardList },
+        { to: '/parties', label: 'Parties', icon: Users },
+        { to: '/reports', label: 'Reports', icon: BarChart3 },
+        { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+        { to: '/notifications', label: 'Notifications', icon: Bell },
+      ]},
+      { label: 'Admin / Advanced', links: adminAdvancedLinks },
+    ];
   }
-  return true;
+  if (role === 'STAFF') {
+    return [
+      { label: 'Daily Work', links: dailyWorkLinks },
+      { label: 'Operations', links: operationsLinks },
+      { label: 'Management', links: managementLinks },
+      { label: 'More', links: staffExtraLinks },
+    ];
+  }
+  // VIEW_ONLY
+  return [
+    { label: 'Daily Work', links: [
+      { to: '/today', label: 'Today', icon: Sun },
+      { to: '/shipments', label: 'Shipments', icon: Ship },
+    ]},
+    { label: 'Management', links: [
+      { to: '/control-tower', label: 'Management Dashboard', icon: Activity },
+      { to: '/predictive', label: 'Risk Alerts', icon: BarChart3 },
+      { to: '/reports', label: 'Reports', icon: BarChart3 },
+      { to: '/ai', label: 'AI Assistant', icon: Bot },
+    ]},
+  ];
 }
 
 function Layout() {
@@ -159,10 +199,8 @@ function Layout() {
     navigate(notification.action_url || '/notifications');
   }
 
-  const visibleAdminLinks = adminLinks.filter((link) => canShowLink(link, currentUser, userLoading));
-  const visibleOperationalBrainLinks = operationalBrainLinks.filter((link) =>
-    canShowLink(link, currentUser, userLoading)
-  );
+  const role = currentUser?.role || (userLoading ? 'STAFF' : 'VIEW_ONLY');
+  const groups = getVisibleGroups(role);
 
   return (
     <div className="app-shell">
@@ -176,41 +214,16 @@ function Layout() {
           </div>
         </div>
         <nav className="nav-links">
-          {mainLinks
-            .filter((link) => canShowLink(link, currentUser, userLoading))
-            .map(({ to, label, icon: Icon }) => (
-              <NavLink key={to} to={to} end={to === '/'}>
-                <Icon size={18} />
-                <span>{label}</span>
-              </NavLink>
-            ))}
-          {visibleOperationalBrainLinks.length > 0 && (
-            <>
-              <span className="nav-section-label">Operational Brain</span>
-              {visibleOperationalBrainLinks.map(({ to, label, icon: Icon }) => (
-                <NavLink key={to} to={to}>
+          {groups.map((group) => (
+            <div key={group.label}>
+              <span className="nav-section-label">{group.label}</span>
+              {group.links.map(({ to, label, icon: Icon }) => (
+                <NavLink key={`${to}-${label}`} to={to} end={to === '/'}>
                   <Icon size={18} />
                   <span>{label}</span>
                 </NavLink>
               ))}
-            </>
-          )}
-          {visibleAdminLinks.length > 0 && (
-            <>
-              <span className="nav-section-label">Administration</span>
-              {visibleAdminLinks.map(({ to, label, icon: Icon }) => (
-                <NavLink key={to} to={to}>
-                  <Icon size={18} />
-                  <span>{label}</span>
-                </NavLink>
-              ))}
-            </>
-          )}
-          {bottomLinks.map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to}>
-              <Icon size={18} />
-              <span>{label}</span>
-            </NavLink>
+            </div>
           ))}
         </nav>
         <div className="sidebar-footer">

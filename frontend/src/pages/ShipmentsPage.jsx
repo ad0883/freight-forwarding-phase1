@@ -37,14 +37,15 @@ function ShipmentsPage() {
     <div className="page-stack">
       <div className="page-header">
         <div>
-          <p className="eyebrow">Shipments</p>
-          <h1>Shipment List</h1>
+          <p className="eyebrow">Daily Work</p>
+          <h1>Shipments</h1>
         </div>
         <Link className="primary-button" to="/shipments/new">
           <Plus size={18} />
           <span>Create</span>
         </Link>
       </div>
+      <p className="page-helper">All shipments — click any row to view details, next actions, and workspace.</p>
 
       <div className="toolbar">
         <div className="search-box">

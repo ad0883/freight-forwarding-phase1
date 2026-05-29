@@ -53,7 +53,8 @@ function ControlTowerPage() {
 
   return (
     <div className="page-stack">
-      <div className="page-header"><div><p className="eyebrow">Command Center</p><h1>Control Tower</h1></div></div>
+      <div className="page-header"><div><p className="eyebrow">Management</p><h1>Management Dashboard</h1></div></div>
+      <p className="page-helper">See blocked shipments, risks, approvals, and operational performance at a glance.</p>
 
       {/* Executive Overview */}
       <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))' }}>

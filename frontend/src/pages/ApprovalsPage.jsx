@@ -77,10 +77,11 @@ function ApprovalsPage() {
     <div className="page-stack">
       <div className="page-header">
         <div>
-          <p className="eyebrow">Governance</p>
-          <h1>Approval Center</h1>
+          <p className="eyebrow">Operations</p>
+          <h1>Approvals</h1>
         </div>
       </div>
+      <p className="page-helper">Approve or reject high-risk actions using maker-checker governance.</p>
 
       {summary && (
         <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(5, minmax(130px, 1fr))' }}>

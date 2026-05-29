@@ -30,6 +30,7 @@ function CustomsPage() {
   return (
     <div className="page-stack">
       <div className="page-header"><div><p className="eyebrow">Operations</p><h1>Customs Coordination</h1></div></div>
+      <p className="page-helper">Manage import clearance (OOC) and export customs (LEO) filing with CHA coordination.</p>
 
       {summary && (
         <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(5, minmax(120px, 1fr))' }}>

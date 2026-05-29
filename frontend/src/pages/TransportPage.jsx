@@ -37,6 +37,7 @@ function TransportPage() {
   return (
     <div className="page-stack">
       <div className="page-header"><div><p className="eyebrow">Operations</p><h1>Transport</h1></div></div>
+      <p className="page-helper">Schedule pickups, deliveries, and track cargo movement between origin and destination.</p>
 
       {summary && (
         <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(6, minmax(100px, 1fr))' }}>

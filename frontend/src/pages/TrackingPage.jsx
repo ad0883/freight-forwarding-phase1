@@ -54,7 +54,7 @@ function TrackingPage() {
           <span>{syncing ? 'Syncing — may take up to 30s...' : 'Run Sync'}</span>
         </button>
       </div>
-
+      <p className="page-helper">Monitor container and vessel tracking updates, mismatches, and sync health.</p>
       {summary && (
         <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(6, minmax(100px, 1fr))' }}>
           <article className="metric-card"><Eye size={20} /><span>Watch Items</span><strong>{summary.active_watch_items}</strong></article>
