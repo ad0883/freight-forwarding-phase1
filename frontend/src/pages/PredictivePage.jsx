@@ -29,8 +29,8 @@ function PredictivePage() {
   }
   useEffect(() => { load(); }, []);
 
-  if (error) return <ErrorState message={error} />;
-  if (loading) return <LoadingState />;
+  if (error) return <ErrorState message={error} onRetry={load} />;
+  if (loading) return <LoadingState label="Loading predictive intelligence..." />;
 
   return (
     <div className="page-stack">

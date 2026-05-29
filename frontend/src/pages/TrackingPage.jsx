@@ -15,6 +15,7 @@ function TrackingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [tab, setTab] = useState('watch-items');
+  const [syncing, setSyncing] = useState(false);
 
   async function load() {
     setLoading(true); setError('');
@@ -36,12 +37,23 @@ function TrackingPage() {
   }
   useEffect(() => { load(); }, []);
 
-  if (error) return <ErrorState message={error} />;
-  if (loading) return <LoadingState />;
+  if (error) return <ErrorState message={error} onRetry={load} />;
+  if (loading) return <LoadingState label="Loading tracking data..." />;
 
   return (
     <div className="page-stack">
-      <div className="page-header"><div><p className="eyebrow">Operations</p><h1>Tracking</h1></div></div>
+      <div className="page-header">
+        <div><p className="eyebrow">Operations</p><h1>Tracking</h1></div>
+        <button className="primary-button" disabled={syncing} onClick={async () => {
+          setSyncing(true);
+          try { await api.post('/tracking/run-sync', {}); await load(); }
+          catch (err) { setError('Sync failed: ' + (err.response?.data?.detail || 'Unknown error')); }
+          finally { setSyncing(false); }
+        }}>
+          <RefreshCw size={16} className={syncing ? 'spin-icon' : ''} />
+          <span>{syncing ? 'Syncing — may take up to 30s...' : 'Run Sync'}</span>
+        </button>
+      </div>
 
       {summary && (
         <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(6, minmax(100px, 1fr))' }}>

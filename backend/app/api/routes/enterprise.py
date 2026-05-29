@@ -23,9 +23,20 @@ class SecurityEventRead(BaseModel):
         from_attributes = True
 
 class OrgRead(BaseModel):
-    id: int; name: str; status: str; organization_type: Optional[str] = None; created_at: datetime
+    id: int; name: str; status: str = "active"; organization_type: Optional[str] = None; created_at: datetime
+
     class Config:
         from_attributes = True
+
+    @classmethod
+    def from_org(cls, org) -> "OrgRead":
+        return cls(
+            id=org.id,
+            name=org.name,
+            status="active" if getattr(org, "is_active", True) else "inactive",
+            organization_type=getattr(org, "org_type", None),
+            created_at=org.created_at,
+        )
 
 class MemberRead(BaseModel):
     id: int; organization_id: int; user_id: int; membership_status: str; member_type: str; role_key: str
@@ -50,7 +61,7 @@ def run_health_check(db: Session = Depends(get_db), current_user: AuthenticatedU
 
 @router.get("/organizations", response_model=list[OrgRead])
 def orgs(db: Session = Depends(get_db), current_user: AuthenticatedUser = AdminUser):
-    return [OrgRead.model_validate(o) for o in list_organizations(db)]
+    return [OrgRead.from_org(o) for o in list_organizations(db)]
 
 
 @router.get("/organizations/{organization_id}/members", response_model=list[MemberRead])

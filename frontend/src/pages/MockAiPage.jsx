@@ -154,7 +154,7 @@ function MockAiPage() {
           {loading && (
             <div className="chat-message assistant">
               <span>AI Assistant</span>
-              <p className="muted">Thinking...</p>
+              <p className="muted">{messages.length <= 1 ? 'Thinking — first response may take 15–20 seconds while the AI warms up...' : 'Thinking...'}</p>
             </div>
           )}
           <div ref={chatEndRef} />

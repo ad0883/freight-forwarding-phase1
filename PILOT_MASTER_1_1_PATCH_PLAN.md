@@ -1,98 +1,84 @@
 # Master 1.1 Pilot Patch Plan
 
-## Patch Priority
+## Patch Status: COMPLETE
 
-### P0 — Must Fix Before Private Beta
-
-| ID | Category | Description | Effort |
+| ID | Category | Description | Status |
 |----|----------|-------------|--------|
-| PATCH-001 | Bug Fix | Fix enterprise/organizations 500 (OrgRead schema missing `status` field) | Small |
-| PATCH-002 | Browser QA | Run full Playwright browser QA suite | Medium |
-
-### P1 — Should Fix Before Private Beta
-
-| ID | Category | Description | Effort |
-|----|----------|-------------|--------|
-| PATCH-003 | Performance | Add caching for control tower summary (60s TTL) | Small |
-| PATCH-004 | Performance | Make tracking sync async (background job) | Medium |
-| PATCH-005 | UX | Add frontend loading states for slow operations (AI, control tower, predictions) | Small |
-| PATCH-006 | Documentation | Document correct API routes for containers (via shipment), documents (via document-versions), tracking watch items | Small |
-
-### P2 — Nice to Have
-
-| ID | Category | Description | Effort |
-|----|----------|-------------|--------|
-| PATCH-007 | Performance | Optimize shipment creation (defer audit/events) | Medium |
-| PATCH-008 | Performance | Pre-warm AI context on startup | Small |
-| PATCH-009 | UX | Add date range filtering to shipment list | Small |
-| PATCH-010 | Performance | Optimize startup seed operations (skip if already seeded) | Small |
-| PATCH-011 | Frontend | Code splitting to reduce bundle below 500KB | Medium |
-| PATCH-012 | Security | Add rate limiting on auth endpoints | Small |
+| PATCH-001 | Bug Fix | Fix enterprise/organizations 500 (OrgRead schema) | ✅ DONE |
+| PATCH-002 | UX | AI cold-start warning message | ✅ DONE |
+| PATCH-003 | UX | Control Tower loading label | ✅ DONE |
+| PATCH-004 | UX | Enterprise resilient loading (Promise.allSettled) | ✅ DONE |
+| PATCH-005 | UX | Predictive loading label + retry | ✅ DONE |
+| PATCH-006 | UX | Tracking loading + sync button with debounce | ✅ DONE |
+| PATCH-007 | UX | Enterprise retry button on error | ✅ DONE |
 
 ---
 
-## Patch Execution Order
+## What Was NOT Changed
 
-```
-1. PATCH-001 (fix OrgRead schema) — immediate
-2. PATCH-003 (control tower caching) — same session
-3. PATCH-005 (frontend loading states) — same session
-4. PATCH-006 (API documentation) — same session
-5. PATCH-002 (browser QA) — after fixes
-6. PATCH-004 (async tracking) — if time permits
-7. Remaining P2 items — after pilot continuation
-```
-
----
-
-## PATCH-001 Detail: Fix OrgRead Schema
-
-**File:** `backend/app/schemas/enterprise.py` (or equivalent)
-
-**Problem:** `OrgRead` Pydantic model requires `status` field but `Organization` SQLAlchemy model doesn't have it.
-
-**Fix Options:**
-1. Add `status: Optional[str] = "active"` to OrgRead (make optional with default)
-2. Add `status` column to Organization model + Alembic migration
-
-**Recommended:** Option 1 (no migration needed, backward compatible)
+- No new features added
+- No business logic changes
+- No new migrations
+- No AI safety rules changed (AI remains read-only)
+- No access control weakened
+- No backend caching added (risk of cross-user data leakage deemed too high for a quick patch)
+- No async tracking refactor (too risky for patch scope)
+- No bundle size optimization (deferred)
 
 ---
 
-## PATCH-003 Detail: Control Tower Caching
+## Remaining Limitations (Accepted for Internal Pilot)
 
-**Problem:** Control tower summary queries all modules on every request (~7s)
-
-**Fix:** Add in-memory cache with 60-second TTL using existing `warm_dashboard_cache` pattern.
-
----
-
-## PATCH-004 Detail: Async Tracking Sync
-
-**Problem:** Tracking sync blocks for 30+ seconds
-
-**Fix:** Return sync job ID immediately, process in background, allow polling for status.
+- Bundle size 531KB (warning only, not blocking)
+- Server startup ~60s on cold start (Neon latency)
+- AI first call ~22s (Groq cold start, now with user-facing warning)
+- Tracking sync ~30s (now with clear UX feedback)
+- Control Tower ~7s (real-time aggregation, no cache)
+- Multi-org enforcement is foundation-level only
 
 ---
 
-## Post-Patch Verification
+## Private Beta Requirements (Not Yet Met)
 
-After applying patches:
-1. Re-run pilot test script
-2. Verify 0 critical/high bugs
-3. Verify enterprise/organizations returns 200
-4. Verify control tower < 2s (cached)
-5. Run Playwright browser QA
-6. If all pass → READY FOR PRIVATE BETA
+1. Full browser QA with Playwright (configured but not run)
+2. Render/Neon deployment smoke test
+3. Production environment variables configured
+4. Strong JWT_SECRET_KEY and ADMIN_PASSWORD set
+5. CORS restricted to production frontend URL
+6. Backup/recovery plan documented
 
 ---
 
-## Timeline Estimate
+## Files Changed in This Patch
 
-| Phase | Duration |
-|-------|----------|
-| P0 patches | 1 day |
-| P1 patches | 2-3 days |
-| Browser QA | 1 day |
-| Verification | 1 day |
-| **Total to Private Beta** | **5-7 days** |
+### Backend
+- `backend/app/api/routes/enterprise.py` — Fix OrgRead schema mapping
+
+### Frontend
+- `frontend/src/pages/ControlTowerPage.jsx` — Loading label
+- `frontend/src/pages/EnterprisePage.jsx` — Resilient loading + retry
+- `frontend/src/pages/PredictivePage.jsx` — Loading label + retry
+- `frontend/src/pages/TrackingPage.jsx` — Loading label + retry + sync button
+- `frontend/src/pages/MockAiPage.jsx` — Cold-start warning
+
+---
+
+## Verification Results
+
+| Check | Result |
+|-------|--------|
+| Backend compile | ✅ PASS (0 errors) |
+| Frontend build | ✅ PASS (844ms) |
+| Alembic single head | ✅ phase24_enterprise_govern |
+| Alembic current = head | ✅ Confirmed |
+| GET /api/enterprise/organizations | ✅ 200 |
+| GET /api/enterprise/health | ✅ 200 |
+| GET /api/enterprise/roles | ✅ 200 |
+| GET /api/enterprise/permissions | ✅ 200 |
+| GET /api/control-tower/summary | ✅ 200 |
+| GET /api/predictive/summary | ✅ 200 |
+| GET /api/tracking/summary | ✅ 200 |
+| VIEW_ONLY blocked from enterprise | ✅ 403 |
+| No secrets in responses | ✅ Confirmed |
+| No secrets committed | ✅ Confirmed |
+| No migration added | ✅ Confirmed |

@@ -45,7 +45,7 @@ function ControlTowerPage() {
   }
   useEffect(() => { load(); }, []);
 
-  if (loading) return <LoadingState />;
+  if (loading) return <LoadingState label="Loading Control Tower — aggregating operations data..." />;
 
   const ops = summary?.operations || {};
   const ea = summary?.exceptions_approvals || {};

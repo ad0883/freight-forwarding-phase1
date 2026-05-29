@@ -16,22 +16,27 @@ function EnterprisePage() {
   async function load() {
     setLoading(true); setError('');
     try {
-      const [hRes, oRes, rRes, pRes, sRes] = await Promise.all([
+      const results = await Promise.allSettled([
         api.get('/enterprise/health'),
         api.get('/enterprise/organizations'),
         api.get('/enterprise/roles'),
         api.get('/enterprise/permissions/matrix'),
         api.get('/enterprise/security-events'),
       ]);
-      setHealth(hRes.data); setOrgs(oRes.data); setRoles(rRes.data);
-      setPermissions(pRes.data); setSecurityEvents(sRes.data);
+      if (results[0].status === 'fulfilled') setHealth(results[0].value.data);
+      if (results[1].status === 'fulfilled') setOrgs(results[1].value.data);
+      if (results[2].status === 'fulfilled') setRoles(results[2].value.data);
+      if (results[3].status === 'fulfilled') setPermissions(results[3].value.data);
+      if (results[4].status === 'fulfilled') setSecurityEvents(results[4].value.data);
+      const allFailed = results.every(r => r.status === 'rejected');
+      if (allFailed) setError('Failed to load enterprise data');
     } catch (err) { setError(err.response?.data?.detail || 'Failed to load'); }
     finally { setLoading(false); }
   }
   useEffect(() => { load(); }, []);
 
-  if (error) return <ErrorState message={error} />;
-  if (loading) return <LoadingState />;
+  if (error) return <ErrorState message={error} onRetry={load} />;
+  if (loading) return <LoadingState label="Loading enterprise governance..." />;
 
   return (
     <div className="page-stack">
