@@ -3,8 +3,11 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client.js';
 import { ErrorState, LoadingState } from '../components/States.jsx';
+import { getRoleMode, getRoleHelperPrefix } from '../utils/roleMode.js';
 
 function CustomsPage() {
+  const currentUser = (() => { try { return JSON.parse(localStorage.getItem('current_user') || 'null'); } catch { return null; } })();
+  const mode = getRoleMode(currentUser?.role);
   const [summary, setSummary] = useState(null);
   const [cases, setCases] = useState([]);
   const [queries, setQueries] = useState([]);
@@ -30,7 +33,7 @@ function CustomsPage() {
   return (
     <div className="page-stack">
       <div className="page-header"><div><p className="eyebrow">Operations</p><h1>Customs Coordination</h1></div></div>
-      <p className="page-helper">Manage import clearance (OOC) and export customs (LEO) filing with CHA coordination.</p>
+      <p className="page-helper">{getRoleHelperPrefix(mode)}Manage import clearance (OOC) and export customs (LEO) filing with CHA coordination.</p>
 
       {summary && (
         <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(5, minmax(120px, 1fr))' }}>

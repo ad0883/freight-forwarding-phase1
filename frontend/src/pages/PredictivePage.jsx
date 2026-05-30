@@ -3,8 +3,11 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client.js';
 import { ErrorState, LoadingState } from '../components/States.jsx';
+import { getRoleMode, getRoleHelperPrefix } from '../utils/roleMode.js';
 
 function PredictivePage() {
+  const currentUser = (() => { try { return JSON.parse(localStorage.getItem('current_user') || 'null'); } catch { return null; } })();
+  const mode = getRoleMode(currentUser?.role);
   const [summary, setSummary] = useState(null);
   const [predictions, setPredictions] = useState([]);
   const [models, setModels] = useState([]);
@@ -35,7 +38,7 @@ function PredictivePage() {
   return (
     <div className="page-stack">
       <div className="page-header"><div><p className="eyebrow">Management</p><h1>Risk Alerts</h1></div></div>
-      <p className="page-helper">Review rule-based risk predictions and recommended preventive actions.</p>
+      <p className="page-helper">{getRoleHelperPrefix(mode)}Review rule-based risk predictions and recommended preventive actions.</p>
 
       {summary && (
         <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))' }}>

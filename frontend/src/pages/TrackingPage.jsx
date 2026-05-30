@@ -3,8 +3,11 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client.js';
 import { ErrorState, LoadingState } from '../components/States.jsx';
+import { getRoleMode, getRoleHelperPrefix } from '../utils/roleMode.js';
 
 function TrackingPage() {
+  const currentUser = (() => { try { return JSON.parse(localStorage.getItem('current_user') || 'null'); } catch { return null; } })();
+  const mode = getRoleMode(currentUser?.role);
   const [summary, setSummary] = useState(null);
   const [watchItems, setWatchItems] = useState([]);
   const [observations, setObservations] = useState([]);
@@ -54,7 +57,7 @@ function TrackingPage() {
           <span>{syncing ? 'Syncing — may take up to 30s...' : 'Run Sync'}</span>
         </button>
       </div>
-      <p className="page-helper">Monitor container and vessel tracking updates, mismatches, and sync health.</p>
+      <p className="page-helper">{getRoleHelperPrefix(mode)}Monitor container and vessel tracking updates, mismatches, and sync health.</p>
       {summary && (
         <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(6, minmax(100px, 1fr))' }}>
           <article className="metric-card"><Eye size={20} /><span>Watch Items</span><strong>{summary.active_watch_items}</strong></article>

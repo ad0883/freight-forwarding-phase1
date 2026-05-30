@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../api/client.js';
 import { EmptyState, ErrorState, LoadingState } from '../components/States.jsx';
+import { getRoleMode, getRoleHelperPrefix } from '../utils/roleMode.js';
 
 function ShipmentsPage() {
   const navigate = useNavigate();
@@ -33,6 +34,10 @@ function ShipmentsPage() {
     return () => clearTimeout(timeout);
   }, [search, includeArchived]);
 
+  const currentUser = (() => { try { return JSON.parse(localStorage.getItem('current_user') || 'null'); } catch { return null; } })();
+  const mode = getRoleMode(currentUser?.role);
+  const isWriter = mode !== 'readonly';
+
   return (
     <div className="page-stack">
       <div className="page-header">
@@ -40,12 +45,14 @@ function ShipmentsPage() {
           <p className="eyebrow">Daily Work</p>
           <h1>Shipments</h1>
         </div>
-        <Link className="primary-button" to="/shipments/new">
-          <Plus size={18} />
-          <span>Create</span>
-        </Link>
+        {isWriter && (
+          <Link className="primary-button" to="/shipments/new">
+            <Plus size={18} />
+            <span>Create</span>
+          </Link>
+        )}
       </div>
-      <p className="page-helper">All shipments — click any row to view details, next actions, and workspace.</p>
+      <p className="page-helper">{getRoleHelperPrefix(mode)}{mode === 'finance' ? 'View shipments linked to your charges, receivables, and payables.' : 'All shipments — click any row to view details, next actions, and workspace.'}</p>
 
       <div className="toolbar">
         <div className="search-box">

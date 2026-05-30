@@ -2,6 +2,7 @@ import { Banknote, ListChecks, RefreshCw, Wallet } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import api from '../api/client.js';
 import { EmptyState, ErrorState, LoadingState } from '../components/States.jsx';
+import { getRoleMode, getRoleHelperPrefix } from '../utils/roleMode.js';
 
 function formatMoney(amount, currency = 'INR') {
   if (amount === null || amount === undefined) return `${currency} 0.00`;
@@ -465,6 +466,9 @@ function FinancePage() {
     return <LoadingState label="Loading finance data" />;
   }
 
+  const currentUser = (() => { try { return JSON.parse(localStorage.getItem('current_user') || 'null'); } catch { return null; } })();
+  const mode = getRoleMode(currentUser?.role);
+
   return (
     <div className="page-stack">
       <div className="page-header">
@@ -479,7 +483,7 @@ function FinancePage() {
           </button>
         </div>
       </div>
-      <p className="page-helper">Track receivables, payables, credit holds, and release status.</p>
+      <p className="page-helper">{getRoleHelperPrefix(mode)}Track receivables, payables, credit holds, and release status.</p>
       <ErrorState message={error} onRetry={loadAll} />
 
       <div className="tabs">

@@ -3,8 +3,11 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client.js';
 import { EmptyState, ErrorState, LoadingState } from '../components/States.jsx';
+import { getRoleMode, getRoleHelperPrefix } from '../utils/roleMode.js';
 
 function DashboardPage() {
+  const currentUser = (() => { try { return JSON.parse(localStorage.getItem('current_user') || 'null'); } catch { return null; } })();
+  const mode = getRoleMode(currentUser?.role);
   const [summary, setSummary] = useState(null);
   const [financials, setFinancials] = useState(null);
   const [dailySummary, setDailySummary] = useState(null);
@@ -148,7 +151,7 @@ function DashboardPage() {
           New Shipment
         </Link>
       </div>
-      <p className="page-helper">Full operational metrics. For daily action items, use the Today page.</p>
+      <p className="page-helper">{getRoleHelperPrefix(mode)}Full operational metrics. For daily action items, use the Today page.</p>
       <section className="metric-grid">
         {cards.map(({ label, value, icon: Icon }) => (
           <article className="metric-card" key={label}>

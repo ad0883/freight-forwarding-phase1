@@ -2,8 +2,13 @@ import { AlertTriangle, CheckCircle2, Shield, ShieldCheck, Users } from 'lucide-
 import { useEffect, useState } from 'react';
 import api from '../api/client.js';
 import { ErrorState, LoadingState } from '../components/States.jsx';
+import AccessDeniedCard from '../components/AccessDeniedCard.jsx';
 
 function EnterprisePage() {
+  const currentUser = (() => { try { return JSON.parse(localStorage.getItem('current_user') || 'null'); } catch { return null; } })();
+  if (currentUser && currentUser.role !== 'ADMIN') {
+    return <AccessDeniedCard title="Admin Settings" message="This section is available to Admin users only. Contact your admin if you need access." />;
+  }
   const [health, setHealth] = useState(null);
   const [orgs, setOrgs] = useState([]);
   const [roles, setRoles] = useState([]);
@@ -40,7 +45,8 @@ function EnterprisePage() {
 
   return (
     <div className="page-stack">
-      <div className="page-header"><div><p className="eyebrow">Governance</p><h1>Enterprise</h1></div></div>
+      <div className="page-header"><div><p className="eyebrow">Admin</p><h1>Admin Settings</h1></div></div>
+      <p className="page-helper">Manage organization settings, users, roles, and system health.</p>
 
       <nav style={{ display: 'flex', gap: '2px', borderBottom: '2px solid var(--color-border)', flexWrap: 'wrap' }}>
         {['health', 'organizations', 'roles', 'permissions', 'security'].map((t) => (

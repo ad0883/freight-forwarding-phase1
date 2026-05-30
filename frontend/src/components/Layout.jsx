@@ -1,81 +1,20 @@
 import {
-  Activity,
-  AlertTriangle,
-  Bot,
-  BarChart3,
   Bell,
   Check,
-  ClipboardList,
-  CreditCard,
-  FileCheck,
-  FileClock,
-  FileText,
-  LayoutDashboard,
   LogOut,
-  Mail,
   Menu,
-  Satellite,
-  Settings,
-  ShieldAlert,
-  ShieldCheck,
-  Ship,
-  Sun,
-  Truck,
-  Users,
-  UserCog,
   X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import api from '../api/client.js';
 import { RoleBadge } from './States.jsx';
+import { getRoleMode, getModeLabel, getNavigationGroups } from '../utils/roleMode.js';
 
 /* ---------------------------------------------------------------
-   S1 — Simplified, role-based, grouped sidebar navigation
+   S2 — Role-mode-based sidebar navigation
+   Uses centralized config from utils/roleMode.js
    --------------------------------------------------------------- */
-
-const dailyWorkLinks = [
-  { to: '/today', label: 'Today', icon: Sun },
-  { to: '/shipments', label: 'Shipments', icon: Ship },
-  { to: '/validation-issues', label: 'Document Check', icon: FileText },
-  { to: '/manual-review', label: 'Issues', icon: AlertTriangle },
-];
-
-const operationsLinks = [
-  { to: '/customs', label: 'Customs', icon: ShieldCheck },
-  { to: '/transport', label: 'Transport', icon: Truck },
-  { to: '/finance', label: 'Finance', icon: CreditCard },
-  { to: '/approvals', label: 'Approvals', icon: FileCheck },
-];
-
-const managementLinks = [
-  { to: '/control-tower', label: 'Management Dashboard', icon: Activity },
-  { to: '/predictive', label: 'Risk Alerts', icon: BarChart3 },
-  { to: '/ai', label: 'AI Assistant', icon: Bot },
-];
-
-const adminAdvancedLinks = [
-  { to: '/enterprise', label: 'Enterprise', icon: ShieldCheck },
-  { to: '/bot-governance', label: 'AI Control', icon: Bot },
-  { to: '/tracking', label: 'Tracking Setup', icon: Satellite },
-  { to: '/users', label: 'Users', icon: UserCog },
-  { to: '/audit-logs', label: 'Audit Logs', icon: FileClock },
-  { to: '/settings', label: 'Settings', icon: Settings },
-  { to: '/admin/tools', label: 'Admin Tools', icon: ShieldCheck },
-  { to: '/email', label: 'Email Automation', icon: Mail },
-  { to: '/events', label: 'Events', icon: ClipboardList },
-  { to: '/rules', label: 'Rules', icon: ShieldAlert },
-  { to: '/status', label: 'System Status', icon: Activity },
-];
-
-/* Extra links available to STAFF but not in the primary groups */
-const staffExtraLinks = [
-  { to: '/tracking', label: 'Tracking Updates', icon: Satellite },
-  { to: '/tasks', label: 'Tasks', icon: ClipboardList },
-  { to: '/parties', label: 'Parties', icon: Users },
-  { to: '/reports', label: 'Reports', icon: BarChart3 },
-  { to: '/email', label: 'Email Automation', icon: Mail },
-];
 
 function cachedUser() {
   try {
@@ -83,45 +22,6 @@ function cachedUser() {
   } catch {
     return null;
   }
-}
-
-function getVisibleGroups(role) {
-  if (role === 'ADMIN') {
-    return [
-      { label: 'Daily Work', links: dailyWorkLinks },
-      { label: 'Operations', links: operationsLinks },
-      { label: 'Management', links: managementLinks },
-      { label: 'More', links: [
-        { to: '/tasks', label: 'Tasks', icon: ClipboardList },
-        { to: '/parties', label: 'Parties', icon: Users },
-        { to: '/reports', label: 'Reports', icon: BarChart3 },
-        { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-        { to: '/notifications', label: 'Notifications', icon: Bell },
-      ]},
-      { label: 'Admin / Advanced', links: adminAdvancedLinks },
-    ];
-  }
-  if (role === 'STAFF') {
-    return [
-      { label: 'Daily Work', links: dailyWorkLinks },
-      { label: 'Operations', links: operationsLinks },
-      { label: 'Management', links: managementLinks },
-      { label: 'More', links: staffExtraLinks },
-    ];
-  }
-  // VIEW_ONLY
-  return [
-    { label: 'Daily Work', links: [
-      { to: '/today', label: 'Today', icon: Sun },
-      { to: '/shipments', label: 'Shipments', icon: Ship },
-    ]},
-    { label: 'Management', links: [
-      { to: '/control-tower', label: 'Management Dashboard', icon: Activity },
-      { to: '/predictive', label: 'Risk Alerts', icon: BarChart3 },
-      { to: '/reports', label: 'Reports', icon: BarChart3 },
-      { to: '/ai', label: 'AI Assistant', icon: Bot },
-    ]},
-  ];
 }
 
 function Layout() {
@@ -200,7 +100,8 @@ function Layout() {
   }
 
   const role = currentUser?.role || (userLoading ? 'STAFF' : 'VIEW_ONLY');
-  const groups = getVisibleGroups(role);
+  const mode = getRoleMode(role);
+  const groups = getNavigationGroups(mode);
 
   return (
     <div className="app-shell">
@@ -274,7 +175,7 @@ function Layout() {
                 <span className="sidebar-user-name">{currentUser.name}</span>
                 <span className="sidebar-user-role">{currentUser.role}</span>
               </div>
-              <RoleBadge role={currentUser.role} />
+              <span className={`role-mode-badge mode-${mode}`}>{getModeLabel(mode)} Mode</span>
             </div>
           )}
           <button className="sidebar-logout" type="button" onClick={logout} title="Logout">

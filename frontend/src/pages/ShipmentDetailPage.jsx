@@ -22,6 +22,7 @@ import { ConfirmDialog, EmptyState, ErrorState, LoadingState } from '../componen
 import ContainersPanel from '../components/ContainersPanel.jsx';
 import ShipmentFinancePanel from '../components/ShipmentFinancePanel.jsx';
 import WorkflowPanel from '../components/WorkflowPanel.jsx';
+import { getRoleMode, getShipmentTabOrder } from '../utils/roleMode.js';
 
 const exportStatuses = [
   'Booking Received',
@@ -1039,7 +1040,7 @@ function ShipmentDetailPage() {
       })()}
 
       <div className="tabs" role="tablist">
-        {['overview', 'workflow', 'containers', 'documents', 'tasks', 'bl', 'followups', 'demurrage', 'charges', 'finance'].map((tab) => (
+        {getShipmentTabOrder(getRoleMode(currentUser?.role)).map((tab) => (
           <button key={tab} className={activeTab === tab ? 'active' : ''} onClick={() => setActiveTab(tab)}>
             {tab === 'bl'
               ? 'BL Management'

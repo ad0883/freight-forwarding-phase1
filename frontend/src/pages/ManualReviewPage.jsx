@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client.js';
 import { ErrorState, LoadingState } from '../components/States.jsx';
+import { getRoleMode, getRoleHelperPrefix } from '../utils/roleMode.js';
 
 const SEVERITY_COLORS = {
   critical: 'var(--color-danger)',
@@ -102,6 +103,7 @@ function ManualReviewPage() {
   })();
   const isAdmin = currentUser?.role === 'ADMIN';
   const canMutate = ['ADMIN', 'STAFF'].includes(currentUser?.role);
+  const mode = getRoleMode(currentUser?.role);
 
   async function loadData() {
     setLoading(true);
@@ -216,7 +218,7 @@ function ManualReviewPage() {
           </button>
         </div>
       </div>
-      <p className="page-helper">Review missing documents, delays, mismatches, and blocked work. Resolve or escalate issues.</p>
+      <p className="page-helper">{getRoleHelperPrefix(mode)}Review missing documents, delays, mismatches, and blocked work. Resolve or escalate issues.</p>
 
       {/* Detection result banner */}
       {detectionResult && (

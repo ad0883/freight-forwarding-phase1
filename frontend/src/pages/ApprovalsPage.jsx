@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client.js';
 import { ErrorState, LoadingState } from '../components/States.jsx';
+import { getRoleMode, getRoleHelperPrefix } from '../utils/roleMode.js';
 
 const RISK_COLORS = { critical: '#dc2626', high: '#ea580c', medium: '#ca8a04', low: '#2563eb' };
 const STATUS_LABELS = {
@@ -25,6 +26,7 @@ function ApprovalsPage() {
   const currentUser = (() => { try { return JSON.parse(localStorage.getItem('current_user') || 'null'); } catch { return null; } })();
   const isAdmin = currentUser?.role === 'ADMIN';
   const canMutate = ['ADMIN', 'STAFF'].includes(currentUser?.role);
+  const mode = getRoleMode(currentUser?.role);
 
   async function load() {
     setLoading(true); setError('');
@@ -81,7 +83,7 @@ function ApprovalsPage() {
           <h1>Approvals</h1>
         </div>
       </div>
-      <p className="page-helper">Approve or reject high-risk actions using maker-checker governance.</p>
+      <p className="page-helper">{getRoleHelperPrefix(mode)}Approve or reject high-risk actions using maker-checker governance.</p>
 
       {summary && (
         <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(5, minmax(130px, 1fr))' }}>

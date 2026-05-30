@@ -3,12 +3,15 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client.js';
 import { ErrorState, LoadingState } from '../components/States.jsx';
+import { getRoleMode, getRoleHelperPrefix } from '../utils/roleMode.js';
 
 function WidgetError({ name }) {
   return <div className="state-box empty-state" style={{ minHeight: '80px', border: '1px dashed var(--color-border)' }}><AlertTriangle size={18} /><div><strong>{name}</strong><p style={{ fontSize: '0.78rem' }}>Failed to load. <button onClick={() => window.location.reload()} style={{ color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Retry</button></p></div></div>;
 }
 
 function ControlTowerPage() {
+  const currentUser = (() => { try { return JSON.parse(localStorage.getItem('current_user') || 'null'); } catch { return null; } })();
+  const mode = getRoleMode(currentUser?.role);
   const [summary, setSummary] = useState(null);
   const [riskHeatmap, setRiskHeatmap] = useState(null);
   const [topRisks, setTopRisks] = useState(null);
@@ -54,7 +57,7 @@ function ControlTowerPage() {
   return (
     <div className="page-stack">
       <div className="page-header"><div><p className="eyebrow">Management</p><h1>Management Dashboard</h1></div></div>
-      <p className="page-helper">See blocked shipments, risks, approvals, and operational performance at a glance.</p>
+      <p className="page-helper">{getRoleHelperPrefix(mode)}Review blocked shipments, risks, approvals, and team workload.</p>
 
       {/* Executive Overview */}
       <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))' }}>

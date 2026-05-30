@@ -3,8 +3,11 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client.js';
 import { ErrorState, LoadingState } from '../components/States.jsx';
+import { getRoleMode, getRoleHelperPrefix } from '../utils/roleMode.js';
 
 function TransportPage() {
+  const currentUser = (() => { try { return JSON.parse(localStorage.getItem('current_user') || 'null'); } catch { return null; } })();
+  const mode = getRoleMode(currentUser?.role);
   const [summary, setSummary] = useState(null);
   const [jobs, setJobs] = useState([]);
   const [exceptions, setExceptions] = useState([]);
@@ -37,7 +40,7 @@ function TransportPage() {
   return (
     <div className="page-stack">
       <div className="page-header"><div><p className="eyebrow">Operations</p><h1>Transport</h1></div></div>
-      <p className="page-helper">Schedule pickups, deliveries, and track cargo movement between origin and destination.</p>
+      <p className="page-helper">{getRoleHelperPrefix(mode)}Schedule pickups, deliveries, and track cargo movement between origin and destination.</p>
 
       {summary && (
         <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(6, minmax(100px, 1fr))' }}>

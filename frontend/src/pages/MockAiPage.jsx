@@ -2,6 +2,7 @@ import { Bot, Info, Send } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import api from '../api/client.js';
 import { ErrorState } from '../components/States.jsx';
+import { getRoleMode, getRoleHelperPrefix } from '../utils/roleMode.js';
 
 const fallbackPrompts = [
   'What shipments need attention today?',
@@ -55,6 +56,8 @@ function AssistantMessage({ message }) {
 }
 
 function MockAiPage() {
+  const currentUser = (() => { try { return JSON.parse(localStorage.getItem('current_user') || 'null'); } catch { return null; } })();
+  const mode = getRoleMode(currentUser?.role);
   const [question, setQuestion] = useState('');
   const [messages, setMessages] = useState([]);
   const [examples, setExamples] = useState(fallbackPrompts);
@@ -124,7 +127,7 @@ function MockAiPage() {
           <strong>{statusText}</strong>
         </div>
       </div>
-      <p className="page-helper">Ask for read-only guidance. AI cannot approve, release, send, or change records.</p>
+      <p className="page-helper">{getRoleHelperPrefix(mode)}Ask for read-only guidance. AI cannot approve, release, send, or change records.</p>
 
       <div className="ai-notice">
         <Info size={20} />
