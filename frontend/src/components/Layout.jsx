@@ -10,6 +10,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import api from '../api/client.js';
 import { RoleBadge } from './States.jsx';
 import { getRoleMode, getModeLabel, getNavigationGroups } from '../utils/roleMode.js';
+import { useFeatures } from '../context/FeatureContext.jsx';
 
 /* ---------------------------------------------------------------
    S2 — Role-mode-based sidebar navigation
@@ -102,6 +103,8 @@ function Layout() {
   const role = currentUser?.role || (userLoading ? 'STAFF' : 'VIEW_ONLY');
   const mode = getRoleMode(role);
   const groups = getNavigationGroups(mode);
+  
+  const { features = {} } = useFeatures();
 
   return (
     <div className="app-shell">
@@ -115,17 +118,27 @@ function Layout() {
           </div>
         </div>
         <nav className="nav-links">
-          {groups.map((group) => (
-            <div key={group.label}>
-              <span className="nav-section-label">{group.label}</span>
-              {group.links.map(({ to, label, icon: Icon }) => (
-                <NavLink key={`${to}-${label}`} to={to} end={to === '/'}>
-                  <Icon size={18} />
-                  <span>{label}</span>
-                </NavLink>
-              ))}
-            </div>
-          ))}
+          {groups.map((group) => {
+            // Filter links based on feature keys
+            const availableLinks = group.links.filter(link => {
+              if (!link.featureKey) return true;
+              return features[link.featureKey];
+            });
+
+            if (availableLinks.length === 0) return null;
+
+            return (
+              <div key={group.label}>
+                <span className="nav-section-label">{group.label}</span>
+                {availableLinks.map(({ to, label, icon: Icon }) => (
+                  <NavLink key={`${to}-${label}`} to={to} end={to === '/'}>
+                    <Icon size={18} />
+                    <span>{label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            );
+          })}
         </nav>
         <div className="sidebar-footer">
           {currentUser && (

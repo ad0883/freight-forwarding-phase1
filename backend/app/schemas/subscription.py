@@ -167,3 +167,12 @@ class SubscriptionSummaryRead(BaseModel):
     features: List[SubscriptionPlanFeatureRead] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class FeatureAccessSummaryRead(BaseModel):
+    organization_id: int
+    plan_key: str
+    subscription_status: str
+    features: Dict[str, bool]
+    
+    model_config = ConfigDict(from_attributes=True)

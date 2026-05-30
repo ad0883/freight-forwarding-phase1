@@ -33,6 +33,8 @@ import ControlTowerPage from './pages/ControlTowerPage.jsx';
 import PredictivePage from './pages/PredictivePage.jsx';
 import EnterprisePage from './pages/EnterprisePage.jsx';
 import SubscriptionsPage from './pages/SubscriptionsPage.jsx';
+import FeatureGate from './components/FeatureGate.jsx';
+import { FEATURE_KEYS } from './config/features.js';
 
 function App() {
   return (
@@ -64,7 +66,7 @@ function App() {
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="finance" element={<FinancePage />} />
-        <Route path="ai" element={<MockAiPage />} />
+        <Route path="ai" element={<FeatureGate featureKey={FEATURE_KEYS.AI_ASSISTANT}><MockAiPage /></FeatureGate>} />
         <Route
           path="email"
           element={
@@ -150,7 +152,9 @@ function App() {
           path="bot-governance"
           element={
             <ProtectedRoute allowedRoles={['ADMIN', 'STAFF', 'VIEW_ONLY']}>
-              <BotGovernancePage />
+              <FeatureGate featureKey={FEATURE_KEYS.AI_CONTROL}>
+                <BotGovernancePage />
+              </FeatureGate>
             </ProtectedRoute>
           }
         />
@@ -175,7 +179,9 @@ function App() {
           path="tracking"
           element={
             <ProtectedRoute allowedRoles={['ADMIN', 'STAFF', 'VIEW_ONLY']}>
-              <TrackingPage />
+              <FeatureGate featureKey={FEATURE_KEYS.TRACKING}>
+                <TrackingPage />
+              </FeatureGate>
             </ProtectedRoute>
           }
         />
@@ -183,7 +189,9 @@ function App() {
           path="control-tower"
           element={
             <ProtectedRoute allowedRoles={['ADMIN', 'STAFF', 'VIEW_ONLY']}>
-              <ControlTowerPage />
+              <FeatureGate featureKey={FEATURE_KEYS.MANAGEMENT_DASHBOARD}>
+                <ControlTowerPage />
+              </FeatureGate>
             </ProtectedRoute>
           }
         />
@@ -191,7 +199,9 @@ function App() {
           path="predictive"
           element={
             <ProtectedRoute allowedRoles={['ADMIN', 'STAFF', 'VIEW_ONLY']}>
-              <PredictivePage />
+              <FeatureGate featureKey={FEATURE_KEYS.RISK_ALERTS}>
+                <PredictivePage />
+              </FeatureGate>
             </ProtectedRoute>
           }
         />
@@ -199,7 +209,9 @@ function App() {
           path="enterprise"
           element={
             <ProtectedRoute allowedRoles={['ADMIN']}>
-              <EnterprisePage />
+              <FeatureGate featureKey={FEATURE_KEYS.ENTERPRISE_GOVERNANCE}>
+                <EnterprisePage />
+              </FeatureGate>
             </ProtectedRoute>
           }
         />
@@ -207,7 +219,9 @@ function App() {
           path="subscriptions"
           element={
             <ProtectedRoute allowedRoles={['ADMIN']}>
-              <SubscriptionsPage />
+              <FeatureGate featureKey={FEATURE_KEYS.SUBSCRIPTION_ADMIN}>
+                <SubscriptionsPage />
+              </FeatureGate>
             </ProtectedRoute>
           }
         />

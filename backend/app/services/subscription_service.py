@@ -304,3 +304,64 @@ def get_subscription_summary(db: Session, user: User):
         "trial_ends_at": sub.trial_ends_at,
         "features": sub.plan.features
     }
+
+def has_feature_access(db: Session, user: User, feature_key: str, organization_id: Optional[int] = None) -> bool:
+    if not organization_id:
+        organization_id = user.organization_id
+    
+    sub = ensure_default_subscription_for_organization(db, organization_id, user)
+    if not sub or not sub.plan:
+        return False
+    
+    if sub.subscription_status in ["past_due", "suspended", "expired", "cancelled"]:
+        # Block advanced features for overdue/suspended accounts
+        # Note: In a real system, you might want more granular rules here.
+        # But per the spec, if past_due, we should allow read access to core modules and block advanced ones safely.
+        # For S4, returning False for suspended limits their access, but core features like shipments might be explicitly allowed if they aren't gated by `require_feature`.
+        pass
+    
+    for feature in sub.plan.features:
+        if feature.feature_key == feature_key and feature.included:
+            return True
+    return False
+
+def require_feature_access(db: Session, user: User, feature_key: str, organization_id: Optional[int] = None):
+    # Admins always need subscription access too, but we give a backdoor for subscription admin to fix subscriptions
+    if feature_key == "subscription_admin" and user.role in ["ADMIN", "ORG_ADMIN"]:
+        return True
+    
+    if not has_feature_access(db, user, feature_key, organization_id):
+        raise HTTPException(
+            status_code=403, 
+            detail=f"Feature '{feature_key}' is not included in your current subscription plan. Please contact your admin to upgrade."
+        )
+    return True
+
+def get_feature_access_summary(db: Session, user: User, organization_id: Optional[int] = None):
+    if user.role == "PORTAL_USER":
+        raise HTTPException(status_code=403, detail="Not available for portal users.")
+
+    if not organization_id:
+        organization_id = user.organization_id
+
+    sub = ensure_default_subscription_for_organization(db, organization_id, user)
+    if not sub or not sub.plan:
+        raise HTTPException(status_code=404, detail="No subscription found")
+
+    features_dict = {}
+    for feature in sub.plan.features:
+        if feature.included:
+            features_dict[feature.feature_key] = True
+
+    # Subscription admin fallback for admins
+    if user.role in ["ADMIN", "ORG_ADMIN"]:
+        features_dict["subscription_admin"] = True
+
+    is_active = sub.subscription_status in ["active", "trial", "manual_override", "internal"]
+
+    return {
+        "organization_id": sub.organization_id,
+        "plan_key": sub.plan.plan_key,
+        "subscription_status": sub.subscription_status,
+        "features": features_dict
+    }

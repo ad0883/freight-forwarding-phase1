@@ -1,0 +1,38 @@
+export const FEATURE_KEYS = {
+  SHIPMENTS: 'shipments',
+  PARTIES: 'parties',
+  DOCUMENTS: 'documents',
+  CONTAINERS: 'containers',
+  BASIC_FINANCE: 'basic_finance',
+  CUSTOMS: 'customs',
+  TRANSPORT: 'transport',
+  ISSUES: 'issues',
+  APPROVALS: 'approvals',
+  MANAGEMENT_DASHBOARD: 'management_dashboard',
+  TRACKING: 'tracking',
+  RISK_ALERTS: 'risk_alerts',
+  AI_ASSISTANT: 'ai_assistant',
+  DOCUMENT_CHECK: 'document_check',
+  ADVANCED_FINANCE: 'advanced_finance',
+  PORTAL: 'portal',
+  ADMIN_SETTINGS: 'admin_settings',
+  AI_CONTROL: 'ai_control',
+  ENTERPRISE_GOVERNANCE: 'enterprise_governance',
+  ROLE_POLICIES: 'role_policies',
+  SECURITY_AUDIT: 'security_audit',
+  SUBSCRIPTION_ADMIN: 'subscription_admin',
+  TRACKING_SETUP: 'tracking_setup',
+  PREDICTION_MODELS: 'prediction_models',
+};
+
+// Map of feature keys to readable names
+export const FEATURE_NAMES = {
+  [FEATURE_KEYS.MANAGEMENT_DASHBOARD]: 'Management Dashboard',
+  [FEATURE_KEYS.RISK_ALERTS]: 'Risk Alerts',
+  [FEATURE_KEYS.AI_ASSISTANT]: 'AI Assistant',
+  [FEATURE_KEYS.DOCUMENT_CHECK]: 'Document Intelligence',
+  [FEATURE_KEYS.TRACKING]: 'Tracking',
+  [FEATURE_KEYS.AI_CONTROL]: 'Bot Governance',
+  [FEATURE_KEYS.ENTERPRISE_GOVERNANCE]: 'Enterprise Governance',
+  [FEATURE_KEYS.SUBSCRIPTION_ADMIN]: 'Subscription Admin',
+};

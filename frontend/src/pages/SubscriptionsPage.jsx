@@ -229,6 +229,48 @@ function SubscriptionsPage() {
         </div>
       </section>
 
+      {/* Feature Matrix */}
+      <section style={{ marginTop: '2rem' }}>
+        <h2 style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>Plan Feature Matrix</h2>
+        <div className="table-responsive card">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Feature</th>
+                {plans.map(p => <th key={p.id} style={{ textAlign: 'center' }}>{p.name}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {/* Combine all unique feature keys and labels */}
+              {(() => {
+                const featureMap = new Map();
+                plans.forEach(plan => {
+                  plan.features.forEach(f => {
+                    if (!featureMap.has(f.feature_key)) {
+                      featureMap.set(f.feature_key, f.feature_label);
+                    }
+                  });
+                });
+                
+                return Array.from(featureMap.entries()).map(([key, label]) => (
+                  <tr key={key}>
+                    <td>{label}</td>
+                    {plans.map(plan => {
+                      const hasFeature = plan.features.some(f => f.feature_key === key && f.included);
+                      return (
+                        <td key={plan.id} style={{ textAlign: 'center' }}>
+                          {hasFeature ? <CheckCircle2 size={16} color="var(--color-success)" /> : <span className="muted">-</span>}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ));
+              })()}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       {/* Subscription Events */}
       <section>
         <h2 style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>Event Log</h2>

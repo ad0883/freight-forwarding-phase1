@@ -60,27 +60,29 @@ export function getModeColor(mode) {
 
 /* --- Navigation Config Per Mode --- */
 
+import { FEATURE_KEYS } from '../config/features.js';
+
 export function getNavigationGroups(mode) {
   switch (mode) {
     case 'operations':
       return [
         { label: 'Daily Work', links: [
           { to: '/today', label: 'Today', icon: Sun },
-          { to: '/shipments', label: 'Shipments', icon: Ship },
-          { to: '/validation-issues', label: 'Documents', icon: FileText },
-          { to: '/manual-review', label: 'Issues', icon: AlertTriangle },
+          { to: '/shipments', label: 'Shipments', icon: Ship, featureKey: FEATURE_KEYS.SHIPMENTS },
+          { to: '/validation-issues', label: 'Documents', icon: FileText, featureKey: FEATURE_KEYS.DOCUMENTS },
+          { to: '/manual-review', label: 'Issues', icon: AlertTriangle, featureKey: FEATURE_KEYS.ISSUES },
         ]},
         { label: 'Operations', links: [
-          { to: '/customs', label: 'Customs', icon: ShieldCheck },
-          { to: '/transport', label: 'Transport', icon: Truck },
-          { to: '/approvals', label: 'Approvals', icon: FileCheck },
+          { to: '/customs', label: 'Customs', icon: ShieldCheck, featureKey: FEATURE_KEYS.CUSTOMS },
+          { to: '/transport', label: 'Transport', icon: Truck, featureKey: FEATURE_KEYS.TRANSPORT },
+          { to: '/approvals', label: 'Approvals', icon: FileCheck, featureKey: FEATURE_KEYS.APPROVALS },
         ]},
         { label: 'Tools', links: [
-          { to: '/ai', label: 'AI Assistant', icon: Bot },
-          { to: '/control-tower', label: 'Management Dashboard', icon: Activity },
-          { to: '/predictive', label: 'Risk Alerts', icon: BarChart3 },
+          { to: '/ai', label: 'AI Assistant', icon: Bot, featureKey: FEATURE_KEYS.AI_ASSISTANT },
+          { to: '/control-tower', label: 'Management Dashboard', icon: Activity, featureKey: FEATURE_KEYS.MANAGEMENT_DASHBOARD },
+          { to: '/predictive', label: 'Risk Alerts', icon: BarChart3, featureKey: FEATURE_KEYS.RISK_ALERTS },
           { to: '/tasks', label: 'Tasks', icon: ClipboardList },
-          { to: '/finance', label: 'Finance', icon: CreditCard },
+          { to: '/finance', label: 'Finance', icon: CreditCard, featureKey: FEATURE_KEYS.BASIC_FINANCE },
           { to: '/reports', label: 'Reports', icon: BarChart3 },
         ]},
       ];
@@ -89,18 +91,18 @@ export function getNavigationGroups(mode) {
       return [
         { label: 'Daily Work', links: [
           { to: '/today', label: 'Today', icon: Sun },
-          { to: '/finance', label: 'Finance', icon: CreditCard },
-          { to: '/shipments', label: 'Shipments', icon: Ship },
-          { to: '/approvals', label: 'Approvals', icon: FileCheck },
+          { to: '/finance', label: 'Finance', icon: CreditCard, featureKey: FEATURE_KEYS.BASIC_FINANCE },
+          { to: '/shipments', label: 'Shipments', icon: Ship, featureKey: FEATURE_KEYS.SHIPMENTS },
+          { to: '/approvals', label: 'Approvals', icon: FileCheck, featureKey: FEATURE_KEYS.APPROVALS },
         ]},
         { label: 'Reports', links: [
-          { to: '/control-tower', label: 'Management Dashboard', icon: Activity },
+          { to: '/control-tower', label: 'Management Dashboard', icon: Activity, featureKey: FEATURE_KEYS.MANAGEMENT_DASHBOARD },
           { to: '/reports', label: 'Reports', icon: BarChart3 },
-          { to: '/ai', label: 'AI Assistant', icon: Bot },
+          { to: '/ai', label: 'AI Assistant', icon: Bot, featureKey: FEATURE_KEYS.AI_ASSISTANT },
         ]},
         { label: 'More', links: [
-          { to: '/validation-issues', label: 'Documents', icon: FileText },
-          { to: '/manual-review', label: 'Issues', icon: AlertTriangle },
+          { to: '/validation-issues', label: 'Documents', icon: FileText, featureKey: FEATURE_KEYS.DOCUMENTS },
+          { to: '/manual-review', label: 'Issues', icon: AlertTriangle, featureKey: FEATURE_KEYS.ISSUES },
         ]},
       ];
 
@@ -108,15 +110,15 @@ export function getNavigationGroups(mode) {
       return [
         { label: 'Daily Work', links: [
           { to: '/today', label: 'Today', icon: Sun },
-          { to: '/control-tower', label: 'Management Dashboard', icon: Activity },
-          { to: '/approvals', label: 'Approvals', icon: FileCheck },
-          { to: '/predictive', label: 'Risk Alerts', icon: BarChart3 },
+          { to: '/control-tower', label: 'Management Dashboard', icon: Activity, featureKey: FEATURE_KEYS.MANAGEMENT_DASHBOARD },
+          { to: '/approvals', label: 'Approvals', icon: FileCheck, featureKey: FEATURE_KEYS.APPROVALS },
+          { to: '/predictive', label: 'Risk Alerts', icon: BarChart3, featureKey: FEATURE_KEYS.RISK_ALERTS },
         ]},
         { label: 'Operations', links: [
-          { to: '/shipments', label: 'Shipments', icon: Ship },
-          { to: '/manual-review', label: 'Issues', icon: AlertTriangle },
-          { to: '/finance', label: 'Finance', icon: CreditCard },
-          { to: '/ai', label: 'AI Assistant', icon: Bot },
+          { to: '/shipments', label: 'Shipments', icon: Ship, featureKey: FEATURE_KEYS.SHIPMENTS },
+          { to: '/manual-review', label: 'Issues', icon: AlertTriangle, featureKey: FEATURE_KEYS.ISSUES },
+          { to: '/finance', label: 'Finance', icon: CreditCard, featureKey: FEATURE_KEYS.BASIC_FINANCE },
+          { to: '/ai', label: 'AI Assistant', icon: Bot, featureKey: FEATURE_KEYS.AI_ASSISTANT },
         ]},
         { label: 'More', links: [
           { to: '/reports', label: 'Reports', icon: BarChart3 },
@@ -128,36 +130,36 @@ export function getNavigationGroups(mode) {
       return [
         { label: 'Daily Work', links: [
           { to: '/today', label: 'Today', icon: Sun },
-          { to: '/shipments', label: 'Shipments', icon: Ship },
-          { to: '/validation-issues', label: 'Documents', icon: FileText },
-          { to: '/manual-review', label: 'Issues', icon: AlertTriangle },
+          { to: '/shipments', label: 'Shipments', icon: Ship, featureKey: FEATURE_KEYS.SHIPMENTS },
+          { to: '/validation-issues', label: 'Documents', icon: FileText, featureKey: FEATURE_KEYS.DOCUMENTS },
+          { to: '/manual-review', label: 'Issues', icon: AlertTriangle, featureKey: FEATURE_KEYS.ISSUES },
         ]},
         { label: 'Operations', links: [
-          { to: '/finance', label: 'Finance', icon: CreditCard },
-          { to: '/customs', label: 'Customs', icon: ShieldCheck },
-          { to: '/transport', label: 'Transport', icon: Truck },
-          { to: '/tracking', label: 'Tracking', icon: Satellite },
-          { to: '/approvals', label: 'Approvals', icon: FileCheck },
+          { to: '/finance', label: 'Finance', icon: CreditCard, featureKey: FEATURE_KEYS.BASIC_FINANCE },
+          { to: '/customs', label: 'Customs', icon: ShieldCheck, featureKey: FEATURE_KEYS.CUSTOMS },
+          { to: '/transport', label: 'Transport', icon: Truck, featureKey: FEATURE_KEYS.TRANSPORT },
+          { to: '/tracking', label: 'Tracking', icon: Satellite, featureKey: FEATURE_KEYS.TRACKING },
+          { to: '/approvals', label: 'Approvals', icon: FileCheck, featureKey: FEATURE_KEYS.APPROVALS },
         ]},
         { label: 'Management', links: [
-          { to: '/control-tower', label: 'Management Dashboard', icon: Activity },
-          { to: '/predictive', label: 'Risk Alerts', icon: BarChart3 },
-          { to: '/ai', label: 'AI Assistant', icon: Bot },
+          { to: '/control-tower', label: 'Management Dashboard', icon: Activity, featureKey: FEATURE_KEYS.MANAGEMENT_DASHBOARD },
+          { to: '/predictive', label: 'Risk Alerts', icon: BarChart3, featureKey: FEATURE_KEYS.RISK_ALERTS },
+          { to: '/ai', label: 'AI Assistant', icon: Bot, featureKey: FEATURE_KEYS.AI_ASSISTANT },
         ]},
         { label: 'More', links: [
           { to: '/tasks', label: 'Tasks', icon: ClipboardList },
-          { to: '/parties', label: 'Parties', icon: Users },
+          { to: '/parties', label: 'Parties', icon: Users, featureKey: FEATURE_KEYS.PARTIES },
           { to: '/reports', label: 'Reports', icon: BarChart3 },
           { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
           { to: '/notifications', label: 'Notifications', icon: Bell },
           { to: '/email', label: 'Email Automation', icon: Mail },
         ]},
         { label: 'Admin / Advanced', links: [
-          { to: '/enterprise', label: 'Admin Settings', icon: ShieldCheck },
-          { to: '/bot-governance', label: 'AI Control', icon: Bot },
-          { to: '/subscriptions', label: 'Subscriptions', icon: FileCheck },
+          { to: '/enterprise', label: 'Admin Settings', icon: ShieldCheck, featureKey: FEATURE_KEYS.ENTERPRISE_GOVERNANCE },
+          { to: '/bot-governance', label: 'AI Control', icon: Bot, featureKey: FEATURE_KEYS.AI_CONTROL },
+          { to: '/subscriptions', label: 'Subscriptions', icon: FileCheck, featureKey: FEATURE_KEYS.SUBSCRIPTION_ADMIN },
           { to: '/users', label: 'Users', icon: UserCog },
-          { to: '/audit-logs', label: 'Audit Logs', icon: FileClock },
+          { to: '/audit-logs', label: 'Audit Logs', icon: FileClock, featureKey: FEATURE_KEYS.SECURITY_AUDIT },
           { to: '/settings', label: 'Settings', icon: Settings },
           { to: '/admin/tools', label: 'Admin Tools', icon: ShieldCheck },
           { to: '/events', label: 'Events', icon: ClipboardList },
@@ -170,13 +172,13 @@ export function getNavigationGroups(mode) {
       return [
         { label: 'Overview', links: [
           { to: '/today', label: 'Today', icon: Sun },
-          { to: '/shipments', label: 'Shipments', icon: Ship },
+          { to: '/shipments', label: 'Shipments', icon: Ship, featureKey: FEATURE_KEYS.SHIPMENTS },
         ]},
         { label: 'Management', links: [
-          { to: '/control-tower', label: 'Management Dashboard', icon: Activity },
-          { to: '/predictive', label: 'Risk Alerts', icon: BarChart3 },
+          { to: '/control-tower', label: 'Management Dashboard', icon: Activity, featureKey: FEATURE_KEYS.MANAGEMENT_DASHBOARD },
+          { to: '/predictive', label: 'Risk Alerts', icon: BarChart3, featureKey: FEATURE_KEYS.RISK_ALERTS },
           { to: '/reports', label: 'Reports', icon: BarChart3 },
-          { to: '/ai', label: 'AI Assistant', icon: Bot },
+          { to: '/ai', label: 'AI Assistant', icon: Bot, featureKey: FEATURE_KEYS.AI_ASSISTANT },
         ]},
       ];
 

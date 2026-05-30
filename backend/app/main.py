@@ -46,7 +46,8 @@ from app.api.routes import (
     workflow_state_machine,
     subscriptions,
 )
-from app.api.deps import AuthenticatedUser
+from app.api.deps import AuthenticatedUser, require_feature
+from fastapi import Depends
 from app.core.config import settings
 from app.core.security import get_password_hash
 from app.db.indexes import ensure_performance_indexes
@@ -247,7 +248,7 @@ app.include_router(parties.router, prefix="/api")
 app.include_router(shipments.router, prefix="/api")
 app.include_router(bl_management.router, prefix="/api")
 app.include_router(demurrage.router, prefix="/api")
-app.include_router(document_intelligence.router, prefix="/api")
+app.include_router(document_intelligence.router, prefix="/api", dependencies=[Depends(require_feature("document_check"))])
 app.include_router(documents.router, prefix="/api")
 app.include_router(document_versions.router, prefix="/api")
 app.include_router(email.router, prefix="/api")
@@ -257,7 +258,7 @@ app.include_router(finance_control.router, prefix="/api")
 app.include_router(finance_control.shipment_finance_router, prefix="/api")
 app.include_router(tasks.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")
-app.include_router(ai.router, prefix="/api")
+app.include_router(ai.router, prefix="/api", dependencies=[Depends(require_feature("ai_assistant"))])
 app.include_router(followups.router, prefix="/api")
 app.include_router(events.router, prefix="/api")
 app.include_router(validation_issues.router, prefix="/api")
@@ -269,7 +270,7 @@ app.include_router(exception_cases.router, prefix="/api")
 app.include_router(exception_cases.shipment_exception_router, prefix="/api")
 app.include_router(approvals.router, prefix="/api")
 app.include_router(approvals.shipment_approval_router, prefix="/api")
-app.include_router(bot_governance.router, prefix="/api")
+app.include_router(bot_governance.router, prefix="/api", dependencies=[Depends(require_feature("ai_control"))])
 app.include_router(portal.router, prefix="/api")
 app.include_router(portal.admin_portal_router, prefix="/api")
 app.include_router(customs.router, prefix="/api")
@@ -277,13 +278,13 @@ app.include_router(customs.shipment_customs_router, prefix="/api")
 app.include_router(transport.router, prefix="/api")
 app.include_router(transport.shipment_transport_router, prefix="/api")
 app.include_router(transport.portal_transport_router, prefix="/api")
-app.include_router(tracking.router, prefix="/api")
-app.include_router(tracking.shipment_tracking_router, prefix="/api")
+app.include_router(tracking.router, prefix="/api", dependencies=[Depends(require_feature("tracking"))])
+app.include_router(tracking.shipment_tracking_router, prefix="/api", dependencies=[Depends(require_feature("tracking"))])
 app.include_router(tracking.portal_tracking_router, prefix="/api")
-app.include_router(control_tower.router, prefix="/api")
-app.include_router(predictive.router, prefix="/api")
-app.include_router(predictive.shipment_predictive_router, prefix="/api")
-app.include_router(enterprise.router, prefix="/api")
+app.include_router(control_tower.router, prefix="/api", dependencies=[Depends(require_feature("management_dashboard"))])
+app.include_router(predictive.router, prefix="/api", dependencies=[Depends(require_feature("risk_alerts"))])
+app.include_router(predictive.shipment_predictive_router, prefix="/api", dependencies=[Depends(require_feature("risk_alerts"))])
+app.include_router(enterprise.router, prefix="/api", dependencies=[Depends(require_feature("enterprise_governance"))])
 app.include_router(subscriptions.router, prefix="/api/subscriptions")
 
 

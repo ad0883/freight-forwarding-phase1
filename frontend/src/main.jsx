@@ -4,8 +4,12 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
 import './styles/global.css';
 
+import { FeatureProvider } from './context/FeatureContext.jsx';
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <BrowserRouter>
-    <App />
+    <FeatureProvider>
+      <App />
+    </FeatureProvider>
   </BrowserRouter>
 );

@@ -102,3 +102,25 @@ def require_write_access(current_user: AuthenticatedUser = Depends(get_current_u
             detail="View-only users cannot modify records",
         )
     return current_user
+
+
+def require_feature(feature_key: str):
+    def dependency(
+        current_user: AuthenticatedUser = Depends(get_current_user),
+        db: Session = Depends(get_db)
+    ) -> AuthenticatedUser:
+        # Import dynamically to avoid circular import issues if they exist
+        from app.services.subscription_service import require_feature_access
+        
+        # We need a proper User object to pass to the service, or we can just pass the current_user 
+        # since it shares similar attributes (like role and organization_id)
+        # We'll fetch the actual user object or adapt the service to accept AuthenticatedUser.
+        # Since subscription_service expects `user: User`, and uses `user.organization_id`, `user.role`
+        user = db.query(User).filter(User.id == current_user.id).first()
+        if not user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+            
+        require_feature_access(db, user, feature_key)
+        return current_user
+
+    return dependency
