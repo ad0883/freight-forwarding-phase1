@@ -32,6 +32,7 @@ import TrackingPage from './pages/TrackingPage.jsx';
 import ControlTowerPage from './pages/ControlTowerPage.jsx';
 import PredictivePage from './pages/PredictivePage.jsx';
 import EnterprisePage from './pages/EnterprisePage.jsx';
+import SubscriptionsPage from './pages/SubscriptionsPage.jsx';
 
 function App() {
   return (
@@ -199,6 +200,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['ADMIN']}>
               <EnterprisePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="subscriptions"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN']}>
+              <SubscriptionsPage />
             </ProtectedRoute>
           }
         />

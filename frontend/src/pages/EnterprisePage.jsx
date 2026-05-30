@@ -10,6 +10,7 @@ function EnterprisePage() {
     return <AccessDeniedCard title="Admin Settings" message="This section is available to Admin users only. Contact your admin if you need access." />;
   }
   const [health, setHealth] = useState(null);
+  const [subscription, setSubscription] = useState(null);
   const [orgs, setOrgs] = useState([]);
   const [roles, setRoles] = useState([]);
   const [permissions, setPermissions] = useState([]);
@@ -27,12 +28,14 @@ function EnterprisePage() {
         api.get('/enterprise/roles'),
         api.get('/enterprise/permissions/matrix'),
         api.get('/enterprise/security-events'),
+        api.get('/subscriptions/summary'),
       ]);
       if (results[0].status === 'fulfilled') setHealth(results[0].value.data);
       if (results[1].status === 'fulfilled') setOrgs(results[1].value.data);
       if (results[2].status === 'fulfilled') setRoles(results[2].value.data);
       if (results[3].status === 'fulfilled') setPermissions(results[3].value.data);
       if (results[4].status === 'fulfilled') setSecurityEvents(results[4].value.data);
+      if (results[5].status === 'fulfilled') setSubscription(results[5].value.data);
       const allFailed = results.every(r => r.status === 'rejected');
       if (allFailed) setError('Failed to load enterprise data');
     } catch (err) { setError(err.response?.data?.detail || 'Failed to load'); }
@@ -45,7 +48,23 @@ function EnterprisePage() {
 
   return (
     <div className="page-stack">
-      <div className="page-header"><div><p className="eyebrow">Admin</p><h1>Admin Settings</h1></div></div>
+      <div className="page-header">
+        <div>
+          <p className="eyebrow">Admin</p>
+          <h1>Admin Settings</h1>
+        </div>
+        {subscription && (
+          <div className="page-header-actions">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--color-surface)', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--color-border)', fontSize: '0.85rem' }}>
+              <span className="muted">Plan:</span> <strong>{subscription.plan_name}</strong>
+              <span className={`badge status-${subscription.is_active ? 'active' : 'critical'}`} style={{ marginLeft: '0.5rem' }}>{subscription.status.toUpperCase()}</span>
+              {subscription.is_trial && subscription.trial_ends_at && (
+                <span className="muted" style={{ marginLeft: '0.5rem', fontSize: '0.75rem' }}>Ends: {new Date(subscription.trial_ends_at).toLocaleDateString()}</span>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
       <p className="page-helper">Manage organization settings, users, roles, and system health.</p>
 
       <nav style={{ display: 'flex', gap: '2px', borderBottom: '2px solid var(--color-border)', flexWrap: 'wrap' }}>

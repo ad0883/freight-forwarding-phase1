@@ -44,6 +44,7 @@ from app.api.routes import (
     users,
     validation_issues,
     workflow_state_machine,
+    subscriptions,
 )
 from app.api.deps import AuthenticatedUser
 from app.core.config import settings
@@ -283,6 +284,7 @@ app.include_router(control_tower.router, prefix="/api")
 app.include_router(predictive.router, prefix="/api")
 app.include_router(predictive.shipment_predictive_router, prefix="/api")
 app.include_router(enterprise.router, prefix="/api")
+app.include_router(subscriptions.router, prefix="/api/subscriptions")
 
 
 @app.get("/")

@@ -29,6 +29,7 @@ from app.api.routes import (
     users,
     validation_issues,
     workflow_state_machine,
+    subscriptions,
 )
 
 __all__ = [
@@ -62,4 +63,5 @@ __all__ = [
     "users",
     "validation_issues",
     "workflow_state_machine",
+    "subscriptions",
 ]

@@ -163,6 +163,12 @@ from app.models.workflow_state_machine import (
     WorkflowTransitionDefinition,
     WorkflowTransitionLog,
 )
+from app.models.subscription import (
+    SubscriptionPlan,
+    SubscriptionPlanFeature,
+    OrganizationSubscription,
+    SubscriptionEvent,
+)
 
 __all__ = [
     "Alert",
@@ -305,4 +311,8 @@ __all__ = [
     "OrganizationRole",
     "OrganizationSetting",
     "RolePermissionPolicy",
+    "SubscriptionPlan",
+    "SubscriptionPlanFeature",
+    "OrganizationSubscription",
+    "SubscriptionEvent",
 ]

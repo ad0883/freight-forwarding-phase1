@@ -155,6 +155,7 @@ export function getNavigationGroups(mode) {
         { label: 'Admin / Advanced', links: [
           { to: '/enterprise', label: 'Admin Settings', icon: ShieldCheck },
           { to: '/bot-governance', label: 'AI Control', icon: Bot },
+          { to: '/subscriptions', label: 'Subscriptions', icon: FileCheck },
           { to: '/users', label: 'Users', icon: UserCog },
           { to: '/audit-logs', label: 'Audit Logs', icon: FileClock },
           { to: '/settings', label: 'Settings', icon: Settings },
