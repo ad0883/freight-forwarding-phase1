@@ -9,6 +9,7 @@ from app.schemas.ai import AIAskRequest, AIAskResponse, AIExamplesResponse, AISt
 from app.services.ai_context_service import build_ai_context
 from app.services.ai_fallback_service import build_fallback_response
 from app.services.llm_service import LLMServiceError, ai_can_use_llm, ask_llm
+from app.services.usage_limit_service import require_usage_available
 
 
 router = APIRouter(prefix="/ai", tags=["ai-assistant"])
@@ -77,6 +78,9 @@ def ask_ai(
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = Depends(get_current_user),
 ) -> AIAskResponse:
+    if current_user.organization_id:
+        require_usage_available(db, current_user.organization_id, "ai_requests_per_month", increment=1, user=current_user)
+
     context = build_ai_context(db, payload, settings.AI_MAX_CONTEXT_ROWS, current_user=current_user)
     fallback_reason = None
     response: AIAskResponse

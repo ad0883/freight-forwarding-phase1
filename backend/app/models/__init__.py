@@ -169,6 +169,11 @@ from app.models.subscription import (
     OrganizationSubscription,
     SubscriptionEvent,
 )
+from app.models.usage_limit import (
+    SubscriptionUsageLimit,
+    OrganizationUsageCounter,
+    UsageEvent,
+)
 
 __all__ = [
     "Alert",
@@ -315,4 +320,7 @@ __all__ = [
     "SubscriptionPlanFeature",
     "OrganizationSubscription",
     "SubscriptionEvent",
+    "SubscriptionUsageLimit",
+    "OrganizationUsageCounter",
+    "UsageEvent",
 ]

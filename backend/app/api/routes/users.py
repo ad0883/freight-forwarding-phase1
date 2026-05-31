@@ -7,6 +7,7 @@ from app.models.user import User
 from app.schemas.user import AdminPasswordResetRequest, UserCreate, UserRead, UserUpdate
 from app.services.audit_service import changed_fields, record_audit_log
 from app.services.organization_scope_service import assign_default_organization
+from app.services.usage_limit_service import require_usage_available
 
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -29,6 +30,10 @@ def create_user(
     existing = db.query(User).filter(User.email == user_in.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
+        
+    if current_user.organization_id:
+        require_usage_available(db, current_user.organization_id, "users", increment=1, user=current_user)
+        
     user = User(
         name=user_in.name,
         email=str(user_in.email),

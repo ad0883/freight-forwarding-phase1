@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client.js';
 import { ErrorState } from '../components/States.jsx';
+import { useUsage } from '../context/UsageContext.jsx';
 
 const initialForm = {
   type: 'export',
@@ -37,6 +38,11 @@ function CreateShipmentPage() {
   const [parties, setParties] = useState([]);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const { isLimitReached, isNearLimit, getUsageMessage } = useUsage();
+  
+  const limitReached = isLimitReached('shipments_per_month');
+  const nearLimit = isNearLimit('shipments_per_month');
+  const usageMessage = getUsageMessage('shipments_per_month');
 
   useEffect(() => {
     async function loadParties() {
@@ -78,6 +84,17 @@ function CreateShipmentPage() {
       </div>
 
       <ErrorState message={error} />
+      
+      {limitReached && (
+        <div className="bg-red-50 p-4 rounded-md mb-4 border border-red-200">
+          <p className="text-sm text-red-700 font-medium">Usage Limit Reached: {usageMessage}</p>
+        </div>
+      )}
+      {!limitReached && nearLimit && (
+        <div className="bg-yellow-50 p-4 rounded-md mb-4 border border-yellow-200">
+          <p className="text-sm text-yellow-700 font-medium">Approaching Limit: {usageMessage}</p>
+        </div>
+      )}
 
       <form className="panel form-grid" onSubmit={handleSubmit}>
         <div className="panel-header span-2 no-margin">
@@ -165,7 +182,7 @@ function CreateShipmentPage() {
           <button className="secondary-button" type="button" onClick={() => navigate('/shipments')}>
             Cancel
           </button>
-          <button className="primary-button" type="submit" disabled={saving}>
+          <button className="primary-button" type="submit" disabled={saving || limitReached}>
             <Save size={18} />
             <span>{saving ? 'Creating...' : 'Create Shipment'}</span>
           </button>

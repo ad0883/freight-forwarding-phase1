@@ -27,6 +27,7 @@ from app.services.document_version_service import (
     reject_document_version,
     rollback_to_version,
 )
+from app.services.usage_limit_service import require_usage_available
 
 
 router = APIRouter(tags=["document-versions"])
@@ -69,6 +70,10 @@ def upload_version_route(
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = Depends(require_write_access),
 ) -> DocumentVersion:
+    if current_user.organization_id:
+        require_usage_available(db, current_user.organization_id, "document_uploads_per_month", increment=1, user=current_user)
+        require_usage_available(db, current_user.organization_id, "documents_total", increment=1, user=current_user)
+
     document_file = store_document_file(
         db,
         file,
@@ -278,6 +283,10 @@ def upload_shipment_version_route(
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = Depends(require_write_access),
 ) -> DocumentVersion:
+    if current_user.organization_id:
+        require_usage_available(db, current_user.organization_id, "document_uploads_per_month", increment=1, user=current_user)
+        require_usage_available(db, current_user.organization_id, "documents_total", increment=1, user=current_user)
+
     document_file = store_document_file(
         db,
         file,

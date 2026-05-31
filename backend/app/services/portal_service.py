@@ -12,6 +12,7 @@ from app.models.portal import (
     PortalNotification, PortalPartyLink, PortalRequest,
     PortalRequestComment, PortalShipmentAccess,
 )
+from app.services.usage_limit_service import require_usage_available
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +149,9 @@ def mark_notification_read(db: Session, notification_id: int, portal_account: Po
 # --- Admin Management ---
 
 def create_portal_account(db: Session, data: dict[str, Any], user: AuthenticatedUser) -> PortalAccount:
+    if user.organization_id:
+        require_usage_available(db, user.organization_id, "portal_users", increment=1, user=user)
+        
     acct = PortalAccount(
         email=data["email"], full_name=data["full_name"],
         account_type=data.get("account_type", "exporter"),

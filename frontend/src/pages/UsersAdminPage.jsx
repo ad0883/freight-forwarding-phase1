@@ -2,6 +2,7 @@ import { KeyRound, Plus, ShieldCheck, UserCheck, UserX } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import api from '../api/client.js';
 import { ConfirmDialog, EmptyState, ErrorState, LoadingState, RoleBadge } from '../components/States.jsx';
+import { useUsage } from '../context/UsageContext.jsx';
 
 const initialForm = {
   name: '',
@@ -20,6 +21,11 @@ function UsersAdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  
+  const { isLimitReached, isNearLimit, getUsageMessage, fetchUsage } = useUsage();
+  const limitReached = isLimitReached('users');
+  const nearLimit = isNearLimit('users');
+  const usageMessage = getUsageMessage('users');
 
   async function load() {
     setLoading(true);
@@ -58,6 +64,7 @@ function UsersAdminPage() {
       setForm(initialForm);
       setNotice('User created');
       await load();
+      fetchUsage();
     } catch (err) {
       setError(err.response?.data?.detail || 'Unable to create user');
     }
@@ -117,6 +124,17 @@ function UsersAdminPage() {
       </div>
       <ErrorState message={error} />
       {notice && <p className="success-text">{notice}</p>}
+      
+      {limitReached && (
+        <div className="bg-red-50 p-4 rounded-md mb-4 border border-red-200">
+          <p className="text-sm text-red-700 font-medium">Usage Limit Reached: {usageMessage}</p>
+        </div>
+      )}
+      {!limitReached && nearLimit && (
+        <div className="bg-yellow-50 p-4 rounded-md mb-4 border border-yellow-200">
+          <p className="text-sm text-yellow-700 font-medium">Approaching Limit: {usageMessage}</p>
+        </div>
+      )}
 
       <form className="panel form-grid" onSubmit={createUser}>
         <div className="panel-header span-2 no-margin">
@@ -143,7 +161,7 @@ function UsersAdminPage() {
           </select>
         </label>
         <div className="form-actions span-2">
-          <button className="primary-button" type="submit">
+          <button className="primary-button" type="submit" disabled={limitReached}>
             <Plus size={18} />
             <span>Create User</span>
           </button>

@@ -14,6 +14,7 @@ from app.services.predictive.predictive_service import (
     list_predictions, record_outcome, review_recommendation, run_predictions,
     list_prediction_models,
 )
+from app.services.usage_limit_service import require_usage_available
 
 router = APIRouter(prefix="/predictive", tags=["predictive"])
 shipment_predictive_router = APIRouter(prefix="/shipments", tags=["shipment-predictive"])
@@ -87,12 +88,16 @@ def list_runs(limit: int = Query(20, ge=1, le=100), db: Session = Depends(get_db
 
 @router.post("/run", response_model=RunRead, status_code=201)
 def run_pred(request: Request, db: Session = Depends(get_db), current_user: AuthenticatedUser = OperationalUser):
+    if current_user.organization_id:
+        require_usage_available(db, current_user.organization_id, "prediction_runs_per_month", increment=1, user=current_user)
     run = run_predictions(db, scope="all_active", user=current_user)
     record_audit_log(db, current_user, "predictive.run", "prediction_run", entity_id=run.id, description=f"Prediction run: {run.records_created} records", request=request)
     return RunRead.model_validate(run)
 
 @router.post("/run/shipment/{shipment_id}", response_model=RunRead, status_code=201)
 def run_pred_shipment(shipment_id: int, db: Session = Depends(get_db), current_user: AuthenticatedUser = OperationalUser):
+    if current_user.organization_id:
+        require_usage_available(db, current_user.organization_id, "prediction_runs_per_month", increment=1, user=current_user)
     run = run_predictions(db, scope="shipment", user=current_user, shipment_id=shipment_id)
     return RunRead.model_validate(run)
 
@@ -145,5 +150,7 @@ def shipment_predictions(shipment_id: int, db: Session = Depends(get_db), curren
 
 @shipment_predictive_router.post("/{shipment_id}/predictions/run", response_model=RunRead, status_code=201)
 def shipment_run_pred(shipment_id: int, db: Session = Depends(get_db), current_user: AuthenticatedUser = OperationalUser):
+    if current_user.organization_id:
+        require_usage_available(db, current_user.organization_id, "prediction_runs_per_month", increment=1, user=current_user)
     run = run_predictions(db, scope="shipment", user=current_user, shipment_id=shipment_id)
     return RunRead.model_validate(run)

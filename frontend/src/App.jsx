@@ -33,6 +33,7 @@ import ControlTowerPage from './pages/ControlTowerPage.jsx';
 import PredictivePage from './pages/PredictivePage.jsx';
 import EnterprisePage from './pages/EnterprisePage.jsx';
 import SubscriptionsPage from './pages/SubscriptionsPage.jsx';
+import UsageLimitsPage from './pages/UsageLimitsPage.jsx';
 import FeatureGate from './components/FeatureGate.jsx';
 import { FEATURE_KEYS } from './config/features.js';
 
@@ -222,6 +223,14 @@ function App() {
               <FeatureGate featureKey={FEATURE_KEYS.SUBSCRIPTION_ADMIN}>
                 <SubscriptionsPage />
               </FeatureGate>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="usage-limits"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'STAFF']}>
+              <UsageLimitsPage />
             </ProtectedRoute>
           }
         />

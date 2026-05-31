@@ -23,6 +23,7 @@ import ContainersPanel from '../components/ContainersPanel.jsx';
 import ShipmentFinancePanel from '../components/ShipmentFinancePanel.jsx';
 import WorkflowPanel from '../components/WorkflowPanel.jsx';
 import { getRoleMode, getShipmentTabOrder } from '../utils/roleMode.js';
+import { useUsage } from '../context/UsageContext.jsx';
 
 const exportStatuses = [
   'Booking Received',
@@ -305,6 +306,11 @@ function ShipmentDetailPage() {
   const [notice, setNotice] = useState('');
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [confirmDeleteTask, setConfirmDeleteTask] = useState(null);
+  
+  const { isLimitReached, isNearLimit, getUsageMessage, fetchUsage } = useUsage();
+  const limitReached = isLimitReached('document_uploads_per_month');
+  const nearLimit = isNearLimit('document_uploads_per_month');
+  const usageMessage = getUsageMessage('document_uploads_per_month');
 
   const canWrite = currentUser && currentUser.role !== 'VIEW_ONLY';
   const canAdmin = currentUser?.role === 'ADMIN';
@@ -450,6 +456,7 @@ function ShipmentDetailPage() {
       setUploadTarget(null);
       setUploadDraft(emptyUploadDraft());
       setNotice('Document version uploaded');
+      fetchUsage();
       refreshDocumentsAfterUpload().catch(() => {
         setNotice('Document version uploaded. Refresh the page if the latest details do not appear.');
       });
@@ -1279,6 +1286,18 @@ function ShipmentDetailPage() {
                     Cancel
                   </button>
                 </div>
+                
+                {limitReached && (
+                  <div className="span-2 bg-red-50 p-4 rounded-md border border-red-200">
+                    <p className="text-sm text-red-700 font-medium">Usage Limit Reached: {usageMessage}</p>
+                  </div>
+                )}
+                {!limitReached && nearLimit && (
+                  <div className="span-2 bg-yellow-50 p-4 rounded-md border border-yellow-200">
+                    <p className="text-sm text-yellow-700 font-medium">Approaching Limit: {usageMessage}</p>
+                  </div>
+                )}
+
                 <label>
                   File
                   <input
@@ -1315,7 +1334,7 @@ function ShipmentDetailPage() {
                   />
                 </label>
                 <div className="form-actions span-2">
-                  <button className="primary-button" type="submit" disabled={documentBusy}>
+                  <button className="primary-button" type="submit" disabled={documentBusy || limitReached}>
                     <UploadCloud size={18} />
                     <span>Upload Version</span>
                   </button>

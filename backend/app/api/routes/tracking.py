@@ -50,6 +50,7 @@ from app.services.tracking.tracking_sync_service import (
     list_sync_runs,
     run_tracking_sync,
 )
+from app.services.usage_limit_service import require_usage_available
 
 router = APIRouter(prefix="/tracking", tags=["tracking"])
 shipment_tracking_router = APIRouter(prefix="/shipments", tags=["shipment-tracking"])
@@ -533,6 +534,9 @@ def run_sync(
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = OperationalUser,
 ):
+    if current_user.organization_id:
+        require_usage_available(db, current_user.organization_id, "tracking_syncs_per_month", increment=1, user=current_user)
+        
     sync = run_tracking_sync(db, scope="manual", user=current_user, provider_id=provider_id, shipment_id=shipment_id)
     record_audit_log(db, current_user, "tracking.sync_run", "tracking_sync_run", entity_id=sync.id, description=f"Tracking sync: {sync.status}, {sync.observations_created} observations", request=request)
     return SyncRunRead.model_validate(sync)
@@ -545,6 +549,9 @@ def run_watch_sync(
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = OperationalUser,
 ):
+    if current_user.organization_id:
+        require_usage_available(db, current_user.organization_id, "tracking_syncs_per_month", increment=1, user=current_user)
+        
     sync = run_tracking_sync(db, scope="single_watch_item", user=current_user, watch_item_id=watch_item_id)
     return SyncRunRead.model_validate(sync)
 
@@ -578,6 +585,9 @@ def shipment_run_sync(
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = OperationalUser,
 ):
+    if current_user.organization_id:
+        require_usage_available(db, current_user.organization_id, "tracking_syncs_per_month", increment=1, user=current_user)
+        
     sync = run_tracking_sync(db, scope="shipment", user=current_user, shipment_id=shipment_id)
     return SyncRunRead.model_validate(sync)
 

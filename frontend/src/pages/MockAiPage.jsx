@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import api from '../api/client.js';
 import { ErrorState } from '../components/States.jsx';
 import { getRoleMode, getRoleHelperPrefix } from '../utils/roleMode.js';
+import { useUsage } from '../context/UsageContext.jsx';
 
 const fallbackPrompts = [
   'What shipments need attention today?',
@@ -65,6 +66,11 @@ function MockAiPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const chatEndRef = useRef(null);
+  
+  const { isLimitReached, isNearLimit, getUsageMessage, fetchUsage } = useUsage();
+  const limitReached = isLimitReached('ai_requests_per_month');
+  const nearLimit = isNearLimit('ai_requests_per_month');
+  const usageMessage = getUsageMessage('ai_requests_per_month');
 
   useEffect(() => {
     async function loadAssistantMeta() {
@@ -108,6 +114,7 @@ function MockAiPage() {
       setError(err.response?.data?.detail || 'Unable to ask AI assistant');
     } finally {
       setLoading(false);
+      fetchUsage();
     }
   }
 
@@ -137,6 +144,17 @@ function MockAiPage() {
           For unsafe requests, the assistant will guide you to the correct manual workflow.
         </div>
       </div>
+      
+      {limitReached && (
+        <div className="bg-red-50 p-4 rounded-md mb-4 border border-red-200">
+          <p className="text-sm text-red-700 font-medium">Usage Limit Reached: {usageMessage}</p>
+        </div>
+      )}
+      {!limitReached && nearLimit && (
+        <div className="bg-yellow-50 p-4 rounded-md mb-4 border border-yellow-200">
+          <p className="text-sm text-yellow-700 font-medium">Approaching Limit: {usageMessage}</p>
+        </div>
+      )}
 
       <section className="panel ai-panel">
         <div className="prompt-row">
@@ -179,8 +197,9 @@ function MockAiPage() {
             value={question}
             onChange={(event) => setQuestion(event.target.value)}
             placeholder="Ask about shipments, finance, demurrage, BL, or next actions"
+            disabled={limitReached}
           />
-          <button className="primary-button" type="submit" disabled={loading}>
+          <button className="primary-button" type="submit" disabled={loading || limitReached}>
             <Send size={18} />
             <span>{loading ? 'Asking...' : 'Ask'}</span>
           </button>

@@ -158,6 +158,7 @@ export function getNavigationGroups(mode) {
           { to: '/enterprise', label: 'Admin Settings', icon: ShieldCheck, featureKey: FEATURE_KEYS.ENTERPRISE_GOVERNANCE },
           { to: '/bot-governance', label: 'AI Control', icon: Bot, featureKey: FEATURE_KEYS.AI_CONTROL },
           { to: '/subscriptions', label: 'Subscriptions', icon: FileCheck, featureKey: FEATURE_KEYS.SUBSCRIPTION_ADMIN },
+          { to: '/usage-limits', label: 'Usage Limits', icon: Activity },
           { to: '/users', label: 'Users', icon: UserCog },
           { to: '/audit-logs', label: 'Audit Logs', icon: FileClock, featureKey: FEATURE_KEYS.SECURITY_AUDIT },
           { to: '/settings', label: 'Settings', icon: Settings },

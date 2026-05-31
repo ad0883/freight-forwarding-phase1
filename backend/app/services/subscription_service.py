@@ -93,29 +93,53 @@ def seed_default_subscription_plans(db: Session):
     db.add_all([starter_plan, prof_plan, enterprise_plan, internal_plan])
     db.commit()
 
+    from app.core.feature_keys import FeatureKeys
     # Features for Starter
     features_starter = [
-        "Shipments", "Parties", "Documents", "Containers", "Basic finance",
-        "Customs tracking", "Transport tracking", "Issues", "Basic dashboard"
+        (FeatureKeys.SHIPMENTS, "Shipments"),
+        (FeatureKeys.PARTIES, "Parties"),
+        (FeatureKeys.DOCUMENTS, "Documents"),
+        (FeatureKeys.CONTAINERS, "Containers"),
+        (FeatureKeys.BASIC_FINANCE, "Basic finance"),
+        (FeatureKeys.CUSTOMS, "Customs tracking"),
+        (FeatureKeys.TRANSPORT, "Transport tracking"),
+        (FeatureKeys.ISSUES, "Issues"),
+        (FeatureKeys.MANAGEMENT_DASHBOARD, "Basic dashboard"),
     ]
-    for idx, f in enumerate(features_starter):
-        db.add(SubscriptionPlanFeature(plan_id=starter_plan.id, feature_key=f.lower().replace(" ", "_"), feature_label=f, sort_order=idx))
+    for idx, (key, label) in enumerate(features_starter):
+        db.add(SubscriptionPlanFeature(plan_id=starter_plan.id, feature_key=key, feature_label=label, sort_order=idx))
 
     # Features for Professional
     features_prof = [
-        "Everything in Starter", "Document Check / Document Intelligence", "Management Dashboard",
-        "Approvals", "Tracking", "Risk Alerts", "AI Assistant", "More users/shipments placeholder"
+        ("everything_starter", "Everything in Starter"),
+        (FeatureKeys.DOCUMENT_CHECK, "Document Intelligence"),
+        (FeatureKeys.MANAGEMENT_DASHBOARD, "Management Dashboard"),
+        (FeatureKeys.APPROVALS, "Approvals"),
+        (FeatureKeys.TRACKING, "Tracking"),
+        (FeatureKeys.RISK_ALERTS, "Risk Alerts"),
+        (FeatureKeys.AI_ASSISTANT, "AI Assistant"),
+        ("more_users", "More users/shipments"),
     ]
-    for idx, f in enumerate(features_prof):
-        db.add(SubscriptionPlanFeature(plan_id=prof_plan.id, feature_key=f.lower().replace(" ", "_"), feature_label=f, sort_order=idx))
+    for idx, (key, label) in enumerate(features_prof):
+        db.add(SubscriptionPlanFeature(plan_id=prof_plan.id, feature_key=key, feature_label=label, sort_order=idx))
 
     # Features for Enterprise
     features_enterprise = [
-        "Everything in Professional", "Advanced Admin Settings", "Role policies", "AI Control",
-        "Audit/security", "Custom limits", "Custom workflows placeholder"
+        ("everything_prof", "Everything in Professional"),
+        (FeatureKeys.ENTERPRISE_GOVERNANCE, "Advanced Admin Settings"),
+        (FeatureKeys.ROLE_POLICIES, "Role policies"),
+        (FeatureKeys.AI_CONTROL, "AI Control"),
+        (FeatureKeys.SECURITY_AUDIT, "Audit/security"),
+        ("custom_limits", "Custom limits"),
+        ("custom_workflows", "Custom workflows"),
     ]
-    for idx, f in enumerate(features_enterprise):
-        db.add(SubscriptionPlanFeature(plan_id=enterprise_plan.id, feature_key=f.lower().replace(" ", "_"), feature_label=f, sort_order=idx))
+    for idx, (key, label) in enumerate(features_enterprise):
+        db.add(SubscriptionPlanFeature(plan_id=enterprise_plan.id, feature_key=key, feature_label=label, sort_order=idx))
+
+    # Features for Internal Trial (All features)
+    features_internal = features_starter + features_prof + features_enterprise
+    for idx, (key, label) in enumerate(features_internal):
+        db.add(SubscriptionPlanFeature(plan_id=internal_plan.id, feature_key=key, feature_label=label, sort_order=idx))
 
     db.commit()
     return {"status": "Plans seeded"}
@@ -305,6 +329,26 @@ def get_subscription_summary(db: Session, user: User):
         "features": sub.plan.features
     }
 
+def get_all_plan_features(db: Session, plan: SubscriptionPlan) -> dict:
+    features_dict = {}
+    for feature in plan.features:
+        if feature.included:
+            features_dict[feature.feature_key] = True
+            
+    if "everything_prof" in features_dict:
+        prof = db.query(SubscriptionPlan).filter(SubscriptionPlan.plan_key == "professional").first()
+        if prof:
+            for f in prof.features:
+                if f.included: features_dict[f.feature_key] = True
+                
+    if "everything_starter" in features_dict or "everything_prof" in features_dict:
+        starter = db.query(SubscriptionPlan).filter(SubscriptionPlan.plan_key == "starter").first()
+        if starter:
+            for f in starter.features:
+                if f.included: features_dict[f.feature_key] = True
+                
+    return features_dict
+
 def has_feature_access(db: Session, user: User, feature_key: str, organization_id: Optional[int] = None) -> bool:
     if not organization_id:
         organization_id = user.organization_id
@@ -315,15 +359,10 @@ def has_feature_access(db: Session, user: User, feature_key: str, organization_i
     
     if sub.subscription_status in ["past_due", "suspended", "expired", "cancelled"]:
         # Block advanced features for overdue/suspended accounts
-        # Note: In a real system, you might want more granular rules here.
-        # But per the spec, if past_due, we should allow read access to core modules and block advanced ones safely.
-        # For S4, returning False for suspended limits their access, but core features like shipments might be explicitly allowed if they aren't gated by `require_feature`.
         pass
     
-    for feature in sub.plan.features:
-        if feature.feature_key == feature_key and feature.included:
-            return True
-    return False
+    all_features = get_all_plan_features(db, sub.plan)
+    return all_features.get(feature_key, False)
 
 def require_feature_access(db: Session, user: User, feature_key: str, organization_id: Optional[int] = None):
     # Admins always need subscription access too, but we give a backdoor for subscription admin to fix subscriptions
@@ -348,10 +387,7 @@ def get_feature_access_summary(db: Session, user: User, organization_id: Optiona
     if not sub or not sub.plan:
         raise HTTPException(status_code=404, detail="No subscription found")
 
-    features_dict = {}
-    for feature in sub.plan.features:
-        if feature.included:
-            features_dict[feature.feature_key] = True
+    features_dict = get_all_plan_features(db, sub.plan)
 
     # Subscription admin fallback for admins
     if user.role in ["ADMIN", "ORG_ADMIN"]:

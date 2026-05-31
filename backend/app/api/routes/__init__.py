@@ -30,6 +30,7 @@ from app.api.routes import (
     validation_issues,
     workflow_state_machine,
     subscriptions,
+    usage_limits,
 )
 
 __all__ = [
@@ -64,4 +65,5 @@ __all__ = [
     "validation_issues",
     "workflow_state_machine",
     "subscriptions",
+    "usage_limits",
 ]

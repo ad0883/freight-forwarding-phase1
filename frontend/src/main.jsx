@@ -6,10 +6,14 @@ import './styles/global.css';
 
 import { FeatureProvider } from './context/FeatureContext.jsx';
 
+import { UsageProvider } from './context/UsageContext.jsx';
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <BrowserRouter>
     <FeatureProvider>
-      <App />
+      <UsageProvider>
+        <App />
+      </UsageProvider>
     </FeatureProvider>
   </BrowserRouter>
 );

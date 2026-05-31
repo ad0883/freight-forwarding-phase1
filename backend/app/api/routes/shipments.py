@@ -21,7 +21,7 @@ from app.services.event_service import OperationalEventType, diff_state, record_
 from app.services.shipment_service import create_shipment_with_defaults
 from app.services.audit_service import changed_fields, record_audit_log
 from app.services.workflow_service import update_workflow_status
-
+from app.services.usage_limit_service import require_usage_available
 
 router = APIRouter(prefix="/shipments", tags=["shipments"])
 
@@ -77,6 +77,10 @@ def create_shipment(
     current_user: AuthenticatedUser = Depends(require_write_access),
 ) -> Shipment:
     _validate_party_ids(db, shipment_in.exporter_id, shipment_in.importer_id)
+    
+    if current_user.organization_id:
+        require_usage_available(db, current_user.organization_id, "shipments_per_month", increment=1, user=current_user)
+
     shipment = create_shipment_with_defaults(db, shipment_in, current_user.id)
     invalidate_dashboard_cache()
     record_audit_log(
