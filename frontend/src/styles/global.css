@@ -2343,3 +2343,31 @@ label {
 .finance-today-metric.has-issue strong {
   color: var(--color-danger);
 }
+
+/* S6 Billing card fallback components */
+.billing-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.billing-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.billing-card-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.billing-card-content {
+  color: #374151;
+}

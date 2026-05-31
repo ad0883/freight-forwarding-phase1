@@ -34,6 +34,7 @@ import PredictivePage from './pages/PredictivePage.jsx';
 import EnterprisePage from './pages/EnterprisePage.jsx';
 import SubscriptionsPage from './pages/SubscriptionsPage.jsx';
 import UsageLimitsPage from './pages/UsageLimitsPage.jsx';
+import BillingAdminPage from './pages/BillingAdminPage.jsx';
 import FeatureGate from './components/FeatureGate.jsx';
 import { FEATURE_KEYS } from './config/features.js';
 
@@ -231,6 +232,14 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['ADMIN', 'STAFF']}>
               <UsageLimitsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="billing"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN']}>
+              <BillingAdminPage />
             </ProtectedRoute>
           }
         />

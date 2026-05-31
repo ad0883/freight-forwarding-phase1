@@ -46,6 +46,7 @@ from app.api.routes import (
     workflow_state_machine,
     subscriptions,
     usage_limits,
+    billing,
 )
 from app.api.deps import AuthenticatedUser, require_feature
 from fastapi import Depends
@@ -288,6 +289,7 @@ app.include_router(predictive.shipment_predictive_router, prefix="/api", depende
 app.include_router(enterprise.router, prefix="/api", dependencies=[Depends(require_feature("enterprise_governance"))])
 app.include_router(subscriptions.router, prefix="/api/subscriptions")
 app.include_router(usage_limits.router, prefix="/api")
+app.include_router(billing.router, prefix="/api/billing")
 
 
 @app.get("/")

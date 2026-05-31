@@ -66,4 +66,5 @@ __all__ = [
     "workflow_state_machine",
     "subscriptions",
     "usage_limits",
+    "billing",
 ]

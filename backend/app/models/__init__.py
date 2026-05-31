@@ -174,6 +174,11 @@ from app.models.usage_limit import (
     OrganizationUsageCounter,
     UsageEvent,
 )
+from app.models.billing import (
+    OrganizationBillingProfile,
+    ManualBillingRecord,
+    BillingEvent,
+)
 
 __all__ = [
     "Alert",
@@ -323,4 +328,7 @@ __all__ = [
     "SubscriptionUsageLimit",
     "OrganizationUsageCounter",
     "UsageEvent",
+    "OrganizationBillingProfile",
+    "ManualBillingRecord",
+    "BillingEvent",
 ]
