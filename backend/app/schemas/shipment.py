@@ -84,6 +84,10 @@ class ShipmentRead(ShipmentBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class DashboardShipmentRead(ShipmentRead):
+    type: str
+
+
 class ShipmentArchiveRequest(BaseModel):
     reason: Optional[str] = None
 
@@ -94,7 +98,7 @@ class DashboardSummary(BaseModel):
     future_bookings: int
     alerts_today: int
     completed_this_month: int
-    shipments: list[ShipmentRead]
+    shipments: list[DashboardShipmentRead]
     recent_alerts: list[AlertRead]
     urgent_tasks: list["TaskRead"] = Field(default_factory=list)
 

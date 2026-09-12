@@ -13,6 +13,7 @@ class Shipment(Base):
     shipment_code = Column(String(40), unique=True, index=True, nullable=False)
     type = Column(String(20), nullable=False)
     status = Column(String(30), nullable=False, default="active")
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
     exporter_id = Column(Integer, ForeignKey("parties.id"), nullable=True)
     importer_id = Column(Integer, ForeignKey("parties.id"), nullable=True)
     shipping_line = Column(String(150), nullable=True)
