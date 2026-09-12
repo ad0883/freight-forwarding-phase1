@@ -25,13 +25,22 @@ function DashboardPage() {
   async function load() {
     setError('');
     try {
-      const [dashboardResponse, financialResponse] = await Promise.all([
+      const [dashboardResponse, financialResponse] = await Promise.allSettled([
         api.get('/shipments/dashboard'),
         api.get('/reports/dashboard-financials'),
       ]);
-      setSummary(dashboardResponse.data);
-      setFinancials(financialResponse.data);
-      setAlerts(dashboardResponse.data.recent_alerts || []);
+      if (dashboardResponse.status === 'fulfilled') {
+        setSummary(dashboardResponse.value.data);
+        setAlerts(dashboardResponse.value.data.recent_alerts || []);
+      } else {
+        setSummary(null);
+        setAlerts([]);
+      }
+      if (financialResponse.status === 'fulfilled') {
+        setFinancials(financialResponse.value.data);
+      } else {
+        setFinancials(null);
+      }
       api
         .get('/notifications/daily-summary')
         .then((response) => setDailySummary(response.data))
@@ -101,7 +110,7 @@ function DashboardPage() {
     );
   }
 
-  if (!summary || !financials) {
+  if (!summary && !financials) {
     return (
       <div className="page-stack">
         <div className="page-header">
@@ -115,30 +124,34 @@ function DashboardPage() {
     );
   }
 
-  const cards = [
-    { label: 'Live Shipments', value: summary.live_shipments, icon: Ship },
-    { label: 'Pending Tasks', value: summary.pending_tasks, icon: Clock },
-    { label: 'Future Bookings', value: summary.future_bookings, icon: Timer },
-    { label: 'Alerts Today', value: summary.alerts_today, icon: AlertTriangle },
-    { label: 'Completed This Month', value: summary.completed_this_month, icon: CheckCircle2 },
-  ];
+  const cards = summary
+    ? [
+        { label: 'Live Shipments', value: summary.live_shipments, icon: Ship },
+        { label: 'Pending Tasks', value: summary.pending_tasks, icon: Clock },
+        { label: 'Future Bookings', value: summary.future_bookings, icon: Timer },
+        { label: 'Alerts Today', value: summary.alerts_today, icon: AlertTriangle },
+        { label: 'Completed This Month', value: summary.completed_this_month, icon: CheckCircle2 },
+      ]
+    : [];
   const formatMoney = (amount, currency = 'INR') =>
     `${currency} ${Number(amount || 0).toLocaleString('en-IN', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
-  const financeCards = [
-    { label: 'Pending Receivables', value: formatMoney(financials.pending_receivables, financials.currency), icon: WalletCards, className: 'warning-card' },
-    { label: 'Pending Payables', value: formatMoney(financials.pending_payables, financials.currency), icon: WalletCards, className: 'info-card' },
-    { label: 'This Month Receivables', value: formatMoney(financials.this_month_receivables, financials.currency), icon: DollarSign, className: 'success-card' },
-    { label: 'This Month Payables', value: formatMoney(financials.this_month_payables, financials.currency), icon: DollarSign, className: 'info-card' },
-    {
-      label: 'This Month Profit',
-      value: formatMoney(financials.this_month_profit, financials.currency),
-      icon: DollarSign,
-      className: Number(financials.this_month_profit) < 0 ? 'critical-card' : 'success-card',
-    },
-  ];
+  const financeCards = financials
+    ? [
+        { label: 'Pending Receivables', value: formatMoney(financials.pending_receivables, financials.currency), icon: WalletCards, className: 'warning-card' },
+        { label: 'Pending Payables', value: formatMoney(financials.pending_payables, financials.currency), icon: WalletCards, className: 'info-card' },
+        { label: 'This Month Receivables', value: formatMoney(financials.this_month_receivables, financials.currency), icon: DollarSign, className: 'success-card' },
+        { label: 'This Month Payables', value: formatMoney(financials.this_month_payables, financials.currency), icon: DollarSign, className: 'info-card' },
+        {
+          label: 'This Month Profit',
+          value: formatMoney(financials.this_month_profit, financials.currency),
+          icon: DollarSign,
+          className: Number(financials.this_month_profit) < 0 ? 'critical-card' : 'success-card',
+        },
+      ]
+    : [];
 
   return (
     <div className="page-stack">
@@ -152,29 +165,37 @@ function DashboardPage() {
         </Link>
       </div>
       <p className="page-helper">{getRoleHelperPrefix(mode)}Full operational metrics. For daily action items, use the Today page.</p>
-      <section className="metric-grid">
-        {cards.map(({ label, value, icon: Icon }) => (
-          <article className="metric-card" key={label}>
-            <Icon size={20} />
-            <span>{label}</span>
-            <strong>{value}</strong>
-          </article>
-        ))}
-      </section>
+      {summary ? (
+        <section className="metric-grid">
+          {cards.map(({ label, value, icon: Icon }) => (
+            <article className="metric-card" key={label}>
+              <Icon size={20} />
+              <span>{label}</span>
+              <strong>{value}</strong>
+            </article>
+          ))}
+        </section>
+      ) : (
+        <EmptyState title="Operational metrics unavailable" detail="One or more dashboard data sources could not load." />
+      )}
 
       <div className="panel-header no-margin">
         <h2>Financial Summary</h2>
       </div>
-      <section className="metric-grid finance-grid">
-        {financeCards.map(({ label, value, icon: Icon, className }) => (
-          <article className={`metric-card ${className}`} key={label}>
-            <Icon size={20} />
-            <span>{label}</span>
-            <strong>{value}</strong>
-          </article>
-        ))}
-      </section>
-      {financials.multiple_currencies && (
+      {financials ? (
+        <section className="metric-grid finance-grid">
+          {financeCards.map(({ label, value, icon: Icon, className }) => (
+            <article className={`metric-card ${className}`} key={label}>
+              <Icon size={20} />
+              <span>{label}</span>
+              <strong>{value}</strong>
+            </article>
+          ))}
+        </section>
+      ) : (
+        <EmptyState title="Financial summary unavailable" detail="The finance dashboard endpoint could not load." />
+      )}
+      {financials?.multiple_currencies && (
         <p className="finance-note">Multiple currencies are present. Totals are not converted automatically.</p>
       )}
 
