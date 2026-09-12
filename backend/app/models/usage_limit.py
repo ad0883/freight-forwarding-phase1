@@ -1,9 +1,9 @@
 from datetime import datetime
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
 from app.db.session import Base
+from app.db.types import PortableJSON
 
 
 class SubscriptionUsageLimit(Base):
@@ -22,7 +22,7 @@ class SubscriptionUsageLimit(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    metadata_json = Column(JSONB, nullable=True)
+    metadata_json = Column(PortableJSON, nullable=True)
 
     plan = relationship("SubscriptionPlan", foreign_keys=[plan_id])
 
@@ -43,7 +43,7 @@ class OrganizationUsageCounter(Base):
     source = Column(String, nullable=False, default="calculated")
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    metadata_json = Column(JSONB, nullable=True)
+    metadata_json = Column(PortableJSON, nullable=True)
 
     organization = relationship("Organization", foreign_keys=[organization_id])
 
@@ -64,7 +64,7 @@ class UsageEvent(Base):
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_by_name = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    metadata_json = Column(JSONB, nullable=True)
+    metadata_json = Column(PortableJSON, nullable=True)
 
     organization = relationship("Organization", foreign_keys=[organization_id])
     subscription = relationship("OrganizationSubscription", foreign_keys=[subscription_id])

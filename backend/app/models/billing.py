@@ -1,9 +1,9 @@
 from datetime import datetime
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, Numeric
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
 from app.db.session import Base
+from app.db.types import PortableJSON
 
 
 class OrganizationBillingProfile(Base):
@@ -27,7 +27,7 @@ class OrganizationBillingProfile(Base):
     
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    metadata_json = Column(JSONB, nullable=True)
+    metadata_json = Column(PortableJSON, nullable=True)
 
     organization = relationship("Organization")
 
@@ -66,7 +66,7 @@ class ManualBillingRecord(Base):
     
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    metadata_json = Column(JSONB, nullable=True)
+    metadata_json = Column(PortableJSON, nullable=True)
 
     organization = relationship("Organization")
     subscription = relationship("OrganizationSubscription")
@@ -93,7 +93,7 @@ class BillingEvent(Base):
     created_by_name = Column(String(255), nullable=True)
     
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    metadata_json = Column(JSONB, nullable=True)
+    metadata_json = Column(PortableJSON, nullable=True)
 
     organization = relationship("Organization")
     billing_record = relationship("ManualBillingRecord")
